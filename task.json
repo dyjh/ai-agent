@@ -1,15 +1,15 @@
 {
   "project": "local-agent",
   "source": "promote.txt",
-  "last_updated": "2026-04-23T17:20:00+08:00",
+  "last_updated": "2026-04-23T18:30:00+08:00",
   "overall_status": "mvp_completed_with_followups",
-  "current_task_id": "phase-9-mcp-runtime",
-  "current_task_title": "补齐 MCP transport 与 mcp.call_tool 执行链路",
+  "current_task_id": "phase-10-eino-workflow-hitl",
+  "current_task_title": "补齐 Eino Graph / Workflow 与审批 interrupt-resume 编排",
   "summary": {
     "headline": "MVP 首轮实现已完成，主链路可运行，当前进入占位模块补全和生产化收口阶段。",
     "progress": {
-      "completed": 8,
-      "pending": 3,
+      "completed": 9,
+      "pending": 2,
       "total": 11
     },
     "verified": [
@@ -17,10 +17,10 @@
       "2026-04-23 已执行 go test ./... 并通过。",
       "README 已同步记录 MVP 限制和后续 TODO。",
       "2026-04-23 已完成 vector backend factory、Qdrant HTTP adapter、kb.search executor、/v1/kbs/health 和对应测试。",
-      "2026-04-23 已完成 skill manifest 校验、skill.run 执行器、Skill API 扩展和 phase-8 测试。"
+      "2026-04-23 已完成 skill manifest 校验、skill.run 执行器、Skill API 扩展和 phase-8 测试。",
+      "2026-04-23 已完成 MCP stdio/http transport、mcp.call_tool executor、policy override 接入、MCP API runtime 和 phase-9 测试。"
     ],
     "unfinished_overview": [
-      "mcp.call_tool 尚未实现真实 transport/client 与调用链路。",
       "Eino Graph / Workflow / interrupt-resume 仍为占位骨架，审批暂停恢复尚未接入正式编排。",
       "Skill Runtime 已支持本地执行，但 zip 上传、运行时沙箱和更细粒度权限隔离仍待继续硬化。"
     ]
@@ -169,18 +169,19 @@
     {
       "id": "phase-9-mcp-runtime",
       "title": "补齐 MCP transport 与 mcp.call_tool 执行链路",
-      "status": "pending",
-      "why_pending": "当前 MCP 仅完成配置管理与 policy override，未真正连接远端 MCP server。",
-      "evidence": [
-        "internal/tools/mcp/client.go 当前仅有 placeholder Client struct。",
-        "internal/app/bootstrap.go 中 mcp.call_tool 被注册为 NotImplementedExecutor。",
-        "README 已注明“真实 MCP transport/client 仍是下一阶段”。"
+      "status": "completed",
+      "completed_items": [
+        "规范 MCP server / tool policy 配置结构，支持 env expansion、stdio/http 差异字段校验、disabled server 禁止调用和敏感 header/env 脱敏返回。",
+        "定义 MCPToolSchema、MCPToolResult、MCPTransport、MCPClient 与可替换 TransportFactory，并实现 HTTPTransport 与 StdioTransport。",
+        "将 MCP Manager 升级为 runtime 管理层，支持 server health、tool schema refresh/cache、ListTools、CallTool 和 policy overlay 查询。",
+        "将 mcp.call_tool 从 NotImplementedExecutor 替换为真实 CallToolExecutor，并接入 ToolRouter -> EffectInference -> PolicyEngine -> ApprovalCenter -> Executor 链路。",
+        "让 MCP 本地 policy override 优先参与 effect inference；unknown MCP tool 默认 unknown.effect 并要求审批，read-only 高置信调用可自动执行，write/network/sensitive/dangerous 调用要求审批。",
+        "新增 POST /v1/mcp/servers/{id}/refresh、POST /v1/mcp/servers/{id}/test、POST /v1/mcp/servers/{id}/tools/{tool_name}/call，call 路径走统一 ToolRouter。",
+        "补充 tool.proposed、effect.inferred、policy.decided、approval.requested、tool.started、tool.completed/tool.failed 事件输出。",
+        "新增 MCP config、transport、policy、call_tool approval snapshot 和 API 测试，并确认 go test ./... 通过。"
       ],
       "remaining_items": [
-        "实现 MCP client transport，支持 server 建连、tool schema 拉取和调用。",
-        "将 mcp.call_tool 接入 ToolRouter，并与 effect inference / policy / approval 串联。",
-        "将 MCP tool policy override 真正用于调用前判定，而不只是配置存储。",
-        "补充 MCP 调用的 smoke test 或 mock transport 测试。"
+        "如需接入更多 MCP server 方言，可继续扩展 transport 层协议适配和 RUN_MCP_INTEGRATION 集成测试矩阵。"
       ],
       "deliverables": [
         "真实 MCP client",
@@ -216,8 +217,8 @@
       "status": "pending",
       "why_pending": "当前测试以核心单元和本地 smoke 为主，生产化运行时的外部依赖、降级策略和文档闭环还需要继续收口。",
       "evidence": [
-        "tests/ 目前覆盖 policy / effect inference / approval snapshot / markdown memory / API smoke。",
-        "README 当前 MVP 限制和后续 TODO 已明确 MCP、Workflow 和运行时硬化尚待补齐。"
+        "tests/ 目前覆盖 policy / effect inference / approval snapshot / markdown memory / MCP runtime / API smoke。",
+        "README 当前 MVP 限制和后续 TODO 已明确 Workflow 和运行时硬化尚待补齐。"
       ],
       "remaining_items": [
         "补充 PostgreSQL / Qdrant / MCP 的集成测试或可重复 mock 套件。",
@@ -262,6 +263,11 @@
       "at": "2026-04-23T17:20:00+08:00",
       "task_id": "phase-8-skill-runtime",
       "summary": "完成 skill manifest 校验、skill.run 真正执行链路、Skill API 扩展和 phase-8 测试，当前任务切换到 phase-9 mcp.call_tool。"
+    },
+    {
+      "at": "2026-04-23T18:30:00+08:00",
+      "task_id": "phase-9-mcp-runtime",
+      "summary": "完成 MCP stdio/http transport、MCPClient/Manager runtime、mcp.call_tool 执行器、policy override 生效、MCP API runtime 和测试，当前任务切换到 phase-10 Eino workflow/HITL。"
     }
   ]
 }

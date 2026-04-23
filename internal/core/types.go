@@ -204,23 +204,43 @@ type SkillPolicyProfile struct {
 
 // MCPServer stores an MCP server config.
 type MCPServer struct {
-	ID          string            `json:"id"`
-	Name        string            `json:"name"`
-	Transport   string            `json:"transport"`
-	Command     string            `json:"command,omitempty"`
-	URL         string            `json:"url,omitempty"`
-	Enabled     bool              `json:"enabled"`
-	Environment map[string]string `json:"environment,omitempty"`
-	CreatedAt   time.Time         `json:"created_at"`
-	UpdatedAt   time.Time         `json:"updated_at"`
+	ID             string            `json:"id" yaml:"id"`
+	Name           string            `json:"name" yaml:"name"`
+	Transport      string            `json:"transport" yaml:"transport"`
+	Command        string            `json:"command,omitempty" yaml:"command,omitempty"`
+	Args           []string          `json:"args,omitempty" yaml:"args,omitempty"`
+	Cwd            string            `json:"cwd,omitempty" yaml:"cwd,omitempty"`
+	URL            string            `json:"url,omitempty" yaml:"url,omitempty"`
+	Headers        map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
+	Enabled        bool              `json:"enabled" yaml:"enabled"`
+	Environment    map[string]string `json:"environment,omitempty" yaml:"env,omitempty"`
+	TimeoutSeconds int               `json:"timeout_seconds,omitempty" yaml:"timeout_seconds,omitempty"`
+	CreatedAt      time.Time         `json:"created_at" yaml:"created_at"`
+	UpdatedAt      time.Time         `json:"updated_at" yaml:"updated_at"`
 }
 
 // MCPToolPolicy stores local policy overrides for MCP tools.
 type MCPToolPolicy struct {
-	ID               string    `json:"id"`
-	ToolName         string    `json:"tool_name"`
-	RequiresApproval bool      `json:"requires_approval"`
-	RiskLevel        string    `json:"risk_level"`
-	Reason           string    `json:"reason,omitempty"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ID               string    `json:"id" yaml:"id"`
+	ToolName         string    `json:"tool_name" yaml:"tool_name"`
+	Effects          []string  `json:"effects,omitempty" yaml:"effects,omitempty"`
+	Approval         string    `json:"approval,omitempty" yaml:"approval,omitempty"`
+	RequiresApproval bool      `json:"requires_approval" yaml:"requires_approval"`
+	RiskLevel        string    `json:"risk_level" yaml:"risk_level"`
+	Reason           string    `json:"reason,omitempty" yaml:"reason,omitempty"`
+	UpdatedAt        time.Time `json:"updated_at" yaml:"updated_at"`
+}
+
+// MCPPolicyProfile is the normalized effect model for a concrete MCP tool.
+type MCPPolicyProfile struct {
+	ServerID         string   `json:"server_id"`
+	ToolName         string   `json:"tool_name"`
+	Effects          []string `json:"effects"`
+	Approval         string   `json:"approval,omitempty"`
+	RequiresApproval bool     `json:"requires_approval"`
+	RiskLevel        string   `json:"risk_level"`
+	Reason           string   `json:"reason,omitempty"`
+	Known            bool     `json:"known"`
+	Enabled          bool     `json:"enabled"`
+	Confidence       float64  `json:"confidence"`
 }

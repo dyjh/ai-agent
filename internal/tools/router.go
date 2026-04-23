@@ -30,26 +30,48 @@ func NewRouter(registry *Registry, inferrer EffectInferrer, policy PolicyDecider
 
 // Propose infers effects and either auto-executes or queues approval.
 func (r *LocalRouter) Propose(ctx context.Context, runID, conversationID string, proposal core.ToolProposal) (*RouteResult, error) {
-	inference, err := r.inferrer.Infer(ctx, proposal)
-	if err != nil {
-		return nil, err
-	}
-
-	decision, err := r.policy.Decide(ctx, proposal, inference)
-	if err != nil {
-		return nil, err
-	}
-
 	r.emit(core.Event{
 		Type:           "tool.proposed",
 		RunID:          runID,
 		ConversationID: conversationID,
 		Tool:           proposal.Tool,
+		ToolCallID:     proposal.ID,
+		Payload: map[string]any{
+			"input": core.CloneMap(proposal.Input),
+		},
+		CreatedAt: time.Now().UTC(),
+	})
+
+	inference, err := r.inferrer.Infer(ctx, proposal)
+	if err != nil {
+		return nil, err
+	}
+	r.emit(core.Event{
+		Type:           "effect.inferred",
+		RunID:          runID,
+		ConversationID: conversationID,
+		Tool:           proposal.Tool,
+		ToolCallID:     proposal.ID,
 		RiskLevel:      inference.RiskLevel,
 		Payload: map[string]any{
-			"input":     core.CloneMap(proposal.Input),
 			"inference": inference,
-			"decision":  decision,
+		},
+		CreatedAt: time.Now().UTC(),
+	})
+
+	decision, err := r.policy.Decide(ctx, proposal, inference)
+	if err != nil {
+		return nil, err
+	}
+	r.emit(core.Event{
+		Type:           "policy.decided",
+		RunID:          runID,
+		ConversationID: conversationID,
+		Tool:           proposal.Tool,
+		ToolCallID:     proposal.ID,
+		RiskLevel:      inference.RiskLevel,
+		Payload: map[string]any{
+			"decision": decision,
 		},
 		CreatedAt: time.Now().UTC(),
 	})
@@ -163,8 +185,12 @@ func (r *LocalRouter) execute(ctx context.Context, proposal core.ToolProposal, r
 		payload["error"] = execErr.Error()
 	}
 
+	eventType := "tool.completed"
+	if execErr != nil {
+		eventType = "tool.failed"
+	}
 	r.emit(core.Event{
-		Type:           "tool.completed",
+		Type:           eventType,
 		RunID:          runID,
 		ConversationID: conversationID,
 		Tool:           proposal.Tool,

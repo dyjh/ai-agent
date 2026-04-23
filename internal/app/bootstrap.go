@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"local-agent/internal/agent"
 	"local-agent/internal/config"
@@ -72,12 +73,15 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 	knowledgeService := kb.NewService(index, embedder, cfg.CollectionName("kb"))
 	skillsManager := skills.NewManager("skills")
 	mcpManager := mcp.NewManager()
+	if err := mcpManager.LoadConfig(resolveConfigPath("config/mcp.servers.yaml"), resolveConfigPath("config/mcp.tool-policies.yaml")); err != nil {
+		return nil, err
+	}
 	approvals := agent.NewApprovalCenter()
 	eventWriter := events.NewJSONLWriter(cfg.Events.JSONLRoot, cfg.Events.AuditRoot)
-	registry := registerTools(cfg, memoryStore, knowledgeService, skillsManager)
+	registry := registerTools(cfg, memoryStore, knowledgeService, skillsManager, mcpManager)
 	router := toolscore.NewRouter(
 		registry,
-		agent.NewEffectInferrer(cfg.Policy, skillsManager),
+		agent.NewEffectInferrer(cfg.Policy, skillsManager, mcpManager),
 		agent.NewPolicyEngine(cfg.Policy),
 		approvals,
 		eventWriter,
@@ -118,7 +122,7 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 	}, nil
 }
 
-func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb.Service, skillsManager *skills.Manager) *toolscore.Registry {
+func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb.Service, skillsManager *skills.Manager, mcpManager *mcp.Manager) *toolscore.Registry {
 	registry := toolscore.NewRegistry()
 	workspace := code.Workspace{Root: cfg.Owner.DefaultWorkspace}
 
@@ -208,15 +212,34 @@ func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb
 		DefaultEffects: []string{"unknown.effect"},
 	}, &skills.Runner{Manager: skillsManager, MaxOutputChars: cfg.Shell.MaxOutputChars})
 	registry.Register(core.ToolSpec{
-		ID:             "mcp.call_tool",
-		Provider:       "mcp",
-		Name:           "mcp.call_tool",
-		Description:    "Call a remote MCP tool",
-		InputSchema:    map[string]any{"tool": "string", "input": "object"},
+		ID:          "mcp.call_tool",
+		Provider:    "mcp",
+		Name:        "mcp.call_tool",
+		Description: "Call a tool exposed by a configured MCP server",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"server_id": map[string]any{"type": "string"},
+				"tool_name": map[string]any{"type": "string"},
+				"arguments": map[string]any{"type": "object"},
+			},
+			"required": []string{"server_id", "tool_name"},
+		},
 		DefaultEffects: []string{"unknown.effect"},
-	}, toolscore.NotImplementedExecutor{Tool: "mcp.call_tool"})
+	}, &mcp.CallToolExecutor{Client: mcpManager})
 
 	return registry
+}
+
+func resolveConfigPath(path string) string {
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+	parent := filepath.Join("..", path)
+	if _, err := os.Stat(parent); err == nil {
+		return parent
+	}
+	return path
 }
 
 func coreShellSpec() core.ToolSpec {

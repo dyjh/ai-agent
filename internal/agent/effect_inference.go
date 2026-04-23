@@ -14,6 +14,7 @@ import (
 type EffectInferrer struct {
 	cfg    config.PolicyConfig
 	skills SkillProfileResolver
+	mcp    MCPPolicyResolver
 }
 
 // SkillProfileResolver exposes registered skill effects to the inferrer.
@@ -21,13 +22,23 @@ type SkillProfileResolver interface {
 	PolicyProfile(id string) (core.SkillPolicyProfile, error)
 }
 
+// MCPPolicyResolver exposes MCP tool policy overlays to the inferrer.
+type MCPPolicyResolver interface {
+	PolicyProfile(serverID, toolName string) (core.MCPPolicyProfile, error)
+}
+
 // NewEffectInferrer constructs an inferrer.
-func NewEffectInferrer(cfg config.PolicyConfig, resolvers ...SkillProfileResolver) *EffectInferrer {
-	var skills SkillProfileResolver
-	if len(resolvers) > 0 {
-		skills = resolvers[0]
+func NewEffectInferrer(cfg config.PolicyConfig, resolvers ...any) *EffectInferrer {
+	inferrer := &EffectInferrer{cfg: cfg}
+	for _, resolver := range resolvers {
+		if skills, ok := resolver.(SkillProfileResolver); ok {
+			inferrer.skills = skills
+		}
+		if mcp, ok := resolver.(MCPPolicyResolver); ok {
+			inferrer.mcp = mcp
+		}
 	}
-	return &EffectInferrer{cfg: cfg, skills: skills}
+	return inferrer
 }
 
 // Infer infers effects for a tool proposal.
@@ -82,13 +93,7 @@ func (e *EffectInferrer) Infer(_ context.Context, proposal core.ToolProposal) (c
 	case "skill.run":
 		return e.inferSkill(proposal), nil
 	case "mcp.call_tool":
-		return core.EffectInferenceResult{
-			Effects:          []string{"unknown.effect"},
-			RiskLevel:        "unknown",
-			ApprovalRequired: true,
-			Confidence:       0.4,
-			ReasonSummary:    "external capability requires explicit approval",
-		}, nil
+		return e.inferMCP(proposal)
 	default:
 		return core.EffectInferenceResult{
 			Effects:          []string{"unknown.effect"},
@@ -98,6 +103,71 @@ func (e *EffectInferrer) Infer(_ context.Context, proposal core.ToolProposal) (c
 			ReasonSummary:    "tool has no known effect profile",
 		}, nil
 	}
+}
+
+func (e *EffectInferrer) inferMCP(proposal core.ToolProposal) (core.EffectInferenceResult, error) {
+	serverID, _ := proposal.Input["server_id"].(string)
+	toolName, _ := proposal.Input["tool_name"].(string)
+	if serverID == "" || toolName == "" || e.mcp == nil {
+		return core.EffectInferenceResult{
+			Effects:          []string{"unknown.effect"},
+			RiskLevel:        "unknown",
+			ApprovalRequired: true,
+			Confidence:       0.3,
+			ReasonSummary:    "MCP server_id or tool_name is unavailable",
+		}, nil
+	}
+
+	profile, err := e.mcp.PolicyProfile(serverID, toolName)
+	if err != nil {
+		return core.EffectInferenceResult{}, err
+	}
+	effects := profile.Effects
+	if len(effects) == 0 {
+		effects = []string{"unknown.effect"}
+	}
+
+	result := core.EffectInferenceResult{
+		Effects:          append([]string(nil), effects...),
+		RiskLevel:        profile.RiskLevel,
+		ApprovalRequired: profile.RequiresApproval,
+		Confidence:       profile.Confidence,
+		ReasonSummary:    profile.Reason,
+	}
+	if result.RiskLevel == "" {
+		result.RiskLevel = "read"
+	}
+	if result.Confidence <= 0 {
+		result.Confidence = 0.4
+	}
+	if result.ReasonSummary == "" {
+		result.ReasonSummary = "MCP policy profile"
+	}
+
+	for _, effect := range effects {
+		switch {
+		case effect == "unknown.effect":
+			result.RiskLevel = "unknown"
+			result.ApprovalRequired = true
+			result.Confidence = minConfidence(result.Confidence, 0.4)
+			result.ReasonSummary = "MCP tool has unknown effects"
+		case strings.Contains(effect, "sensitive") || strings.Contains(effect, "env_file"):
+			result.RiskLevel = "sensitive"
+			result.Sensitive = true
+			result.ApprovalRequired = true
+		case strings.Contains(effect, "kill") || strings.Contains(effect, "restart") || strings.Contains(effect, "stop") || strings.Contains(effect, "escalate") || strings.Contains(effect, "danger"):
+			result.RiskLevel = "danger"
+			result.ApprovalRequired = true
+		case effectRequiresApproval(effect):
+			result.RiskLevel = "write"
+			result.ApprovalRequired = true
+		}
+	}
+
+	if profile.Approval == "require" {
+		result.ApprovalRequired = true
+	}
+	return result, nil
 }
 
 func (e *EffectInferrer) inferSkill(proposal core.ToolProposal) core.EffectInferenceResult {
@@ -409,4 +479,11 @@ func uniq(items []string) []string {
 		out = append(out, item)
 	}
 	return out
+}
+
+func minConfidence(current, limit float64) float64 {
+	if current <= 0 || current > limit {
+		return limit
+	}
+	return current
 }

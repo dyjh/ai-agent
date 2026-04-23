@@ -136,6 +136,12 @@ func approvalSummary(proposal core.ToolProposal, inference core.EffectInferenceR
 		if skillID, ok := proposal.Input["skill_id"].(string); ok {
 			return fmt.Sprintf("准备执行 skill `%s`，风险等级为 %s。", skillID, inference.RiskLevel)
 		}
+	case "mcp.call_tool":
+		serverID, _ := proposal.Input["server_id"].(string)
+		toolName, _ := proposal.Input["tool_name"].(string)
+		if serverID != "" && toolName != "" {
+			return fmt.Sprintf("准备调用 MCP 工具 `%s/%s`，风险等级为 %s。", serverID, toolName, inference.RiskLevel)
+		}
 	}
 	return fmt.Sprintf("准备执行 `%s`，风险等级为 %s。", proposal.Tool, inference.RiskLevel)
 }

@@ -1,0 +1,552 @@
+
+你是一个资深 Go 后端工程师、CloudWeGo Eino Agent 架构师、系统安全工程师。请在当前仓库 dyjh/ai-agent 中继续开发，不要推倒重写，只在现有 MVP 和已完成 Phase 8 的基础上，完成下一阶段：Phase 9 - MCP runtime。
+
+开始前必须先做：
+
+1. 阅读 README.md
+2. 阅读 task.json
+3. 阅读 AGENTS.md
+4. 检查当前仓库以下文件：
+   - internal/tools/mcp/client.go
+   - internal/tools/mcp/manager.go
+   - internal/tools/mcp/schemas.go
+   - internal/app/bootstrap.go
+   - internal/tools/registry.go
+   - internal/tools/router.go
+   - internal/agent/effect_inference.go
+   - internal/agent/policy.go
+   - internal/api/handlers/mcp.go
+   - internal/api/router.go
+   - internal/einoapp/tools_adapter.go
+   - tests/ 下与 mcp / policy / approval / api 相关测试
+5. 全局搜索：
+   - NotImplementedExecutor
+   - placeholder
+   - TODO
+   - mcp.call_tool
+6. 先输出：
+   - 当前 MCP 相关问题列表
+   - 你准备修改的文件列表
+   - 你的实现顺序
+7. 然后开始分步骤修改代码
+
+本次只做 Phase 9，不要顺手做 Phase 10/11，除非为了编译或测试通过只做最小兼容调整。
+
+==================================================
+当前阶段目标
+==================================================
+
+完成 Phase 9：补齐 MCP transport 与 mcp.call_tool 执行链路。
+
+最终必须满足：
+
+1. 实现 MCP client transport，支持：
+   - stdio
+   - http
+
+2. 将 ToolRegistry 中的 `mcp.call_tool` 从 NotImplementedExecutor 改为真实 executor。
+
+3. MCP 工具调用必须经过完整安全链路：
+   ToolProposal
+   -> EffectInference
+   -> PolicyEngine
+   -> ApprovalCenter（需要时）
+   -> MCP Executor
+
+4. MCP tool policy override 必须真正参与调用前决策，而不只是配置存储。
+
+5. unknown MCP tool 默认：
+   - unknown.effect
+   - 需要审批
+
+6. read-only MCP tool 在高置信情况下可自动执行。
+
+7. 增加 mock transport 测试、policy 测试、approval snapshot 测试。
+
+8. 更新 README.md 和 task.json，使 current_task_id 切换到 phase-10-eino-workflow-hitl。
+
+==================================================
+必须遵守的架构约束
+==================================================
+
+1. 不要引入租户、多用户、RBAC、云端 SaaS 假设。
+2. 本项目仍然是单用户本地部署。
+3. 不要让 Eino Tool 直接调用 MCP server。
+4. 不要让 handler 直接绕过 ToolRouter 去调用 MCP client，除非是管理类 refresh/test 路径且无副作用。
+5. 不要绕过 EffectInference / PolicyEngine / ApprovalCenter。
+6. MCP server 返回的 tool schema/annotation 不能被完全信任。
+7. 本地 MCP tool policy override 优先级高于 server 端声明。
+8. 不要把 token、Authorization header、secret、cookie 写入日志、agent_events、messages、Qdrant payload。
+9. unknown.effect 默认审批。
+10. low confidence 默认审批。
+11. approval 后只能执行 approval.input_snapshot。
+12. 如果 server_id / tool_name / arguments / risk/effects 变化，必须重新审批。
+13. 不要把普通 LLM 文本直接变成 MCP 调用。
+14. 不要让 Planner 直接调用 transport。
+
+==================================================
+MCP 总体设计要求
+==================================================
+
+请把 MCP runtime 设计成三层：
+
+1. 配置层
+   - 读取 config/mcp.servers.yaml
+   - 读取 config/mcp.tool-policies.yaml
+   - 支持 env expansion
+   - 支持启用/禁用 server
+
+2. 传输层
+   - StdioTransport
+   - HTTPTransport
+   - 统一实现 MCPTransport interface
+
+3. 业务层
+   - MCPClient
+   - MCPManager
+   - ToolRegistry 中的 `mcp.call_tool`
+   - ToolRouter / Policy / Approval / Executor 集成
+
+==================================================
+任务 1：规范 MCP 配置结构
+==================================================
+
+确保支持如下配置格式。
+
+config/mcp.servers.yaml:
+
+```yaml
+servers:
+  - id: filesystem
+    name: filesystem
+    enabled: true
+    transport: stdio
+    command: node
+    args:
+      - ./mcp/filesystem/index.js
+    cwd: ./mcp/filesystem
+    env:
+      ROOT_DIR: ./workspace
+
+  - id: local-http-tools
+    name: local-http-tools
+    enabled: true
+    transport: http
+    url: http://localhost:3001/mcp
+    headers:
+      Authorization: ${MCP_LOCAL_TOKEN}
+````
+
+config/mcp.tool-policies.yaml:
+
+```yaml
+tools:
+  mcp.filesystem.read_file:
+    effects:
+      - fs.read
+    approval: auto
+
+  mcp.filesystem.write_file:
+    effects:
+      - fs.write
+    approval: require
+
+  mcp.github.create_issue:
+    effects:
+      - network.post
+    approval: require
+```
+
+要求：
+
+* 支持 env expansion
+* disabled server 不可被调用
+* 缺失配置给出明确错误
+* 不要打印 secret 值
+* header/env 中的 secret 不应进入日志
+* 支持 stdio/http 两种 transport 的差异化字段校验
+* 如果 transport=stdio，则必须有 command
+* 如果 transport=http，则必须有 url
+
+==================================================
+任务 2：定义 MCP 运行时接口
+=================
+
+请定义或完善以下接口。
+
+```go
+type MCPToolSchema struct {
+    Name        string         `json:"name"`
+    Description string         `json:"description,omitempty"`
+    InputSchema map[string]any `json:"input_schema,omitempty"`
+    Metadata    map[string]any `json:"metadata,omitempty"`
+}
+
+type MCPToolResult struct {
+    Content  any            `json:"content,omitempty"`
+    Structured map[string]any `json:"structured,omitempty"`
+    Raw      map[string]any `json:"raw,omitempty"`
+}
+
+type MCPTransport interface {
+    Start(ctx context.Context) error
+    ListTools(ctx context.Context) ([]MCPToolSchema, error)
+    CallTool(ctx context.Context, name string, input map[string]any) (*MCPToolResult, error)
+    Close(ctx context.Context) error
+}
+
+type MCPClient interface {
+    ListTools(ctx context.Context, serverID string) ([]MCPToolSchema, error)
+    CallTool(ctx context.Context, serverID string, toolName string, input map[string]any) (*MCPToolResult, error)
+    Health(ctx context.Context, serverID string) error
+}
+```
+
+要求：
+
+* transport 不应该直接暴露给 handler
+* client 负责按 server_id 选择 transport
+* manager 负责配置、状态、refresh、policy overlay
+* transport 应可 mock，便于测试
+* transport 生命周期要可控
+
+==================================================
+任务 3：实现 StdioTransport
+======================
+
+实现 stdio transport，至少具备清晰骨架和可测试行为。
+
+要求：
+
+* 可启动本地子进程
+* 可与子进程通过 stdin/stdout 做 JSON-RPC 或近似封装
+* 支持超时
+* 支持 context cancel
+* 支持 Close
+* 错误信息清晰
+* 不把命令行中的 secret 写入日志
+* 如果协议细节暂时无法完全落地，也必须把代码封装清楚，不能留成 placeholder
+
+MVP 要求：
+
+* 至少可以通过 mock child process 测试 ListTools / CallTool
+* 对真实协议细节不确定部分，用清晰注释和抽象隔离
+* 不要在 mcp.call_tool 里直接写 os/exec
+
+==================================================
+任务 4：实现 HTTPTransport
+=====================
+
+实现 http transport，至少支持：
+
+* Health
+* ListTools
+* CallTool
+
+要求：
+
+* 支持 base URL
+* 支持 headers
+* 支持 timeout
+* 支持 context
+* 对 4xx / 5xx / JSON 解析失败给出明确错误
+* 不把 Authorization header 记录到日志
+* response body 需要限长或至少避免无界日志输出
+* transport 也必须可 mock
+
+如果 MCP HTTP 协议细节当前项目里尚未完全确定：
+
+* 请用清晰封装和 mock tests 支撑
+* 不要把“假协议”散落在 handler 或 router 中
+
+==================================================
+任务 5：实现 MCPClient / Manager
+===========================
+
+实现或补齐：
+
+* 根据 server_id 读取配置
+* 构造对应 transport
+* ListTools
+* CallTool
+* Health
+* Refresh tools schema
+
+要求：
+
+* refresh 后把 tool schema 缓存到 manager/registry/config state
+* disabled server 调用时报错
+* unknown server 报错
+* 如果 tool 不存在：
+
+  * 返回明确错误
+  * 或标记 unknown tool
+* policy override 查询接口清晰
+* local override 优先级高于 server schema
+
+建议行为：
+
+优先级顺序：
+
+1. 本地 tool policy override effects
+2. 本地 tool policy override approval
+3. server tool schema metadata/annotations
+4. default unknown.effect
+
+==================================================
+任务 6：实现 mcp.call_tool Tool
+==========================
+
+将 `mcp.call_tool` 从占位实现改成真实执行器。
+
+ToolSpec 目标格式：
+
+```json
+{
+  "id": "mcp.call_tool",
+  "provider": "mcp",
+  "name": "call_mcp_tool",
+  "description": "Call a tool exposed by a configured MCP server",
+  "default_effects": ["unknown.effect"],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "server_id": { "type": "string" },
+      "tool_name": { "type": "string" },
+      "arguments": { "type": "object" }
+    },
+    "required": ["server_id", "tool_name"]
+  }
+}
+```
+
+执行链路要求：
+
+* Agent 生成 ToolProposal
+* ToolRouter 接收 mcp.call_tool proposal
+* EffectInference 先查本地 override
+* 再结合 server schema
+* 最终给出 effects / risk / confidence
+* PolicyEngine 决定 auto / approval
+* 需要审批时创建 approval.input_snapshot：
+
+  * server_id
+  * tool_name
+  * arguments
+* 审批通过后才真正调用 MCPClient.CallTool
+* Executor 只执行批准过的 input_snapshot
+
+不要出现这种错误路径：
+
+* Eino Tool 直接 CallTool
+* handler 直接 CallTool
+* approval 前已实际调用远端 tool
+
+==================================================
+任务 7：让 MCP policy override 真正生效
+===============================
+
+目前配置管理应该已经存在。现在要让 override 真正参与调用前判断。
+
+要求：
+
+* `mcp.filesystem.read_file` 这类 override 能把 effect 判为 `fs.read`
+* `mcp.filesystem.write_file` 这类 override 能把 effect 判为 `fs.write`
+* `mcp.github.create_issue` 这类 override 能把 effect 判为 `network.post`
+* unknown tool 默认 `unknown.effect`
+* `unknown.effect` 必须审批
+* `fs.write / network.post / dangerous / sensitive_read` 必须审批
+* 全 read-only 且高置信时才允许自动执行
+
+必要时调整：
+
+* internal/agent/effect_inference.go
+* internal/agent/policy.go
+* internal/tools/mcp/manager.go
+* internal/tools/router.go
+
+==================================================
+任务 8：补 MCP API
+==============
+
+在现有 MCP 管理 API 基础上，补或完善：
+
+```text
+POST /v1/mcp/servers/{id}/refresh
+POST /v1/mcp/servers/{id}/test
+POST /v1/mcp/servers/{id}/tools/{tool_name}/call
+```
+
+要求：
+
+* refresh：刷新 tools schema
+* test：做 health check
+* call：必须走 ToolRouter
+* 如果是写操作或 unknown，必须进入审批
+* 不能绕过安全链路
+* 管理类接口返回格式清晰
+* 错误码合理
+
+==================================================
+任务 9：事件与日志
+==========
+
+所有 MCP 调用都应进入统一事件链。
+
+至少记录：
+
+* tool.proposed
+* effect.inferred
+* policy.decided
+* approval.requested（如有）
+* tool.started
+* tool.completed
+* tool.failed
+
+要求：
+
+* WebSocket 可看到 MCP 工具事件
+* JSONL 可看到 MCP 工具事件
+* 敏感 headers / tokens 必须脱敏
+* agent_events 如已启用，也可写入
+* tool_call_count 要正确累计
+
+==================================================
+任务 10：测试
+========
+
+请至少新增或补齐以下测试。
+
+1. `mcp_config_test.go`
+
+   * stdio 配置解析
+   * http 配置解析
+   * env expansion
+   * disabled server
+   * 缺失必须字段时报错
+
+2. `mcp_policy_test.go`
+
+   * override effects 生效
+   * unknown tool -> unknown.effect
+   * read tool auto execute
+   * write tool require approval
+   * network.post require approval
+
+3. `mcp_call_tool_test.go`
+
+   * mock transport list tools
+   * mock transport call tool
+   * `mcp.call_tool` 通过 ToolRouter
+   * approval 后只执行 input_snapshot
+   * proposal 改变后不能复用旧 approval
+
+4. `mcp_api_test.go`
+
+   * refresh
+   * test
+   * tools/{tool_name}/call
+   * disabled server 错误
+   * unknown server 错误
+
+5. 可选集成测试
+
+   * RUN_MCP_INTEGRATION=1 go test ./...
+   * 对 http transport 做最小可运行 mock server 集成测试
+
+要求：
+
+* 默认 `go test ./...` 不依赖外部真实 MCP server
+* 优先使用 mock transport
+* 不要删现有安全测试
+
+==================================================
+任务 11：更新 README.md 和 task.json
+==============================
+
+README 至少更新：
+
+* 当前 MCP runtime 已实现的能力
+* 支持的 transport：stdio / http
+* MCP tool policy override 现在会真正参与调用决策
+* `mcp.call_tool` 已接入 ToolRouter / Policy / Approval
+* 已知限制（如果某些协议细节仍是 MVP 骨架，要说清楚）
+* 不要夸大实现程度
+
+task.json 需要更新：
+
+* phase-9 status -> completed
+* completed_items 添加本阶段完成内容
+* change_log 增加本次记录
+* current_task_id -> phase-10-eino-workflow-hitl
+* unfinished_overview 删除已完成的 MCP runtime 描述
+* summary 同步更新
+
+==================================================
+建议实现顺序
+======
+
+请严格按这个顺序推进：
+
+1. 检查当前 MCP 代码和占位点
+2. 规范配置结构与解析
+3. 定义/补齐 transport interface
+4. 实现 HTTPTransport
+5. 实现 StdioTransport
+6. 实现 MCPClient / Manager
+7. 接入 mcp.call_tool executor
+8. 接入 override -> EffectInference -> Policy
+9. 补 API
+10. 补事件日志
+11. 补测试
+12. gofmt
+13. go test ./...
+14. 更新 README.md
+15. 更新 task.json
+
+==================================================
+验收标准
+====
+
+完成后必须满足：
+
+1. `mcp.call_tool` 不再是 NotImplementedExecutor
+2. stdio 和 http transport 都有清晰实现或可测试骨架
+3. MCPClient 能按 server_id 选择 transport
+4. MCP policy override 真正参与 EffectInference / Policy
+5. unknown tool 默认 unknown.effect 并审批
+6. read-only MCP tool 高置信时可自动执行
+7. 写入 / network / sensitive / dangerous MCP tool 必须审批
+8. 审批后只执行 approval.input_snapshot
+9. WebSocket / JSONL 有 MCP 调用事件
+10. `go test ./...` 通过
+11. README 与 task.json 同步
+12. current_task_id 切换到 phase-10-eino-workflow-hitl
+
+==================================================
+特别注意
+====
+
+* 不要把 Eino Tool 直接连到 MCP 调用
+* 不要让 Planner 绕过 ToolRouter
+* 不要把 MCP server metadata 当成可信真理
+* 不要记录 secret headers
+* 不要为了测试通过而绕过审批
+* 不要让 README 领先于实现
+* 不要引入租户、多用户、RBAC
+
+现在开始执行。
+
+先输出：
+
+1. 当前 MCP 相关问题列表
+2. 计划修改的文件列表
+3. 实现顺序
+   然后开始逐步修改，最后给出：
+
+* 测试结果
+* README 更新摘要
+* task.json 更新摘要
+
+```
+

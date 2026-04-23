@@ -250,15 +250,52 @@ curl http://127.0.0.1:8765/v1/kbs/health
 
 ## MCP 配置说明
 
-当前 MCP 管理支持：
+当前 MCP runtime 支持：
 
 - `GET /v1/mcp/servers`
 - `POST /v1/mcp/servers`
 - `PATCH /v1/mcp/servers/{id}`
+- `POST /v1/mcp/servers/{id}/refresh`
+- `POST /v1/mcp/servers/{id}/test`
+- `POST /v1/mcp/servers/{id}/tools/{tool_name}/call`
 - `GET /v1/mcp/tools`
 - `PATCH /v1/mcp/tools/{id}/policy`
 
-当前 MVP 先实现配置管理和 tool policy override；真实 MCP transport/client 仍是下一阶段。
+MCP server 配置从 `config/mcp.servers.yaml` 加载，tool policy override 从 `config/mcp.tool-policies.yaml` 加载，并支持环境变量展开。当前支持两种 transport：
+
+- `stdio`：启动本地 MCP 子进程，通过 stdin/stdout 做 line-delimited JSON-RPC 调用
+- `http`：向配置的 MCP URL 发送 JSON-RPC HTTP 请求，并支持 headers、timeout 和 health check
+
+`mcp.call_tool` 已接入统一安全链路：
+
+```text
+ToolProposal -> EffectInference -> PolicyEngine -> ApprovalCenter -> MCP Executor
+```
+
+本地 tool policy override 会优先参与调用前决策，例如：
+
+```yaml
+tools:
+  mcp.filesystem.read_file:
+    effects:
+      - fs.read
+    approval: auto
+
+  mcp.filesystem.write_file:
+    effects:
+      - fs.write
+    approval: require
+```
+
+判定规则：
+
+- 本地 override 优先于 server 返回的 schema / metadata
+- unknown MCP tool 默认 `unknown.effect`，必须审批
+- `fs.write`、`network.post`、敏感读、危险操作必须审批
+- 全只读且高置信 MCP tool 可自动执行
+- `POST /v1/mcp/servers/{id}/tools/{tool_name}/call` 必须走 ToolRouter，不能绕过审批链路
+
+已知限制：当前 stdio/http transport 已有可测试 MVP 实现，但 MCP 协议细节仍按 JSON-RPC `tools/list` / `tools/call` 的最小封装处理；后续如接入更多 MCP server 方言，应只扩展 transport 层，不应把协议分支散落到 handler 或 router。
 
 ## 审批机制说明
 
@@ -301,6 +338,7 @@ go test ./...
 - markdown memory
 - qdrant store / vector factory / kb.search tool
 - skill manifest / runner / policy
+- mcp config / transport / policy / call_tool / API
 - approval snapshot behavior
 - API smoke flows
 
@@ -309,7 +347,7 @@ go test ./...
 - 当前支持 `memory` 和 `qdrant` 两种向量后端；本地测试默认更偏向 `memory`，生产部署可切到 `qdrant`
 - Eino Graph / Workflow / interrupt-resume 目前保留了封装入口，尚未做完整编排
 - Skill Runtime 已支持本地 manifest + executable/script 执行，但 zip 上传、运行时沙箱和更细粒度权限隔离仍待继续收口
-- MCP Client 目前仍是配置管理与骨架优先，真实 transport / tool 调用尚未打通
+- MCP runtime 已支持 stdio/http 与 `mcp.call_tool`，但更完整的 MCP 协议兼容矩阵仍待后续集成测试扩展
 - CLI 已走 HTTP API，但仍是轻量控制台，不包含富交互 TUI
 
 ## 任务清单
