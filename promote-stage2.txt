@@ -1,0 +1,1131 @@
+
+````text
+你是一个资深 Go 后端工程师、CloudWeGo Eino Agent 架构师、系统安全工程师。请在当前仓库中继续完成 local-agent 项目的后续阶段。
+
+当前项目是一个个人本地部署的 Codex-like Agent 系统，技术栈为：
+
+- Go
+- CloudWeGo Eino
+- HTTP API
+- WebSocket
+- Cobra CLI
+- PostgreSQL + pgx + goose
+- Qdrant
+- Markdown Memory
+- JSONL event log
+- Tool Proposal -> Effect Inference -> Policy Engine -> Approval Center -> Executor 安全主链路
+
+请注意：项目已经有 MVP，不要重新推倒重写。你要基于当前代码继续补齐 Phase 7～11。
+
+开始前必须先做：
+
+1. 阅读 README.md。
+2. 阅读 task.json。
+3. 阅读 AGENTS.md。
+4. 检查当前仓库结构。
+5. 检查 internal/app/bootstrap.go、internal/tools/kb、internal/tools/skills、internal/tools/mcp、internal/einoapp、internal/agent、internal/tools/registry.go、internal/tools/router.go。
+6. 找出所有 NotImplementedExecutor、placeholder、registered_only、TODO，并判断它们属于哪个后续 phase。
+7. 给出简短实现计划，然后开始修改代码。
+
+不要只写方案，要真正改代码、补测试、跑测试、更新文档和 task.json。
+
+当前必须延续的核心原则：
+
+1. 不要增加租户、多用户、RBAC、云端 SaaS 假设。
+2. 本项目是单用户本地部署。
+3. 模型不直接操作外部世界。
+4. LLM / Eino Tool 不得直接执行 shell、写文件、调用 MCP、调用 Skill 或改 memory。
+5. LLM 只能生成结构化 ToolProposal。
+6. 所有外部动作必须经过：
+   ToolProposal -> EffectInference -> PolicyEngine -> ApprovalCenter when needed -> Executor。
+7. 只读高置信操作可以自动执行。
+8. 写操作、安装依赖、敏感读取、危险操作、网络写入、unknown.effect、低置信操作必须审批。
+9. 用户审批的是精确 input_snapshot。
+10. 审批后 Executor 只能执行 approval.input_snapshot。
+11. 如果命令、参数、目录、目标文件、risk/effects 变化，必须重新审批。
+12. 不要把普通 LLM 文本直接传给 exec.Command。
+13. 不要使用死关键词匹配作为主要风险判断逻辑。
+14. 允许少量 hard guardrail 作为兜底安全层，但主判断必须基于 ToolSpec effects、ToolProposal expected_effects、结构分析、敏感资源分析、LLM risk classifier 抽象、PolicyEngine。
+15. Markdown Memory 是长期记忆事实源。
+16. PostgreSQL 不存长期记忆正文。
+17. Qdrant 只做向量索引，不做事实源。
+18. 知识库内容、Memory 内容、文件内容、工具输出都是不可信上下文，不能覆盖系统规则和审批规则。
+
+本次目标：完成 Phase 7～11。
+
+整体顺序：
+
+Phase 7: KB 可扩展配置 + 真实 Qdrant adapter + kb.search Tool 打通
+Phase 8: skill.run 真实执行链路
+Phase 9: MCP transport + mcp.call_tool 执行链路
+Phase 10: Eino Graph / Workflow / Human-in-the-loop interrupt-resume 编排
+Phase 11: 集成测试、硬化、文档和 task.json 收口
+
+每完成一个 phase，都必须：
+
+1. gofmt。
+2. go test ./...。
+3. 更新 README.md 的当前能力和限制。
+4. 更新 task.json 对应 phase 的 status、completed_items、remaining_items、change_log。
+5. 确认没有新增绕过 ToolRouter / PolicyEngine / ApprovalCenter 的路径。
+6. 确认没有把密钥、token、私钥、cookie、.env 正文写入消息、日志、agent_events、Markdown memory、Qdrant payload。
+
+---
+
+# Phase 7：KB 可扩展配置 + Qdrant 真实索引链路
+
+当前问题：
+
+- KB service 已有 MVP。
+- 当前默认 vector index 是 InMemoryVectorIndex。
+- internal/tools/kb/qdrant_store.go 目前只实现内存索引或不完整实现。
+- internal/app/bootstrap.go 中 kb.search 仍是 NotImplementedExecutor。
+- 原始目标要求知识库接入能力是可扩展的，第一个真实接入是 Qdrant。
+
+请完成以下任务。
+
+## 7.1 设计可扩展知识库后端配置
+
+在 config/agent.yaml 中增加或规范化：
+
+```yaml
+kb:
+  enabled: true
+  registry_path: ./knowledge/registry.yaml
+
+vector:
+  backend: qdrant # memory | qdrant
+  fallback_to_memory: true
+  embedding_dimension: 1536
+  distance: cosine
+
+qdrant:
+  url: http://localhost:6333
+  api_key: ${QDRANT_API_KEY}
+  timeout_seconds: 10
+  collections:
+    kb: kb_chunks
+    memory: memory_chunks
+    code: code_chunks
+````
+
+要求：
+
+* 支持 `vector.backend=memory`。
+* 支持 `vector.backend=qdrant`。
+* Qdrant 不可用时，如果 `fallback_to_memory=true`，启动时降级到 memory，并输出 warning。
+* Qdrant 不可用时，如果 `fallback_to_memory=false`，启动失败并给出明确错误。
+* 配置 loader 要支持环境变量展开。
+* README 需要说明这两种模式的区别。
+* 不要把 Qdrant 作为事实源。
+
+## 7.2 实现 VectorIndex Factory
+
+新增或修改：
+
+```go
+type VectorBackend string
+
+const (
+    VectorBackendMemory VectorBackend = "memory"
+    VectorBackendQdrant VectorBackend = "qdrant"
+)
+
+type VectorIndexFactory interface {
+    NewVectorIndex(ctx context.Context, cfg Config, embedder EmbeddingProvider) (VectorIndex, error)
+}
+```
+
+在 bootstrap 中根据配置创建：
+
+```text
+memory -> InMemoryVectorIndex
+qdrant -> QdrantVectorIndex
+```
+
+要求：
+
+* factory 不应散落在 handler 里。
+* 所有 KB、Memory、Code 的 vector index 选择从统一 factory 走。
+* 目前至少 KB 和 Memory 接入该 factory。
+* 后续 Milvus、pgvector、Elasticsearch 可以扩展，不要把 Qdrant 逻辑写死到 KB service 中。
+
+## 7.3 实现真实 QdrantVectorIndex
+
+实现 interface：
+
+```go
+type VectorChunk struct {
+    ID         string
+    Text       string
+    Vector     []float32
+    Payload    map[string]any
+    SourceFile string
+}
+
+type VectorSearchResult struct {
+    ID      string
+    Text    string
+    Score   float32
+    Payload map[string]any
+}
+
+type VectorIndex interface {
+    EnsureCollections(ctx context.Context) error
+    UpsertChunks(ctx context.Context, collection string, chunks []VectorChunk) error
+    DeleteBySourceFile(ctx context.Context, collection string, sourceFile string) error
+    Search(ctx context.Context, collection string, query string, filters map[string]any, topK int) ([]VectorSearchResult, error)
+    Health(ctx context.Context) error
+}
+```
+
+QdrantVectorIndex 要求：
+
+* 使用 Go Qdrant client 或稳定 HTTP client 封装。
+* 支持 EnsureCollections。
+* 支持 collection 不存在时创建。
+* 支持 upsert。
+* 支持 delete by source_file。
+* 支持 search。
+* 支持 payload filter，至少支持：
+
+  * kb_id
+  * document_id
+  * source_file
+  * memory_type
+  * scope
+  * project_key
+* 支持 Health。
+* 支持 timeout。
+* 支持 API key header。
+* Qdrant payload 不要存敏感内容。
+* Payload 可以存 source_file、chunk_id、kb_id、document_id、section、content_hash、updated_at，但不要把完整长期记忆或密钥类内容放 payload。
+* Text 是否作为 payload 存储要谨慎：KB chunk text 可用于搜索返回，但 Memory 长期事实源仍是 Markdown。可以把 chunk text 作为 point payload 的 `text`，但 README 要说明 Qdrant 仍只是索引，Markdown/KB 文件才是事实源。
+
+## 7.4 打通 kb.search Tool
+
+将 ToolRegistry 中的 `kb.search` 从 NotImplementedExecutor 改为真实 executor。
+
+ToolSpec：
+
+```json
+{
+  "id": "kb.search",
+  "provider": "kb",
+  "name": "search_knowledge_base",
+  "description": "Search local knowledge base by semantic query",
+  "default_effects": ["kb.read"],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "kb_id": { "type": "string" },
+      "query": { "type": "string" },
+      "limit": { "type": "integer" },
+      "filters": { "type": "object" }
+    },
+    "required": ["query"]
+  }
+}
+```
+
+要求：
+
+* `kb.search` 必须走 ToolRouter。
+* `kb.search` effects 应为 `kb.read`。
+* `kb.search` 高置信只读时自动执行。
+* 不得从 LLM 普通文本直接调用 KB service。
+* Executor 输出：
+
+  * results
+  * source_file
+  * score
+  * snippet
+  * payload
+* WebSocket 中应能看到 tool.started / tool.output / tool.completed。
+* JSONL 记录 kb.search 事件。
+* API 的 `/v1/kbs/{kb_id}/search` 可以直接调用 KB service，属于管理/查询 API；但 Agent 内部工具调用必须走 ToolRouter。
+
+## 7.5 KB Health 和降级
+
+新增：
+
+```text
+GET /v1/kbs/health
+```
+
+或纳入 `/v1/health` payload：
+
+```json
+{
+  "vector_backend": "qdrant",
+  "qdrant": "ok",
+  "kb_collections": {
+    "kb_chunks": "ok",
+    "memory_chunks": "ok"
+  }
+}
+```
+
+如果 fallback 到 memory：
+
+```json
+{
+  "vector_backend": "memory",
+  "fallback_reason": "qdrant unavailable: ..."
+}
+```
+
+## 7.6 Phase 7 测试
+
+必须新增或补齐：
+
+```text
+qdrant_store_test.go
+  - EnsureCollections 调用 mock client
+  - UpsertChunks 正确构造 points
+  - DeleteBySourceFile 正确构造 filter
+  - Search 正确返回 VectorSearchResult
+  - Health 失败时返回错误
+
+vector_factory_test.go
+  - backend=memory 返回 InMemoryVectorIndex
+  - backend=qdrant 返回 QdrantVectorIndex
+  - qdrant 不可用且 fallback=true 返回 memory
+  - qdrant 不可用且 fallback=false 返回 error
+
+kb_tool_test.go
+  - kb.search 注册为真实 executor
+  - kb.search effects=kb.read
+  - kb.search 通过 Policy 自动执行
+  - kb.search 输出检索结果
+```
+
+如果真实 Qdrant 集成测试成本高，先实现 mock client。可额外支持：
+
+```text
+RUN_QDRANT_INTEGRATION=1 go test ./internal/tools/kb -run TestQdrantIntegration
+```
+
+Phase 7 验收标准：
+
+* `internal/app/bootstrap.go` 不再把 `kb.search` 注册为 NotImplementedExecutor。
+* `config/agent.yaml` 支持 memory/qdrant 后端选择。
+* `go test ./...` 通过。
+* README 更新 Qdrant 配置和 KB Tool 说明。
+* task.json phase-7 标记 completed。
+
+---
+
+# Phase 8：skill.run 真实执行链路
+
+当前问题：
+
+* Skill 管理支持注册、上传、启停。
+* `skill.run` 仍是占位执行器。
+* runner 当前返回 `registered_only` 或类似占位结果。
+* 需要把真实 Skill 执行接入 ToolRouter / Policy。
+
+请完成以下任务。
+
+## 8.1 定义 Skill manifest 执行协议
+
+扩展 skill.yaml schema：
+
+```yaml
+id: cpu_analyzer
+name: CPU Analyzer
+version: 1.0.0
+description: Analyze local CPU and process information.
+
+runtime:
+  type: executable # executable | script | go_plugin 后续可扩展
+  command: ./bin/cpu_analyzer
+  args: []
+  cwd: .
+  input_mode: json_stdin # json_stdin | args | env
+  output_mode: json_stdout # json_stdout | text
+  timeout_seconds: 30
+
+input_schema:
+  type: object
+  properties:
+    top_n:
+      type: integer
+
+output_schema:
+  type: object
+  properties:
+    results:
+      type: array
+
+effects:
+  - process.read
+  - system.metrics.read
+
+approval:
+  default: auto # auto | require
+
+permissions:
+  filesystem:
+    read: []
+    write: []
+  shell:
+    enabled: false
+  network:
+    enabled: false
+```
+
+要求：
+
+* manifest 必须校验。
+* skill id、version、runtime、effects 必填。
+* unknown effects 默认审批。
+* 没有 effects 的 skill 默认 `unknown.effect`。
+* Skill 不能绕过 ToolRouter。
+* Skill 如果要执行外部程序，只能由 SkillRunner 执行，不能让 LLM 直接执行。
+* SkillRunner 的执行也属于工具执行，必须记录 JSONL。
+
+## 8.2 实现 SkillRunner
+
+实现：
+
+```go
+type SkillRunInput struct {
+    SkillID string         `json:"skill_id"`
+    Args    map[string]any `json:"args"`
+}
+
+type SkillRunResult struct {
+    SkillID    string         `json:"skill_id"`
+    Status     string         `json:"status"`
+    Output     map[string]any `json:"output"`
+    Stdout     string         `json:"stdout,omitempty"`
+    Stderr     string         `json:"stderr,omitempty"`
+    ExitCode   int            `json:"exit_code"`
+    DurationMS int64          `json:"duration_ms"`
+}
+```
+
+Runner 要求：
+
+* 查 registry。
+* 确认 skill enabled。
+* 校验 input_schema。
+* 根据 runtime 执行。
+* 默认通过 stdin 传 JSON。
+* 捕获 stdout/stderr/exit_code/duration_ms。
+* 超时 kill。
+* 输出做脱敏。
+* 写 JSONL。
+* 发生错误时返回 ToolResult error，不要 panic。
+* 如果 output_mode=json_stdout，解析 JSON。
+* 如果 output_mode=text，返回 text。
+* 不要把敏感内容写入 memory。
+
+## 8.3 注册 skill.run Tool
+
+ToolSpec：
+
+```json
+{
+  "id": "skill.run",
+  "provider": "skill",
+  "name": "run_skill",
+  "description": "Run a local registered skill by id",
+  "default_effects": ["unknown.effect"],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "skill_id": { "type": "string" },
+      "args": { "type": "object" }
+    },
+    "required": ["skill_id"]
+  }
+}
+```
+
+EffectInference 要求：
+
+* 读取 skill manifest effects。
+* manifest effects 优先于 default unknown。
+* approval.default=require 时必须审批。
+* effects 包含 write/dangerous/sensitive/network_write 时必须审批。
+* effects 全是 read 且 confidence 足够时可自动执行。
+* disabled skill 不可执行。
+
+## 8.4 Skill API 扩展
+
+已有：
+
+```text
+POST /v1/skills/upload
+GET /v1/skills
+POST /v1/skills/{id}/enable
+POST /v1/skills/{id}/disable
+```
+
+补：
+
+```text
+GET  /v1/skills/{id}
+POST /v1/skills/{id}/test
+POST /v1/skills/{id}/run
+```
+
+注意：
+
+* 管理 API 直接 run skill 也要走同样的 Policy 或至少显式执行测试路径。
+* `test` 可以用 dry-run 或 mock input。
+* `run` 必须走 ToolRouter。
+
+## 8.5 Phase 8 测试
+
+新增：
+
+```text
+skill_manifest_test.go
+  - manifest 必填字段校验
+  - missing effects -> unknown.effect
+  - invalid runtime -> error
+
+skill_runner_test.go
+  - enabled executable skill 成功执行
+  - disabled skill 拒绝执行
+  - json_stdin/json_stdout 正常
+  - timeout 生效
+  - stdout/stderr 脱敏
+
+skill_policy_test.go
+  - read-only skill 自动执行
+  - write skill 进入 approval
+  - approval 后执行 input_snapshot
+  - proposal 改变后不能复用旧 approval
+```
+
+Phase 8 验收标准：
+
+* `skill.run` 不再返回 registered_only 占位结果。
+* Skill manifest effects 真正参与 Policy。
+* go test ./... 通过。
+* README 更新 Skill 执行说明。
+* task.json phase-8 标记 completed。
+
+---
+
+# Phase 9：MCP transport + mcp.call_tool 执行链路
+
+当前问题：
+
+* MCP 目前是配置管理和 tool policy override。
+* `mcp.call_tool` 仍是 NotImplementedExecutor。
+* `internal/tools/mcp/client.go` 还是 placeholder。
+* 需要支持 stdio 和 http 模式。
+
+请完成以下任务。
+
+## 9.1 MCP 配置结构
+
+确保 `config/mcp.servers.yaml` 支持：
+
+```yaml
+servers:
+  - id: filesystem
+    name: filesystem
+    enabled: true
+    transport: stdio
+    command: node
+    args:
+      - ./mcp/filesystem/index.js
+    cwd: ./mcp/filesystem
+    env:
+      ROOT_DIR: ./workspace
+
+  - id: local-http-tools
+    name: local-http-tools
+    enabled: true
+    transport: http
+    url: http://localhost:3001/mcp
+    headers:
+      Authorization: ${MCP_LOCAL_TOKEN}
+```
+
+`config/mcp.tool-policies.yaml`：
+
+```yaml
+tools:
+  mcp.filesystem.read_file:
+    effects:
+      - fs.read
+    approval: auto
+
+  mcp.filesystem.write_file:
+    effects:
+      - fs.write
+    approval: require
+
+  mcp.github.create_issue:
+    effects:
+      - network.post
+    approval: require
+```
+
+要求：
+
+* env/header 支持环境变量展开。
+* 不要把 token 打印到日志。
+* disabled server 不可调用。
+* unknown server/tool 默认审批或拒绝，不能直接执行。
+
+## 9.2 实现 MCP Client 抽象
+
+定义：
+
+```go
+type MCPClient interface {
+    ListTools(ctx context.Context, serverID string) ([]MCPToolSchema, error)
+    CallTool(ctx context.Context, serverID string, toolName string, input map[string]any) (*MCPToolResult, error)
+    Health(ctx context.Context, serverID string) error
+}
+```
+
+Transport：
+
+```go
+type MCPTransport interface {
+    Start(ctx context.Context) error
+    ListTools(ctx context.Context) ([]MCPToolSchema, error)
+    CallTool(ctx context.Context, name string, input map[string]any) (*MCPToolResult, error)
+    Close(ctx context.Context) error
+}
+```
+
+实现：
+
+* StdioTransport
+* HTTPTransport
+
+MVP 要求：
+
+* 至少实现 mockable transport。
+* stdio 和 http 至少有基本 JSON-RPC 调用骨架。
+* 如果协议细节暂时不完整，必须清晰封装，不要把 placeholder 暴露给 mcp.call_tool。
+* refresh tools 能拉取工具 schema 并缓存到 registry/config。
+* call_tool 能通过 mock transport 完成测试。
+* README 标注真实 MCP 协议支持范围。
+
+## 9.3 mcp.call_tool Tool
+
+ToolSpec：
+
+```json
+{
+  "id": "mcp.call_tool",
+  "provider": "mcp",
+  "name": "call_mcp_tool",
+  "description": "Call a tool exposed by a configured MCP server",
+  "default_effects": ["unknown.effect"],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "server_id": { "type": "string" },
+      "tool_name": { "type": "string" },
+      "arguments": { "type": "object" }
+    },
+    "required": ["server_id", "tool_name"]
+  }
+}
+```
+
+EffectInference 要求：
+
+* 先查本地 MCP tool policy override。
+* override effects 优先。
+* server/tool schema 声明可作为辅助信息，但不能完全信任。
+* 没有 policy 的 MCP tool 默认 unknown.effect。
+* unknown.effect 必须审批。
+* write/network/dangerous/sensitive 必须审批。
+* read-only 且 confidence 足够才自动执行。
+
+## 9.4 MCP API 补强
+
+已有：
+
+```text
+GET /v1/mcp/servers
+POST /v1/mcp/servers
+PATCH /v1/mcp/servers/{id}
+GET /v1/mcp/tools
+PATCH /v1/mcp/tools/{id}/policy
+```
+
+补或完善：
+
+```text
+POST /v1/mcp/servers/{id}/refresh
+POST /v1/mcp/servers/{id}/test
+POST /v1/mcp/servers/{id}/tools/{tool_name}/call
+```
+
+注意：
+
+* call 必须走 ToolRouter。
+* refresh 可以直接走 MCP client，但要记录事件。
+* test 不应执行有副作用 tool。
+* policy override 更新后立即影响调用判断。
+
+## 9.5 Phase 9 测试
+
+新增：
+
+```text
+mcp_config_test.go
+  - stdio/http config 解析
+  - env expansion
+  - disabled server
+
+mcp_policy_test.go
+  - override effects 生效
+  - unknown tool 默认 approval
+  - read tool auto
+  - write tool approval
+
+mcp_call_tool_test.go
+  - mock transport list tools
+  - mock transport call tool
+  - mcp.call_tool 通过 ToolRouter
+  - approval 后只执行 input_snapshot
+```
+
+Phase 9 验收标准：
+
+* `mcp.call_tool` 不再是 NotImplementedExecutor。
+* MCP policy override 真正参与 EffectInference/Policy。
+* mock transport 测试通过。
+* go test ./... 通过。
+* README 更新 MCP runtime 能力和限制。
+* task.json phase-9 标记 completed。
+
+---
+
+# Phase 10：Eino Graph / Workflow / HITL interrupt-resume 编排
+
+当前问题：
+
+* Eino ChatModel 已封装。
+* internal/einoapp/graph.go、workflow.go 目前是 placeholder。
+* 当前 runtime/orchestrator 更像简单流程，没有完整 Graph/Workflow 和审批恢复编排。
+* 需要让 Eino 编排更符合 Agent 多步执行和 Human-in-the-loop。
+
+请完成以下任务。
+
+## 10.1 明确 Workflow 状态机
+
+设计状态：
+
+```text
+received_user_message
+context_built
+planned
+tool_proposed
+effect_inferred
+policy_decided
+approval_requested
+paused_for_approval
+approval_approved
+approval_rejected
+tool_executing
+tool_completed
+tool_failed
+assistant_summarizing
+completed
+failed
+cancelled
+```
+
+定义：
+
+```go
+type RunState struct {
+    RunID          string
+    ConversationID string
+    Status         string
+    CurrentStep    string
+    UserMessage    string
+    Context        AgentContext
+    Proposal       *ToolProposal
+    Effect         *EffectInferenceResult
+    Policy         *PolicyDecision
+    ApprovalID     string
+    ToolResult     *ToolResult
+    Events         []AgentEvent
+}
+```
+
+要求：
+
+* RunState 可以序列化到 JSONL / agent_events。
+* paused_for_approval 可以恢复。
+* 恢复时不重新生成 ToolProposal。
+* 恢复时读取 approval.input_snapshot。
+* 多步工具调用要保留 step 序列。
+
+## 10.2 Eino Graph / Workflow 封装
+
+在 `internal/einoapp/workflow.go` 实现一个清晰封装：
+
+```go
+type AgentWorkflow interface {
+    Start(ctx context.Context, input AgentInput) (AgentEventStream, error)
+    Resume(ctx context.Context, runID string, approvalID string, approved bool) (AgentEventStream, error)
+}
+```
+
+不要让业务层到处依赖 Eino 细节。可以在内部使用 Eino Graph/Workflow/ADK 能力，但对外暴露稳定接口。
+
+节点建议：
+
+```text
+BuildContextNode
+PlanNode
+ToolProposalNode
+EffectInferenceNode
+PolicyNode
+ApprovalInterruptNode
+ExecuteToolNode
+SummarizeNode
+PersistNode
+```
+
+要求：
+
+* Eino Tool Adapter 只生成 ToolProposal。
+* ToolProposal 仍进入本系统 ToolRouter。
+* 需要审批时产生 interrupt/approval event。
+* approval 后 resume，不重新规划。
+* WebSocket 和 CLI 都使用同一 AgentWorkflow。
+* Runtime/orchestrator 不要再用散落逻辑手工拼接审批恢复。
+
+## 10.3 Streaming / Callback 统一
+
+实现事件类型统一：
+
+```go
+type AgentEvent struct {
+    Type           string         `json:"type"`
+    RunID          string         `json:"run_id,omitempty"`
+    ConversationID string         `json:"conversation_id,omitempty"`
+    ToolCallID     string         `json:"tool_call_id,omitempty"`
+    ApprovalID     string         `json:"approval_id,omitempty"`
+    Payload        map[string]any `json:"payload,omitempty"`
+    CreatedAt      time.Time      `json:"created_at"`
+}
+```
+
+事件：
+
+```text
+run.started
+context.built
+assistant.delta
+tool.proposed
+effect.inferred
+policy.decided
+approval.requested
+approval.approved
+approval.rejected
+tool.started
+tool.output
+tool.completed
+assistant.message
+run.completed
+run.failed
+```
+
+要求：
+
+* WebSocket 输出这些事件。
+* CLI 能打印这些事件。
+* JSONL 写这些事件。
+* Eino callback 能映射为这些事件。
+* token usage 仍写 PostgreSQL message_usage / rollup。
+* tool_call_count 正确累加。
+
+## 10.4 Phase 10 测试
+
+新增：
+
+```text
+workflow_readonly_test.go
+  - 用户请求只读 shell
+  - workflow 产生 proposal
+  - policy auto execute
+  - tool completed
+  - run completed
+
+workflow_approval_test.go
+  - 用户请求写操作
+  - workflow paused_for_approval
+  - approval request 生成
+  - approve 后 resume
+  - resume 不重新生成 proposal
+  - executor 执行 input_snapshot
+  - run completed
+
+workflow_reject_test.go
+  - 写操作审批被拒绝
+  - 不执行 executor
+  - assistant 给出拒绝后的总结
+  - run completed or cancelled
+
+workflow_events_test.go
+  - WebSocket / event stream 顺序正确
+```
+
+Phase 10 验收标准：
+
+* graph.go/workflow.go 不再是 placeholder。
+* approval resume 是 workflow 的一部分。
+* WebSocket/CLI/JSONL 事件一致。
+* go test ./... 通过。
+* README 更新 Eino Workflow/HITL 说明。
+* task.json phase-10 标记 completed。
+
+---
+
+# Phase 11：集成测试、运行时硬化、文档收口
+
+当前问题：
+
+* 测试主要是单元测试和 smoke test。
+* 外部依赖、降级策略、NotImplemented 清理、文档同步仍需收口。
+
+请完成以下任务。
+
+## 11.1 清理 NotImplemented / Placeholder
+
+全仓库搜索：
+
+```text
+NotImplementedExecutor
+not_implemented
+placeholder
+TODO
+registered_only
+```
+
+要求：
+
+* 对已经实现的能力，删除占位。
+* 对暂未实现的能力，明确标记 experimental，并在 README/task.json 说明。
+* 不允许 README 声称已完成但代码仍是 not implemented。
+* 不允许 ToolRegistry 注册对外可见工具但执行器是占位，除非 ToolSpec 标记 disabled/experimental 且不会被 Planner 自动选择。
+
+## 11.2 配置校验
+
+启动时校验：
+
+```text
+database.url
+qdrant.url when vector.backend=qdrant
+memory.root_dir
+events.jsonl_root
+shell.enabled
+policy.yaml
+skills.registry.yaml
+mcp.servers.yaml
+mcp.tool-policies.yaml
+```
+
+要求：
+
+* 缺少必要配置给出明确错误。
+* 可选配置缺失使用合理默认值。
+* 路径不存在时自动创建可创建目录。
+* 对 secrets/env 展开失败要明确提示，但不要打印 secret 值。
+* 增加 `agent-server --check-config` 或 CLI `agent check-config`。
+
+## 11.3 集成测试矩阵
+
+补充：
+
+```text
+postgres integration:
+  - migrations up
+  - create conversation
+  - insert messages
+  - usage rollup
+
+qdrant integration:
+  - ensure collection
+  - upsert
+  - search
+  - delete by source_file
+
+kb integration:
+  - create KB
+  - upload doc
+  - search via API
+  - search via kb.search Tool
+
+skill integration:
+  - upload test skill
+  - run read-only skill
+  - write skill approval path
+
+mcp integration:
+  - mock stdio server
+  - mock http server
+  - list tools
+  - call read tool
+  - call write tool requires approval
+
+workflow integration:
+  - WebSocket readonly
+  - WebSocket approval request
+  - approval respond resume
+```
+
+如果外部服务测试成本高：
+
+* 默认 go test ./... 使用 mock。
+* 集成测试用环境变量开启：
+
+```bash
+RUN_INTEGRATION=1 go test ./...
+RUN_QDRANT_INTEGRATION=1 go test ./internal/tools/kb/...
+RUN_POSTGRES_INTEGRATION=1 go test ./internal/db/...
+```
+
+## 11.4 安全硬化
+
+确认：
+
+* shell stdout/stderr 脱敏。
+* JSONL 脱敏。
+* agent_events 脱敏。
+* messages 脱敏。
+* memory patch 脱敏。
+* Qdrant payload 不写 secret。
+* .env/private key/cloud credentials/browser cookie 默认 sensitive_read。
+* unknown.effect 必须审批。
+* low confidence 必须审批。
+* approval input_snapshot 不允许被修改。
+* approval 后执行的 input hash 和 approval hash 一致。
+
+可增加：
+
+```go
+type ApprovalSnapshot struct {
+    InputSnapshot map[string]any
+    InputHash     string
+}
+```
+
+执行前校验 hash。
+
+## 11.5 README / task.json 收口
+
+README 必须最终包含：
+
+```text
+1. 当前完整能力列表
+2. 当前仍未完成或 experimental 能力
+3. Qdrant 配置说明
+4. Vector backend memory/qdrant 选择说明
+5. kb.search Tool 说明
+6. Skill runtime 说明
+7. MCP runtime 说明
+8. Eino Workflow/HITL 说明
+9. 配置检查说明
+10. 集成测试说明
+11. 降级策略说明
+12. 安全边界说明
+13. 不可信上下文说明
+14. 所有 API 和 CLI 示例
+```
+
+task.json 要更新：
+
+* phase-7 status completed
+* phase-8 status completed
+* phase-9 status completed
+* phase-10 status completed
+* phase-11 status completed 或 partially_completed_with_notes
+* overall_status 更新为 production_ready_mvp 或 mvp_completed_with_runtime_extensions
+* change_log 加每个 phase 的完成记录
+* verified 加入 go test ./... 结果和集成测试结果
+
+## 11.6 Phase 11 验收标准
+
+* gofmt。
+* go vet ./... 尽量通过。
+* go test ./... 通过。
+* 可选集成测试说明清楚。
+* README 与实际能力一致。
+* task.json 与实际进度一致。
+* 不存在可被 Planner 自动选择的 NotImplementedExecutor。
+* 所有外部动作仍走 ToolRouter / Policy / Approval / Executor。
+
+---
+
+# 最终验收总标准
+
+完成 Phase 7～11 后，项目至少应满足：
+
+1. docker compose up 可以启动 PostgreSQL 和 Qdrant。
+2. goose migration 可以创建数据库表。
+3. Agent Server 可以启动。
+4. CLI 可以调用 health、ask、chat、approvals、memory、kb、skills、mcp。
+5. WebSocket 可以完成普通对话。
+6. WebSocket 可以完成只读工具自动执行。
+7. WebSocket 可以完成写操作 approval.requested。
+8. 用户 approve 后 workflow resume，执行 approval.input_snapshot。
+9. 用户 reject 后不执行工具，并给出总结。
+10. kb.search 已接入真实 KB service。
+11. vector.backend=memory 可用。
+12. vector.backend=qdrant 可用。
+13. Qdrant 不可用时按配置降级或启动失败。
+14. skill.run 可以执行本地注册 skill。
+15. skill effects 参与 Policy。
+16. mcp.call_tool 可以通过 mock/真实 transport 调用 MCP 工具。
+17. MCP tool policy override 参与 Policy。
+18. Eino Workflow/HITL 不再是 placeholder。
+19. Markdown Memory 仍是长期记忆事实源。
+20. Qdrant 仍只是索引。
+21. PostgreSQL 仍只存 conversations/messages/usage/agent_events。
+22. 不存在 LLM 普通文本直接 exec.Command 的路径。
+23. 不存在 Eino Tool 直接操作外部世界的路径。
+24. go test ./... 通过。
+25. README 和 task.json 与实际实现一致。
+
+---
+
+# 工作方式要求
+
+请按 phase 顺序推进，不要一次性大改完不验证。
+
+每个 phase 内：
+
+1. 先检查相关代码。
+2. 给出你准备修改的文件列表。
+3. 小步提交式修改。
+4. 跑相关测试。
+5. 修复失败。
+6. 再进入下一 phase。
+
+请不要为了让测试通过而删除安全测试。
+请不要绕过审批机制。
+请不要把 NotImplementedExecutor 换成一个实际仍然不执行的假实现。
+请不要让 README 夸大能力。
+请不要引入租户、多用户、RBAC。
+请不要把长期记忆写进 PostgreSQL。
+请不要让 Qdrant 成为事实源。
+
+现在开始执行。先读 README.md、task.json、AGENTS.md，然后从 Phase 7 开始。
+
+```
+
+---
+
+
+[1]: https://developers.openai.com/codex/cli?utm_source=chatgpt.com "Codex CLI"

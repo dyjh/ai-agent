@@ -1,0 +1,261 @@
+{
+  "project": "local-agent",
+  "source": "promote.txt",
+  "last_updated": "2026-04-23T16:10:00+08:00",
+  "overall_status": "mvp_completed_with_followups",
+  "current_task_id": "phase-8-skill-runtime",
+  "current_task_title": "补齐 skill.run 真实执行链路",
+  "summary": {
+    "headline": "MVP 首轮实现已完成，主链路可运行，当前进入占位模块补全和生产化收口阶段。",
+    "progress": {
+      "completed": 7,
+      "pending": 4,
+      "total": 11
+    },
+    "verified": [
+      "2026-04-23 已检查仓库结构，HTTP API / WebSocket / CLI / memory / kb / skills / mcp / tests 均已存在。",
+      "2026-04-23 已执行 go test ./... 并通过。",
+      "README 已同步记录 MVP 限制和后续 TODO。",
+      "2026-04-23 已完成 vector backend factory、Qdrant HTTP adapter、kb.search executor、/v1/kbs/health 和对应测试。"
+    ],
+    "unfinished_overview": [
+      "skill.run 目前只返回 registered_only 占位结果，未执行真实技能。",
+      "mcp.call_tool 尚未实现真实 transport/client 与调用链路。",
+      "Eino Graph / Workflow / interrupt-resume 仍为占位骨架，审批暂停恢复尚未接入正式编排。"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "phase-1-bootstrap",
+      "title": "初始化 Go 项目骨架与基础配置",
+      "status": "completed",
+      "deliverables": [
+        "go.mod / Makefile / docker-compose.yml / .env.example",
+        "cmd / internal / config / memory 等基础目录结构",
+        "README 初稿与启动说明"
+      ],
+      "completed_items": [
+        "建立 agent server 与 CLI 双入口。",
+        "补齐基础配置文件与本地开发所需容器编排。",
+        "整理仓库骨架，使后续 agent / tool / db / api 能按包扩展。",
+        "提供最初版本的运行与迁移说明。"
+      ]
+    },
+    {
+      "id": "phase-2-core-domain",
+      "title": "实现核心领域模型与基础设施",
+      "status": "completed",
+      "deliverables": [
+        "config / ids / timeutil / log",
+        "events / db migration / repo 接口",
+        "ToolSpec / ToolProposal / ToolResult / Effect / Approval 等核心类型"
+      ],
+      "completed_items": [
+        "实现配置加载、ID 生成、时间与日志基础设施。",
+        "建立 PostgreSQL migration、repo 接口与内存 fallback store。",
+        "补齐 conversations / messages / usage / agent_events 的基础存储抽象。",
+        "统一工具与审批链路的数据结构，供 planner、router、executor 复用。"
+      ]
+    },
+    {
+      "id": "phase-3-safety-runtime",
+      "title": "实现安全主链路",
+      "status": "completed",
+      "deliverables": [
+        "EffectInference",
+        "PolicyEngine",
+        "ApprovalCenter",
+        "ToolRouter / shell.exec / JSONL Event Log"
+      ],
+      "completed_items": [
+        "实现 Tool Proposal -> Effect Inference -> Policy -> Approval -> Executor 主链路。",
+        "实现 shell 命令结构分析、敏感资源识别和审批快照绑定。",
+        "支持只读高置信自动执行，写操作/敏感读/未知效果进入审批。",
+        "将 run/tool/approval 事件写入 JSONL，满足基础审计能力。"
+      ]
+    },
+    {
+      "id": "phase-4-agent-memory-kb",
+      "title": "实现 Agent Runtime、Markdown Memory 与 KB",
+      "status": "completed",
+      "deliverables": [
+        "agent runtime / planner / context builder",
+        "einoapp ChatModel 封装与 runner",
+        "memory store / memory patch / KB service / fake embedding"
+      ],
+      "completed_items": [
+        "实现 Runtime、Planner、ContextBuilder 和基础 prompts/schema。",
+        "接入 Eino ChatModel 封装，保留后续编排扩展入口。",
+        "实现 Markdown Memory 检索、patch 和 reindex 流程。",
+        "实现 KB 元数据、文档切块、向量写入与搜索服务。",
+        "建立本地可运行的 embedder + 内存向量索引 MVP 路径。"
+      ]
+    },
+    {
+      "id": "phase-5-api-cli",
+      "title": "实现 HTTP API、WebSocket 与 CLI",
+      "status": "completed",
+      "deliverables": [
+        "HTTP router / handlers",
+        "WebSocket chat 事件流",
+        "cobra CLI"
+      ],
+      "completed_items": [
+        "提供健康检查、会话、消息、审批、memory、knowledge、skills、mcp 等 HTTP 接口。",
+        "提供 WebSocket 聊天事件通道，用于 run/tool/assistant/approval 事件推送。",
+        "提供 CLI 健康检查、ask/chat、approval、memory、skills、mcp 等命令。",
+        "保证本地单机模式下的基础交互链路可用。"
+      ]
+    },
+    {
+      "id": "phase-6-skill-mcp-docs-tests",
+      "title": "实现 Skill/MCP 管理、测试和文档",
+      "status": "completed",
+      "deliverables": [
+        "skill manager / mcp manager",
+        "核心单元测试与 smoke test",
+        "README / AGENTS 完整化"
+      ],
+      "completed_items": [
+        "实现 Skill 注册、启停管理和本地状态维护。",
+        "实现 MCP server 配置管理与 tool policy override 管理。",
+        "补齐 policy / effect inference / approval snapshot / markdown memory / API smoke tests。",
+        "README 覆盖安装、运行、API、CLI、WebSocket、memory、kb、skills、mcp、审批与测试说明。",
+        "AGENTS.md 已同步项目约束与实现原则。"
+      ]
+    },
+    {
+      "id": "phase-7-kb-qdrant-productionization",
+      "title": "补齐 KB Tool 与 Qdrant 真实索引链路",
+      "status": "completed",
+      "completed_items": [
+        "新增 kb/vector/qdrant 配置，支持 memory / qdrant backend 选择、环境变量展开和 fallback_to_memory 降级。",
+        "实现统一 VectorIndexFactory，并让 KB 与 Memory 通过同一工厂选择内存或 Qdrant 后端。",
+        "实现真实 Qdrant HTTP adapter，支持 health、ensure collections、upsert、delete by source_file、payload filter search。",
+        "将 kb.search 从 NotImplementedExecutor 替换为真实 executor，并通过 ToolRouter 自动执行高置信只读查询。",
+        "新增 /v1/kbs/health 与 /v1/health 中的 vector payload，补齐 qdrant store / vector factory / kb.search tool 测试。"
+      ],
+      "remaining_items": [
+        "如需更高保真生产部署，可继续补充真实 embedding provider 和 RUN_QDRANT_INTEGRATION 集成测试。"
+      ],
+      "deliverables": [
+        "真实 Qdrant adapter",
+        "可执行的 kb.search Tool",
+        "KB 检索测试与运行说明"
+      ]
+    },
+    {
+      "id": "phase-8-skill-runtime",
+      "title": "补齐 skill.run 真实执行链路",
+      "status": "pending",
+      "why_pending": "当前 Skill 管理只完成注册和启停，skill.run 仍是占位执行器。",
+      "evidence": [
+        "internal/tools/skills/runner.go 返回 status=registered_only。",
+        "README 已注明“真实 skill 执行仍保留为后续扩展点”。"
+      ],
+      "remaining_items": [
+        "定义 Skill 执行输入输出协议，并把执行结果纳入 ToolResult。",
+        "将 Skill manifest / runner / approval policy 接入 ToolRouter。",
+        "明确 Skill 的只读/写入/敏感效果声明，避免 unknown.effect 长期兜底。",
+        "补充 skill.run 的成功、失败、审批分支测试。"
+      ],
+      "deliverables": [
+        "真实 skill.run 执行器",
+        "Skill effect 声明与策略接入",
+        "Skill 执行测试"
+      ]
+    },
+    {
+      "id": "phase-9-mcp-runtime",
+      "title": "补齐 MCP transport 与 mcp.call_tool 执行链路",
+      "status": "pending",
+      "why_pending": "当前 MCP 仅完成配置管理与 policy override，未真正连接远端 MCP server。",
+      "evidence": [
+        "internal/tools/mcp/client.go 当前仅有 placeholder Client struct。",
+        "internal/app/bootstrap.go 中 mcp.call_tool 被注册为 NotImplementedExecutor。",
+        "README 已注明“真实 MCP transport/client 仍是下一阶段”。"
+      ],
+      "remaining_items": [
+        "实现 MCP client transport，支持 server 建连、tool schema 拉取和调用。",
+        "将 mcp.call_tool 接入 ToolRouter，并与 effect inference / policy / approval 串联。",
+        "将 MCP tool policy override 真正用于调用前判定，而不只是配置存储。",
+        "补充 MCP 调用的 smoke test 或 mock transport 测试。"
+      ],
+      "deliverables": [
+        "真实 MCP client",
+        "可执行的 mcp.call_tool Tool",
+        "MCP policy 生效测试"
+      ]
+    },
+    {
+      "id": "phase-10-eino-workflow-hitl",
+      "title": "补齐 Eino Graph / Workflow 与审批 interrupt-resume 编排",
+      "status": "pending",
+      "why_pending": "当前已接入 Eino ChatModel，但更完整的 Agent Graph、Workflow 和审批暂停恢复仍未落地。",
+      "evidence": [
+        "internal/einoapp/graph.go 当前为 placeholder。",
+        "internal/einoapp/workflow.go 当前为 placeholder。",
+        "internal/agent/orchestrator.go 当前只是 Runtime 别名。"
+      ],
+      "remaining_items": [
+        "将 planner、context builder、tool proposal、approval wait/resume 编排成明确 workflow。",
+        "实现审批中断后的恢复执行，避免由外层逻辑手工拼接。",
+        "补齐 callbacks / streaming 事件在 WebSocket 与 CLI 中的一致传递。",
+        "为复杂多步工具调用增加更清晰的状态迁移与失败恢复。"
+      ],
+      "deliverables": [
+        "Eino Graph/Workflow 编排实现",
+        "审批 interrupt-resume 流程",
+        "统一的 streaming / callback 事件链路"
+      ]
+    },
+    {
+      "id": "phase-11-hardening-and-integration",
+      "title": "集成测试、运行时硬化与文档收口",
+      "status": "pending",
+      "why_pending": "当前测试以核心单元和本地 smoke 为主，生产化运行时的外部依赖、降级策略和文档闭环还需要继续收口。",
+      "evidence": [
+        "tests/ 目前覆盖 policy / effect inference / approval snapshot / markdown memory / API smoke。",
+        "README 当前 MVP 限制和后续 TODO 已明确真实 Qdrant、Skill、MCP、Workflow 尚待补齐。"
+      ],
+      "remaining_items": [
+        "补充 PostgreSQL / Qdrant / MCP 的集成测试或可重复 mock 套件。",
+        "补充启动配置校验、依赖不可用降级和恢复场景测试。",
+        "完善运行手册，保证 task.json、README 和实际能力列表持续同步。",
+        "梳理 not_implemented 工具与实验性能力，避免对外能力描述过度领先于实现。"
+      ],
+      "deliverables": [
+        "更完整的集成测试矩阵",
+        "启动与降级策略验证",
+        "文档与任务清单收口"
+      ]
+    }
+  ],
+  "change_log": [
+    {
+      "at": "2026-04-23T12:55:00+08:00",
+      "task_id": "phase-1-bootstrap",
+      "summary": "根据 promote.txt 创建任务清单，开始搭建 MVP 项目骨架。"
+    },
+    {
+      "at": "2026-04-23T13:20:00+08:00",
+      "task_id": "phase-3-safety-runtime",
+      "summary": "完成核心类型、迁移、仓储、JSONL 事件、ToolRegistry、Shell parser、EffectInference、PolicyEngine、ApprovalCenter 和 Router 的首版实现。"
+    },
+    {
+      "at": "2026-04-23T14:05:00+08:00",
+      "task_id": "phase-6-skill-mcp-docs-tests",
+      "summary": "完成 Eino ChatModel 封装、Runtime、Markdown Memory、KB、HTTP API、WebSocket、CLI、Skill/MCP 管理、README 和核心测试。"
+    },
+    {
+      "at": "2026-04-23T14:20:00+08:00",
+      "task_id": "phase-7-kb-qdrant-productionization",
+      "summary": "重新整理 task.json：保留 MVP 已完成阶段，细化完成项，并把 kb.search/Qdrant、skill.run、mcp.call_tool、Eino workflow 与集成硬化列为后续任务。"
+    },
+    {
+      "at": "2026-04-23T16:10:00+08:00",
+      "task_id": "phase-7-kb-qdrant-productionization",
+      "summary": "完成 vector backend 配置与工厂、Qdrant HTTP adapter、kb.search executor、KB 健康检查和 phase-7 测试，当前任务切换到 phase-8 skill.run。"
+    }
+  ]
+}

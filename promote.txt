@@ -1,0 +1,2039 @@
+
+
+```text
+你是一个资深 Go 后端工程师、AI Agent 架构师，并且熟悉 CloudWeGo Eino 框架。请帮我从当前仓库开始，设计并实现一个“个人本地部署的 Codex-like Agent 系统”。
+
+请先阅读整个仓库。如果仓库为空或结构不完整，请创建一个可运行的 MVP 项目。不要只给方案，要真正落地代码、配置、数据库 schema、迁移、测试和文档。
+
+重要：这是个人本地部署系统，不需要租户、多用户、团队 RBAC。目标是本地使用，支持日常对话、知识问答、代码能力、运维能力、会话管理、WebSocket 对话接口、CMD Console 对话、知识库接入、Skill 管理、MCP 管理、长期记忆和审批机制。
+
+技术栈必须使用：
+
+- Language: Go
+- Agent / LLM Orchestration Framework: CloudWeGo Eino
+- Agent 编排优先使用 Eino ADK / Graph / Workflow / Tool / Retriever / Embedding / Callback 能力
+- HTTP API: Go net/http + chi，或在已有项目中沿用现有 Go HTTP 框架
+- WebSocket: nhooyr.io/websocket 或 gorilla/websocket，优先选择轻量、稳定、易测试方案
+- CLI: Cobra
+- PostgreSQL: pgx/v5
+- DB Migration: goose
+- Config: YAML + env expansion
+- Qdrant: Go client，封装成 VectorIndex 接口
+- Markdown Memory: 本地 Markdown 文件
+- JSONL Event Log: 本地文件
+- Tests: go test
+- Lint/format: gofmt, go vet，可选 golangci-lint
+
+不要使用 Python/FastAPI/Typer/SQLAlchemy/Pydantic。所有实现都应改为 Go 类型、Go interface、Go struct、Go package。
+
+如果当前仓库已有不同技术栈，请先评估是否应该迁移或沿用。但本次目标是 Go + Eino，除非仓库已经是成熟 Go 架构，否则按下面结构实现。
+
+核心原则：
+
+1. 模型不直接操作外部世界。
+   - LLM 只能生成结构化 Tool Proposal。
+   - 所有外部动作必须经过 Tool Router、Effect Inference、Policy Engine、Approval Center、Executor。
+   - 只读查询可自动执行。
+   - 写操作、安装依赖、敏感读取、危险操作、不确定操作必须请求用户确认。
+   - 用户确认的是“具体动作快照”，不是授权 AI 随意操作。
+   - 审批后 Executor 只能执行用户确认过的 input_snapshot。
+   - 如果命令、参数、目录、目标文件、风险等级发生变化，必须重新审批。
+
+2. 不要使用死关键词匹配来判断用户意图或命令风险。
+   - 不要写成：命令包含 rm 就危险、包含 cat 就安全、用户说删除就危险。
+   - 应该使用：
+     - Intent Planner
+     - Tool Proposal
+     - Effect Inference
+     - Tool manifest effects
+     - Shell/PowerShell 命令结构分析
+     - 资源敏感度分析
+     - Policy Engine
+     - 低置信度默认审批
+   - 少量 hard guardrail 可以作为兜底安全层，但不能作为主路由或主要风险判断方式。
+
+3. 长期记忆和偏好记忆使用 Markdown 作为事实源。
+   - PostgreSQL 不存长期记忆正文。
+   - Markdown memory 是可读、可改、可 Git 管理的本地事实源。
+   - Qdrant 只作为语义索引，不作为事实源。
+   - PostgreSQL 只存会话、消息历史、token 使用统计，以及可选的轻量 agent_events。
+   - run/tool/approval/audit 可以存在 JSONL，也可以同步写入 agent_events。
+
+4. 所有能力统一抽象成 ToolSpec。
+   - shell.exec
+   - code.read_file
+   - code.search
+   - code.propose_patch
+   - code.apply_patch
+   - kb.search
+   - memory.search
+   - memory.patch
+   - skill.run
+   - mcp.call_tool
+   - 未来可扩展更多工具。
+
+5. Shell 执行硬性规则：
+   - AI/LLM 可以根据用户需求生成 shell.exec Tool Proposal。
+   - shell.exec Tool Proposal 必须包含：
+     - shell
+     - command
+     - cwd
+     - timeout_seconds
+     - purpose
+     - expected_effects
+   - 系统必须先对 shell.exec Tool Proposal 做 Effect Inference。
+   - 如果判断为只读查询，例如：
+     - system.read
+     - system.metrics.read
+     - process.read
+     - git.read
+     - code.read
+     且 confidence >= policy.min_confidence_for_auto_execute，则可以自动执行。
+   - 如果判断为以下任意类型，必须创建 approval，不能直接执行：
+     - fs.write
+     - code.modify
+     - package.install
+     - git.write
+     - db.write
+     - config.modify
+     - fs.delete
+     - service.restart
+     - service.stop
+     - process.kill
+     - privilege.escalate
+     - deployment.apply
+     - network.post
+     - network.put
+     - network.delete
+     - sensitive_read
+     - unknown.effect
+     - low confidence
+   - 用户批准后，Shell Executor 只能执行 approval.input_snapshot 中的 command/cwd/shell/timeout。
+   - 用户批准前，Shell Executor 绝不能执行写入、安装、高危、敏感读取或未知风险命令。
+   - 如果 approval 之后模型重新生成了不同命令，必须重新审批。
+   - 禁止将 LLM 普通文本输出直接传入 exec.Command。
+   - 所有 shell 执行都必须经过 Tool Router、Policy Engine、Approval Center 和 Shell Executor。
+
+6. 系统必须本地可运行。
+   - 优先实现 MVP。
+   - 必须提供 README、启动方式、环境变量示例、数据库迁移、基本测试。
+   - 如果某些功能暂时不能完整实现，请实现接口、类型、服务骨架和清晰 TODO，但核心流程必须能跑通。
+```
+
+---
+
+## 项目目标
+
+```text
+实现一个个人本地 Agent Server：
+
+Local Agent Server
+  ├── HTTP API
+  ├── WebSocket Chat API
+  ├── CMD Console CLI
+  ├── Conversation / Message / Usage
+  ├── Eino Agent Runtime
+  ├── Context Builder
+  ├── Intent Planner
+  ├── Tool Proposal
+  ├── Effect Inference
+  ├── Policy Engine
+  ├── Approval Center
+  ├── Tool Router
+  │     ├── Shell Executor
+  │     ├── Code Workspace
+  │     ├── Knowledge Retrieval
+  │     ├── Skill Runner
+  │     └── MCP Manager
+  ├── Markdown Memory Store
+  ├── Qdrant Vector Index
+  ├── PostgreSQL Message / Usage Store
+  └── JSONL Run / Tool / Audit Logs
+```
+
+Eino 的使用原则：
+
+```text
+1. Eino 负责 LLM 应用编排、Agent 流程、Tool 调用抽象、Retriever/Embedding 接入、Callback/Tracing、Human-in-the-loop 中断/恢复设计。
+2. 本系统自己的安全边界仍由 Tool Router、Effect Inference、Policy Engine、Approval Center、Executor 控制。
+3. 不要直接使用 Eino 的 Tool 调用结果绕过审批。
+4. Eino Agent 只能生成 Tool Proposal，真实执行必须进入本系统 Tool Router。
+5. 对于需要用户审批的操作，应使用 Eino ADK / Workflow / Graph 的 interrupt/resume 思路实现暂停和恢复。
+6. 对话流式输出、工具事件、审批事件应能通过 WebSocket 发送给客户端。
+```
+
+---
+
+## 推荐目录结构
+
+如果当前仓库为空，请创建如下结构：
+
+```text
+local-agent/
+  README.md
+  AGENTS.md
+  go.mod
+  go.sum
+  Makefile
+  .env.example
+  docker-compose.yml
+
+  cmd/
+    agent-server/
+      main.go
+    agent/
+      main.go
+
+  internal/
+    app/
+      server.go
+      bootstrap.go
+
+    config/
+      config.go
+      loader.go
+
+    ids/
+      ids.go
+
+    timeutil/
+      time.go
+
+    log/
+      logger.go
+
+    db/
+      postgres.go
+      migrations/
+        001_init.sql
+      repo/
+        conversations.go
+        messages.go
+        usage.go
+        agent_events.go
+
+    api/
+      router.go
+      middleware.go
+      handlers/
+        health.go
+        chat.go
+        conversations.go
+        approvals.go
+        knowledge.go
+        memory.go
+        skills.go
+        mcp.go
+      ws/
+        chat_ws.go
+        events.go
+
+    agent/
+      runtime.go
+      orchestrator.go
+      context_builder.go
+      planner.go
+      proposal.go
+      effect_inference.go
+      policy.go
+      approval.go
+      schemas.go
+      prompts.go
+
+    einoapp/
+      chat_model.go
+      agent_runner.go
+      graph.go
+      workflow.go
+      tools_adapter.go
+      retriever_adapter.go
+      callbacks.go
+
+    tools/
+      base.go
+      registry.go
+      router.go
+
+      shell/
+        executor.go
+        parser.go
+        schemas.go
+
+      code/
+        workspace.go
+        patcher.go
+        schemas.go
+
+      kb/
+        service.go
+        qdrant_store.go
+        chunking.go
+        embeddings.go
+        schemas.go
+
+      memory/
+        markdown_store.go
+        indexer.go
+        patcher.go
+        schemas.go
+
+      skills/
+        manager.go
+        manifest.go
+        runner.go
+        schemas.go
+
+      mcp/
+        manager.go
+        client.go
+        schemas.go
+
+    events/
+      jsonl.go
+      schemas.go
+
+    security/
+      redaction.go
+      sensitive_resources.go
+
+  memory/
+    profile.md
+    preferences.md
+    long_term.md
+    projects/
+    procedures/
+    episodes/
+    conversations/
+    pending/
+
+  config/
+    agent.yaml
+    policy.yaml
+    mcp.servers.yaml
+    mcp.tool-policies.yaml
+    skills.registry.yaml
+
+  knowledge/
+    registry.yaml
+    uploads/
+
+  skills/
+
+  runs/
+
+  audit/
+
+  tests/
+    policy_test.go
+    effect_inference_test.go
+    shell_parser_test.go
+    markdown_memory_test.go
+    approval_snapshot_test.go
+    api_smoke_test.go
+```
+
+如果已有项目结构，请尽量适配，但必须实现这些模块的职责。
+
+---
+
+## Go package 设计要求
+
+请使用清晰的 Go interface 和 struct。
+
+示例核心类型：
+
+```go
+type ToolSpec struct {
+    ID             string                 `json:"id"`
+    Provider       string                 `json:"provider"`
+    Name           string                 `json:"name"`
+    Description    string                 `json:"description"`
+    InputSchema    map[string]any         `json:"input_schema"`
+    DefaultEffects []string               `json:"default_effects"`
+    Metadata       map[string]any         `json:"metadata,omitempty"`
+}
+
+type ToolProposal struct {
+    ID              string         `json:"id"`
+    Tool            string         `json:"tool"`
+    Input           map[string]any `json:"input"`
+    Purpose         string         `json:"purpose"`
+    ExpectedEffects []string       `json:"expected_effects"`
+    CreatedAt       time.Time      `json:"created_at"`
+}
+
+type EffectInferenceResult struct {
+    Effects          []string `json:"effects"`
+    RiskLevel        string   `json:"risk_level"`
+    Sensitive        bool     `json:"sensitive"`
+    ApprovalRequired bool     `json:"approval_required"`
+    Confidence       float64  `json:"confidence"`
+    ReasonSummary    string   `json:"reason_summary"`
+}
+
+type PolicyDecision struct {
+    Allowed          bool           `json:"allowed"`
+    RequiresApproval bool           `json:"requires_approval"`
+    RiskLevel        string         `json:"risk_level"`
+    Reason           string         `json:"reason"`
+    ApprovalPayload  map[string]any `json:"approval_payload,omitempty"`
+}
+```
+
+Executor interface：
+
+```go
+type ToolExecutor interface {
+    Execute(ctx context.Context, input map[string]any) (*ToolResult, error)
+}
+
+type ToolResult struct {
+    ToolCallID string         `json:"tool_call_id"`
+    Output     map[string]any `json:"output"`
+    Error      string         `json:"error,omitempty"`
+    StartedAt  time.Time      `json:"started_at"`
+    FinishedAt time.Time      `json:"finished_at"`
+}
+```
+
+ToolRouter：
+
+```go
+type ToolRouter interface {
+    Propose(ctx context.Context, proposal ToolProposal) (*PolicyDecision, error)
+    ExecuteApproved(ctx context.Context, approvalID string) (*ToolResult, error)
+    ExecuteReadOnly(ctx context.Context, proposal ToolProposal) (*ToolResult, error)
+}
+```
+
+---
+
+## Eino 集成要求
+
+请在 `internal/einoapp/` 下封装 Eino，不要让业务层散落 Eino 初始化代码。
+
+需要实现：
+
+```text
+internal/einoapp/chat_model.go
+  - 初始化 Eino ChatModel
+  - 支持 OpenAI-compatible 配置
+  - 支持从 config/agent.yaml 和环境变量读取 base_url/api_key/model
+  - 如果未配置真实模型，提供 MockChatModel 供测试
+
+internal/einoapp/agent_runner.go
+  - 创建 Eino ADK Agent Runner 或等价封装
+  - 对外暴露 Run(ctx, AgentInput) -> event stream
+  - 不允许 Eino tool 直接执行外部动作
+  - Eino tool adapter 只能返回 Tool Proposal 或进入 ToolRouter
+
+internal/einoapp/tools_adapter.go
+  - 将本系统 ToolSpec 转成 Eino Tool 可见描述
+  - Eino 触发工具时，生成 ToolProposal
+  - ToolProposal 必须进入 EffectInference + PolicyEngine
+  - 需要审批时返回 interrupt/approval event
+  - 已审批后才能调用 Executor
+
+internal/einoapp/retriever_adapter.go
+  - 将 Markdown Memory/Qdrant KB 检索封装成 Eino Retriever 或等价组件
+
+internal/einoapp/callbacks.go
+  - Eino Callback 记录 token usage、tool proposal、tool result、error、latency
+  - 事件写入 JSONL，也可写入 agent_events
+```
+
+关键约束：
+
+```text
+不要把 shell.exec 直接注册成能执行命令的 Eino Tool。
+应该注册成“产生 Tool Proposal 的 Tool Adapter”，再进入本系统安全流程。
+
+错误示例：
+  Eino Tool -> os/exec 直接执行
+
+正确示例：
+  Eino Tool -> ToolProposal -> EffectInference -> PolicyEngine -> ApprovalCenter/Executor
+```
+
+---
+
+## PostgreSQL 设计
+
+使用 pgx/v5。不要用 GORM，除非仓库已有成熟 GORM 架构。
+
+使用 goose 迁移，创建以下表：
+
+```sql
+CREATE TABLE IF NOT EXISTS conversations (
+    id TEXT PRIMARY KEY,
+    title TEXT,
+    project_key TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    archived BOOLEAN NOT NULL DEFAULT false
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    content TEXT,
+    content_json JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS message_usage (
+    id TEXT PRIMARY KEY,
+    message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    model TEXT,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    total_tokens INTEGER NOT NULL DEFAULT 0,
+    tool_call_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS conversation_usage_rollups (
+    conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+    total_input_tokens BIGINT NOT NULL DEFAULT 0,
+    total_output_tokens BIGINT NOT NULL DEFAULT 0,
+    total_tokens BIGINT NOT NULL DEFAULT 0,
+    total_messages BIGINT NOT NULL DEFAULT 0,
+    total_runs BIGINT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS agent_events (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT,
+    run_id TEXT,
+    event_type TEXT NOT NULL,
+    payload JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+PostgreSQL 只负责：
+
+```text
+- 会话列表
+- 消息历史
+- token 使用统计
+- conversation usage rollup
+- 可选轻量 agent_events
+```
+
+不要把长期记忆正文存进 PostgreSQL。
+
+---
+
+## Markdown Memory Store
+
+长期记忆、偏好、项目记忆、流程经验使用 Markdown 文件保存。
+
+默认路径：
+
+```text
+memory/
+  profile.md
+  preferences.md
+  long_term.md
+  projects/
+  procedures/
+  episodes/
+  conversations/
+  pending/
+```
+
+每个 Markdown 使用 YAML frontmatter：
+
+```markdown
+---
+id: memory_preferences
+scope: user
+type: preference
+updated_at: 2026-04-23T10:00:00+08:00
+importance: 0.95
+confidence: 1.0
+---
+
+# 用户偏好
+
+- 用户偏好中文回答。
+- 用户希望回答直接、工程化、可落地。
+- 用户希望本地 agent 查询类指令可以直接执行，写操作必须确认。
+- 用户不希望 agent 用固定关键词匹配来判断命令风险，而是希望使用语义分析和效果推断。
+```
+
+实现：
+
+```go
+type MemoryDocument struct {
+    Path        string
+    Frontmatter map[string]any
+    Body        string
+    UpdatedAt   time.Time
+}
+
+type MemoryPatch struct {
+    ID        string
+    Path      string
+    Diff      string
+    Reason    string
+    CreatedAt time.Time
+}
+
+type MarkdownMemoryStore interface {
+    ListMemoryFiles(ctx context.Context) ([]string, error)
+    ReadMemoryFile(ctx context.Context, path string) (*MemoryDocument, error)
+    WriteMemoryFile(ctx context.Context, path string, doc *MemoryDocument) error
+    ProposePatch(ctx context.Context, path string, diff string, reason string) (*MemoryPatch, error)
+    ApplyPatch(ctx context.Context, patch *MemoryPatch) error
+    SearchByMetadata(ctx context.Context, filter MemoryFilter) ([]*MemoryDocument, error)
+}
+```
+
+注意：
+
+```text
+- 修改 memory Markdown 本质上是写操作。
+- 低风险偏好更新可以由配置决定是否自动写入。
+- 敏感内容、token、密码、私钥、cookie、.env 内容不得自动写入长期记忆。
+- 所有 memory patch 应写入 JSONL event log。
+- 修改 Markdown 后应触发 Qdrant 重新索引。
+```
+
+---
+
+## Qdrant Vector Index
+
+Qdrant 只作为索引，不是事实源。
+
+实现三个 collection：
+
+```text
+kb_chunks
+memory_chunks
+code_chunks
+```
+
+MVP 必须实现：
+
+```text
+memory_chunks
+kb_chunks
+```
+
+Qdrant payload 示例：
+
+```json
+{
+  "source_type": "memory_md",
+  "source_file": "memory/preferences.md",
+  "section": "用户偏好",
+  "scope": "user",
+  "memory_type": "preference",
+  "content_hash": "sha256:xxxx",
+  "updated_at": "2026-04-23T10:00:00+08:00"
+}
+```
+
+实现 interface：
+
+```go
+type VectorChunk struct {
+    ID         string
+    Text       string
+    Vector     []float32
+    Payload    map[string]any
+    SourceFile string
+}
+
+type VectorIndex interface {
+    EnsureCollections(ctx context.Context) error
+    UpsertChunks(ctx context.Context, collection string, chunks []VectorChunk) error
+    DeleteBySourceFile(ctx context.Context, collection string, sourceFile string) error
+    Search(ctx context.Context, collection string, query string, filters map[string]any, topK int) ([]VectorSearchResult, error)
+}
+
+type EmbeddingProvider interface {
+    EmbedTexts(ctx context.Context, texts []string) ([][]float32, error)
+}
+```
+
+如果没有配置真实 embedding provider，MVP 可实现 deterministic fake embedding 用于测试，但生产配置必须支持 OpenAI-compatible embedding endpoint。
+
+---
+
+## Agent 主流程
+
+实现 `internal/agent/orchestrator.go`：
+
+```text
+用户输入
+  ↓
+加载 conversation/messages
+  ↓
+Context Builder 加载：
+    - 系统规则
+    - policy 配置
+    - 最近消息
+    - conversation summary
+    - Markdown memory 相关片段
+    - Qdrant 检索结果
+    - 可用 ToolSpec
+  ↓
+Eino Agent Runtime / Planner 生成结构化意图
+  ↓
+生成 Tool Proposal
+  ↓
+Effect Inference 推断 effects/risk/confidence
+  ↓
+Policy Engine 判断是否可执行
+  ↓
+如果只读且高置信度：执行
+  ↓
+如果写/危险/敏感/未知/低置信度：创建 approval request
+  ↓
+用户批准后：执行 input_snapshot
+  ↓
+工具结果返回 Eino Agent / ChatModel 总结
+  ↓
+保存 assistant message 和 token usage
+  ↓
+必要时生成 memory patch
+```
+
+LLM Provider 不要写死某一家模型供应商：
+
+```go
+type LLMProvider interface {
+    CompleteChat(ctx context.Context, req ChatRequest) (*ChatResponse, error)
+    StreamChat(ctx context.Context, req ChatRequest) (ChatStream, error)
+}
+```
+
+但 Eino 初始化应支持 OpenAI-compatible ChatModel，并允许后续接 Ollama、Ark、Claude、Gemini 等 provider。
+
+---
+
+## Tool Proposal
+
+模型不能输出裸命令直接执行。必须输出结构化 Tool Proposal。
+
+示例：
+
+```json
+{
+  "type": "tool_proposal",
+  "tool": "shell.exec",
+  "input": {
+    "shell": "powershell",
+    "command": "Get-Process | Sort-Object CPU -Descending | Select-Object -First 3",
+    "cwd": "D:/code/project",
+    "timeout_seconds": 30
+  },
+  "purpose": "查询当前 CPU 占用最高的进程",
+  "expected_effects": [
+    "system.metrics.read",
+    "process.read"
+  ]
+}
+```
+
+Go struct：
+
+```go
+type ToolProposal struct {
+    ID              string         `json:"id"`
+    Type            string         `json:"type"`
+    Tool            string         `json:"tool"`
+    Input           map[string]any `json:"input"`
+    Purpose         string         `json:"purpose"`
+    ExpectedEffects []string       `json:"expected_effects"`
+    CreatedAt       time.Time      `json:"created_at"`
+}
+```
+
+---
+
+## Effect Taxonomy
+
+实现 effect taxonomy：
+
+```text
+read:
+  system.read
+  system.metrics.read
+  process.read
+  fs.read
+  code.read
+  git.read
+  db.read
+  network.read
+  kb.read
+  memory.read
+
+sensitive_read:
+  secret.read
+  credential.read
+  private_key.read
+  browser_data.read
+  env_file.read
+  token.read
+
+write:
+  fs.write
+  code.modify
+  git.write
+  db.write
+  package.install
+  config.modify
+  memory.write
+
+dangerous:
+  fs.delete
+  fs.delete_recursive
+  service.restart
+  service.stop
+  process.kill
+  privilege.escalate
+  deployment.apply
+  firewall.modify
+  system.modify
+
+network_write:
+  network.post
+  network.put
+  network.delete
+  email.send
+  webhook.call
+
+unknown:
+  unknown.effect
+```
+
+Go struct：
+
+```go
+type EffectInferenceResult struct {
+    Effects          []string `json:"effects"`
+    RiskLevel        string   `json:"risk_level"`
+    Sensitive        bool     `json:"sensitive"`
+    ApprovalRequired bool     `json:"approval_required"`
+    Confidence       float64  `json:"confidence"`
+    ReasonSummary    string   `json:"reason_summary"`
+}
+```
+
+---
+
+## Effect Inference 要求
+
+不要靠固定关键词做主判断。实现多信号合成：
+
+```text
+1. ToolSpec 声明的 effects
+2. Tool Proposal expected_effects
+3. Shell/PowerShell command structure analysis
+4. 目标路径敏感度分析
+5. LLM risk classifier 抽象接口
+6. low confidence fallback
+```
+
+### Shell command structure analysis
+
+实现基础 parser，不要求完整 shell 语法，但要能抽取结构：
+
+```go
+type CommandStructure struct {
+    Shell                       string   `json:"shell"`
+    Commands                    []string `json:"commands"`
+    HasPipeline                 bool     `json:"has_pipeline"`
+    HasRedirectWrite            bool     `json:"has_redirect_write"`
+    HasRedirectRead             bool     `json:"has_redirect_read"`
+    HasCommandSubstitution      bool     `json:"has_command_substitution"`
+    HasBackgroundExecution      bool     `json:"has_background_execution"`
+    PossibleFileTargets         []string `json:"possible_file_targets"`
+    PossibleNetwork             bool     `json:"possible_network"`
+    PossiblePrivilegeEscalation bool     `json:"possible_privilege_escalation"`
+    StructureConfidence         float64  `json:"structure_confidence"`
+}
+```
+
+注意：
+
+```text
+这不是死关键词匹配。
+命令名称可以用于结构特征提取，但不能仅凭单个关键词决定最终策略。
+最终风险由 Effect Inference 汇总判断。
+```
+
+### Sensitive resource analysis
+
+实现 `internal/security/sensitive_resources.go`：
+
+```text
+高敏资源类型：
+- .env
+- private key
+- credential file
+- token file
+- browser cookie/session
+- ssh key
+- cloud credential
+- password database
+```
+
+这层可以有安全兜底规则，但输出应是 effect hint，例如：
+
+```text
+env_file.read
+credential.read
+private_key.read
+```
+
+而不是直接替代完整风险判断。
+
+---
+
+## Policy Engine
+
+配置文件 `config/policy.yaml`：
+
+```yaml
+approval:
+  auto_execute_when:
+    - system.read
+    - system.metrics.read
+    - process.read
+    - git.read
+    - code.read
+    - kb.read
+    - memory.read
+
+  require_approval_when:
+    - sensitive_read
+    - secret.read
+    - credential.read
+    - private_key.read
+    - env_file.read
+    - token.read
+    - fs.write
+    - code.modify
+    - git.write
+    - db.write
+    - package.install
+    - config.modify
+    - memory.write
+    - fs.delete
+    - fs.delete_recursive
+    - service.restart
+    - service.stop
+    - process.kill
+    - privilege.escalate
+    - deployment.apply
+    - firewall.modify
+    - system.modify
+    - network.post
+    - network.put
+    - network.delete
+    - email.send
+    - webhook.call
+    - unknown.effect
+
+  min_confidence_for_auto_execute: 0.75
+  default_when_low_confidence: require_approval
+  default_when_unknown_effect: require_approval
+```
+
+Go struct：
+
+```go
+type PolicyDecision struct {
+    Allowed          bool           `json:"allowed"`
+    RequiresApproval bool           `json:"requires_approval"`
+    RiskLevel        string         `json:"risk_level"`
+    Reason           string         `json:"reason"`
+    ApprovalPayload  map[string]any `json:"approval_payload,omitempty"`
+}
+```
+
+规则：
+
+```text
+- read 且 confidence >= min_confidence，允许自动执行。
+- sensitive_read/write/dangerous/network_write/unknown 必须审批。
+- low confidence 必须审批。
+- policy 不认识的 effect 必须审批。
+```
+
+---
+
+## Approval Center
+
+实现 approval request：
+
+```json
+{
+  "approval_id": "apr_xxx",
+  "run_id": "run_xxx",
+  "tool": "shell.exec",
+  "risk_level": "write",
+  "input_snapshot": {
+    "shell": "powershell",
+    "command": "pnpm add axios",
+    "cwd": "D:/code/my-project",
+    "timeout_seconds": 120
+  },
+  "purpose": "为当前项目安装 axios 依赖",
+  "expected_effects": [
+    "package.install",
+    "fs.write"
+  ],
+  "reason": "该命令会修改 package.json、lockfile 和 node_modules。",
+  "status": "pending"
+}
+```
+
+Go struct：
+
+```go
+type ApprovalRequest struct {
+    ID              string         `json:"approval_id"`
+    RunID           string         `json:"run_id"`
+    Tool            string         `json:"tool"`
+    RiskLevel       string         `json:"risk_level"`
+    InputSnapshot   map[string]any `json:"input_snapshot"`
+    Purpose         string         `json:"purpose"`
+    ExpectedEffects []string       `json:"expected_effects"`
+    Reason          string         `json:"reason"`
+    Status          string         `json:"status"`
+    CreatedAt       time.Time      `json:"created_at"`
+    DecidedAt       *time.Time     `json:"decided_at,omitempty"`
+}
+```
+
+要求：
+
+```text
+- approval 必须保存 input_snapshot。
+- 执行时只执行 input_snapshot。
+- 用户批准 A，不能执行 B。
+- 如果模型想改命令，必须新建 approval。
+- approval 事件写入 JSONL，建议也写 agent_events。
+- WebSocket 要能推送 approval.requested。
+- CLI 要能交互确认。
+```
+
+API：
+
+```text
+GET  /v1/approvals/pending
+POST /v1/approvals/{approval_id}/approve
+POST /v1/approvals/{approval_id}/reject
+```
+
+WebSocket event：
+
+```json
+{
+  "type": "approval.requested",
+  "approval_id": "apr_123",
+  "run_id": "run_123",
+  "risk_level": "write",
+  "summary": "准备执行 pnpm add axios，会修改项目依赖文件。",
+  "input_snapshot": {
+    "command": "pnpm add axios",
+    "cwd": "D:/code/my-project"
+  }
+}
+```
+
+---
+
+## Shell Executor
+
+实现 `shell.exec` ToolSpec：
+
+```json
+{
+  "id": "shell.exec",
+  "provider": "shell",
+  "name": "execute_command",
+  "description": "Execute a local shell command through controlled executor",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "shell": {
+        "type": "string",
+        "enum": ["powershell", "cmd", "bash", "wsl", "sh"]
+      },
+      "command": {
+        "type": "string"
+      },
+      "cwd": {
+        "type": "string"
+      },
+      "timeout_seconds": {
+        "type": "integer"
+      }
+    },
+    "required": ["shell", "command"]
+  },
+  "default_effects": ["unknown.effect"]
+}
+```
+
+Executor 要求：
+
+```text
+- 使用 os/exec 实现，但只能在 ShellExecutor 内部使用。
+- 支持 powershell/cmd/bash/wsl/sh 的抽象，但 MVP 至少支持当前系统 shell。
+- 支持 cwd。
+- 支持 timeout。
+- 捕获 stdout/stderr/exit_code/duration_ms。
+- 限制最大输出字符数。
+- 输出中做敏感信息脱敏。
+- 每次执行写 JSONL event。
+- 只执行 Tool Router 传入的工具输入。
+- 只执行审批 input_snapshot 或只读高置信 proposal。
+- 不从模型普通文本中直接取命令执行。
+```
+
+Shell result：
+
+```go
+type ShellExecInput struct {
+    Shell          string `json:"shell"`
+    Command        string `json:"command"`
+    CWD            string `json:"cwd"`
+    TimeoutSeconds int    `json:"timeout_seconds"`
+}
+
+type ShellExecResult struct {
+    Stdout     string `json:"stdout"`
+    Stderr     string `json:"stderr"`
+    ExitCode   int    `json:"exit_code"`
+    DurationMS int64  `json:"duration_ms"`
+}
+```
+
+---
+
+## Code Workspace
+
+实现基础代码能力：
+
+```text
+code.search
+code.read_file
+code.propose_patch
+code.apply_patch
+```
+
+规则：
+
+```text
+- 读取普通项目文件可自动执行。
+- 读取敏感文件需要审批。
+- propose_patch 不修改文件，可以自动执行。
+- apply_patch 修改文件，必须审批。
+- 用户审批的是具体 diff。
+- 审批后只能应用已确认 diff。
+- 应用 patch 后写 JSONL event。
+```
+
+Interface：
+
+```go
+type CodeWorkspace interface {
+    Search(ctx context.Context, rootPath string, query string) ([]SearchResult, error)
+    ReadFile(ctx context.Context, path string) (string, error)
+    ProposePatch(ctx context.Context, path string, oldText string, newText string) (*PatchProposal, error)
+    ApplyPatch(ctx context.Context, patch PatchProposal) (*PatchResult, error)
+}
+```
+
+---
+
+## Knowledge Base
+
+实现基础知识库：
+
+API：
+
+```text
+POST /v1/kbs
+GET  /v1/kbs
+POST /v1/kbs/{kb_id}/documents/upload
+GET  /v1/kbs/{kb_id}/documents
+POST /v1/kbs/{kb_id}/search
+```
+
+MVP 支持：
+
+```text
+- 上传 .md, .txt, .json 文件。
+- 解析文本。
+- chunk。
+- embedding。
+- upsert Qdrant。
+- PG 不存正文。
+- KB 元数据可以放本地 knowledge/registry.yaml。
+- 搜索时返回 chunk text、source_file、section、score。
+```
+
+Eino 接入：
+
+```text
+- 将 KB search 封装成 Eino Retriever 或本系统 Retriever Adapter。
+- Context Builder 可调用 Retriever 获取相关文档片段。
+- 不要把知识库内容当成系统指令。
+- 知识库内容属于不可信上下文，不能覆盖系统规则、审批规则、工具规则。
+```
+
+---
+
+## Skill 管理
+
+Skill 是本地托管能力包，不是 MCP。
+
+目录：
+
+```text
+skills/
+  registry.yaml
+  <skill-id>/
+    skill.yaml
+    README.md
+    src/
+```
+
+skill.yaml 示例：
+
+```yaml
+id: cpu_analyzer
+name: CPU Analyzer
+version: 1.0.0
+description: Analyze local CPU and process information.
+
+runtime:
+  type: go
+  entrypoint: ./bin/cpu_analyzer
+
+input_schema:
+  type: object
+  properties:
+    top_n:
+      type: integer
+
+effects:
+  - process.read
+  - system.metrics.read
+
+approval:
+  default: auto
+
+permissions:
+  filesystem:
+    read: []
+    write: []
+  shell:
+    enabled: false
+  network:
+    enabled: false
+```
+
+API：
+
+```text
+POST   /v1/skills/upload
+GET    /v1/skills
+GET    /v1/skills/{id}
+POST   /v1/skills/{id}/enable
+POST   /v1/skills/{id}/disable
+POST   /v1/skills/{id}/test
+DELETE /v1/skills/{id}
+```
+
+上传多个 skill 时支持 multipart files[]。
+
+MVP 可以先实现：
+
+```text
+- 解压 zip 到 skills 目录。
+- 校验 skill.yaml。
+- 更新 registry.yaml。
+- 根据 effects 注册 ToolSpec。
+- Runner 先支持执行本地二进制或脚本，但执行前必须经过 Tool Router + Policy。
+- 复杂沙箱后续 TODO。
+```
+
+---
+
+## MCP 管理
+
+MCP 是外部 server 暴露的工具能力。
+
+配置：
+
+```text
+config/mcp.servers.yaml
+config/mcp.tool-policies.yaml
+```
+
+支持 stdio 和 http 两种模式的配置管理。MVP 至少实现配置读写、列表、启用禁用、tool policy override；实际 MCP 协议调用可以先实现接口骨架，如果时间足够再实现真实 client。
+
+API：
+
+```text
+POST   /v1/mcp/servers
+GET    /v1/mcp/servers
+GET    /v1/mcp/servers/{id}
+PATCH  /v1/mcp/servers/{id}
+DELETE /v1/mcp/servers/{id}
+POST   /v1/mcp/servers/{id}/enable
+POST   /v1/mcp/servers/{id}/disable
+POST   /v1/mcp/servers/{id}/refresh
+POST   /v1/mcp/servers/{id}/test
+GET    /v1/mcp/tools
+PATCH  /v1/mcp/tools/{id}/policy
+```
+
+MCP tool policy 示例：
+
+```yaml
+tools:
+  mcp.filesystem.read_file:
+    effects:
+      - fs.read
+    approval: auto
+
+  mcp.filesystem.write_file:
+    effects:
+      - fs.write
+    approval: require
+
+  mcp.github.create_issue:
+    effects:
+      - network.post
+    approval: require
+```
+
+要求：
+
+```text
+- 外部 MCP server 声明不能完全信任。
+- 本地 policy override 优先。
+- unknown MCP tool 默认审批。
+- MCP 工具调用也必须进入 Tool Proposal -> EffectInference -> PolicyEngine。
+```
+
+---
+
+## HTTP API
+
+实现：
+
+```text
+GET  /v1/health
+
+POST /v1/conversations
+GET  /v1/conversations
+GET  /v1/conversations/{conversation_id}
+GET  /v1/conversations/{conversation_id}/messages
+POST /v1/conversations/{conversation_id}/messages
+
+WS   /v1/conversations/{conversation_id}/ws
+
+GET  /v1/approvals/pending
+POST /v1/approvals/{approval_id}/approve
+POST /v1/approvals/{approval_id}/reject
+
+GET  /v1/memory/files
+GET  /v1/memory/files/{path}
+POST /v1/memory/search
+POST /v1/memory/patches
+POST /v1/memory/reindex
+
+POST /v1/kbs
+GET  /v1/kbs
+POST /v1/kbs/{kb_id}/documents/upload
+POST /v1/kbs/{kb_id}/search
+
+POST /v1/skills/upload
+GET  /v1/skills
+POST /v1/skills/{id}/enable
+POST /v1/skills/{id}/disable
+
+GET  /v1/mcp/servers
+POST /v1/mcp/servers
+PATCH /v1/mcp/servers/{id}
+GET  /v1/mcp/tools
+PATCH /v1/mcp/tools/{id}/policy
+```
+
+---
+
+## WebSocket 协议
+
+客户端发送：
+
+```json
+{
+  "type": "user.message",
+  "content": "帮我看一下 CPU 占用第三高的进程"
+}
+```
+
+服务端事件：
+
+```json
+{ "type": "run.started", "run_id": "run_123" }
+{ "type": "assistant.delta", "content": "我会先查询当前进程 CPU 信息。" }
+{ "type": "tool.proposed", "tool": "shell.exec", "risk_level": "read" }
+{ "type": "tool.started", "tool_call_id": "tool_123" }
+{ "type": "tool.output", "stdout": "..." }
+{ "type": "tool.completed", "exit_code": 0 }
+{ "type": "assistant.message", "content": "当前 CPU 占用第三高的是 ..." }
+{ "type": "run.completed" }
+```
+
+审批事件：
+
+```json
+{
+  "type": "approval.requested",
+  "approval_id": "apr_123",
+  "run_id": "run_123",
+  "risk_level": "write",
+  "summary": "准备执行 pnpm add axios，会修改依赖文件。",
+  "input_snapshot": {
+    "shell": "powershell",
+    "command": "pnpm add axios",
+    "cwd": "D:/code/my-project"
+  }
+}
+```
+
+客户端审批：
+
+```json
+{
+  "type": "approval.respond",
+  "approval_id": "apr_123",
+  "approved": true
+}
+```
+
+---
+
+## CLI
+
+使用 Cobra 实现：
+
+```text
+agent chat
+agent chat --conversation conv_123
+agent ask "帮我查 CPU 第三高进程"
+agent approvals
+agent approve <approval_id>
+agent reject <approval_id>
+agent memory list
+agent memory search "我的偏好"
+agent memory reindex
+agent skills upload ./skills/*.zip
+agent skills list
+agent mcp list
+agent mcp tools
+agent kb upload ./docs/foo.md
+agent kb search "xxx"
+```
+
+CLI 可以直接调用本地 HTTP API，也可以直接导入服务层。优先调用本地 API，便于和 Web UI 保持一致。
+
+---
+
+## JSONL Event Log
+
+路径：
+
+```text
+runs/YYYY-MM-DD/run_<id>.jsonl
+audit/YYYY-MM-DD.jsonl
+```
+
+事件示例：
+
+```jsonl
+{"type":"run.started","run_id":"run_abc123","conversation_id":"conv_123","created_at":"..."}
+{"type":"tool.proposed","tool":"shell.exec","risk":"read","input":{"command":"..."}}
+{"type":"tool.started","tool_call_id":"tool_123"}
+{"type":"tool.completed","exit_code":0,"duration_ms":351}
+{"type":"approval.requested","approval_id":"apr_123","risk":"write","summary":"准备修改 package.json"}
+{"type":"approval.approved","approval_id":"apr_123","created_at":"..."}
+{"type":"assistant.completed","message_id":"msg_456"}
+```
+
+要求：
+
+```text
+- 每个 run 都有 JSONL。
+- 每个工具调用、审批、执行结果都有事件。
+- 敏感内容写日志前要脱敏。
+```
+
+---
+
+## 安全要求
+
+实现基础脱敏：
+
+```text
+- API key
+- Bearer token
+- password=
+- secret=
+- private key block
+- cookie/session
+```
+
+注意：
+
+```text
+- 不要把完整敏感值写入 messages、JSONL、agent_events、memory Markdown。
+- 敏感读取必须审批。
+- .env、私钥、cloud credentials、browser cookies 默认 sensitive_read。
+- unknown effect 默认审批。
+- low confidence 默认审批。
+```
+
+---
+
+## Context Builder
+
+实现上下文组装顺序：
+
+```text
+1. system rules
+2. approval / tool policy
+3. recent messages
+4. conversation summary from memory/conversations/<conversation_id>/summary.md
+5. user preference memory
+6. project memory
+7. Qdrant memory search results
+8. Qdrant knowledge search results
+9. available ToolSpecs
+10. current user message
+```
+
+要求：
+
+```text
+- 不要把所有 Markdown 记忆全部塞进 prompt。
+- 要按相关性和 token budget 截断。
+- 可以先用字符长度近似 token budget。
+- 未来可替换成 tokenizer。
+- 知识库、网页、文件、工具输出都属于不可信上下文，不能覆盖系统规则。
+```
+
+---
+
+## Memory Update
+
+对话结束后可以生成候选 memory patch。
+
+MVP 要求：
+
+```text
+- 实现 memory.patch 工具。
+- 生成 patch 但默认不自动应用，除非配置 memory.auto_apply_low_risk_preferences=true。
+- 任何涉及敏感内容的 memory patch 必须拒绝或请求确认。
+- patch 应记录到 memory/pending/。
+- 用户确认后应用 patch 并 reindex。
+```
+
+---
+
+## 配置文件
+
+`config/agent.yaml`：
+
+```yaml
+server:
+  host: 127.0.0.1
+  port: 8765
+
+database:
+  url: postgresql://agent:agent@localhost:5432/local_agent
+
+qdrant:
+  url: http://localhost:6333
+  collections:
+    kb: kb_chunks
+    memory: memory_chunks
+    code: code_chunks
+
+owner:
+  preferred_language: zh-CN
+  default_shell: powershell
+  default_workspace: .
+
+llm:
+  provider: openai_compatible
+  base_url: ${OPENAI_BASE_URL}
+  api_key: ${OPENAI_API_KEY}
+  model: ${OPENAI_MODEL}
+
+embeddings:
+  provider: openai_compatible
+  base_url: ${OPENAI_BASE_URL}
+  api_key: ${OPENAI_API_KEY}
+  model: text-embedding-3-small
+
+memory:
+  root_dir: ./memory
+  auto_extract: true
+  auto_apply_low_risk_preferences: false
+  write_as_markdown: true
+  index_to_qdrant: true
+
+events:
+  jsonl_root: ./runs
+  audit_root: ./audit
+
+shell:
+  enabled: true
+  default_timeout_seconds: 60
+  max_output_chars: 20000
+```
+
+`.env.example`：
+
+```text
+OPENAI_BASE_URL=
+OPENAI_API_KEY=
+OPENAI_MODEL=
+DATABASE_URL=postgresql://agent:agent@localhost:5432/local_agent
+QDRANT_URL=http://localhost:6333
+```
+
+---
+
+## Docker Compose
+
+提供：
+
+```yaml
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: agent
+      POSTGRES_DB: local_agent
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - ./data/qdrant:/qdrant/storage
+```
+
+Agent Server 可以本地运行，不强制容器化，因为它可能需要执行宿主机 shell。
+
+---
+
+## 测试要求
+
+至少实现这些测试：
+
+```text
+policy_test.go
+  - read effects 自动执行
+  - write effects 需要审批
+  - sensitive_read 需要审批
+  - unknown effect 需要审批
+  - low confidence 需要审批
+
+effect_inference_test.go
+  - 普通进程查询识别为 read/process.read
+  - 读取 .env 识别为 sensitive_read/env_file.read
+  - apply patch 识别为 write/code.modify
+  - 未知工具识别为 unknown
+
+shell_parser_test.go
+  - pipeline 识别
+  - redirect write 识别
+  - possible file target 识别
+  - command structure output schema 正确
+
+markdown_memory_test.go
+  - 读取 frontmatter
+  - 写入 markdown
+  - 生成 patch
+  - 应用 patch
+  - reindex 调用 mock vector index
+
+approval_snapshot_test.go
+  - approve A 后只能执行 A input_snapshot
+  - proposal 改成 B 时必须重新审批
+  - approve 前写操作不能执行
+  - LLM 返回普通文本命令不得直接执行
+
+api_smoke_test.go
+  - health
+  - create conversation
+  - post message
+  - list messages
+  - pending approvals
+```
+
+如果真实 PostgreSQL/Qdrant 不方便在单元测试中使用，使用 mock；至少要有不依赖外部服务的核心单元测试。
+
+---
+
+## README 要求
+
+README 必须包括：
+
+```text
+1. 项目目标
+2. 架构说明
+3. 为什么“模型不直接操作外部世界”
+4. Eino 在本系统中的角色
+5. 安装步骤
+6. 启动 PostgreSQL 和 Qdrant
+7. 运行数据库迁移
+8. 启动 Agent Server
+9. 使用 CLI
+10. WebSocket 示例
+11. 知识库上传示例
+12. Memory Markdown 说明
+13. Skill 上传说明
+14. MCP 配置说明
+15. 审批机制说明
+16. Shell 执行安全机制说明
+17. 测试命令
+18. 当前 MVP 限制和后续 TODO
+```
+
+---
+
+## Makefile
+
+提供至少这些命令：
+
+```makefile
+.PHONY: run server cli test fmt vet migrate-up migrate-down docker-up docker-down
+
+run:
+	go run ./cmd/agent-server
+
+server:
+	go run ./cmd/agent-server
+
+cli:
+	go run ./cmd/agent
+
+test:
+	go test ./...
+
+fmt:
+	gofmt -w .
+
+vet:
+	go vet ./...
+
+migrate-up:
+	goose -dir internal/db/migrations postgres "$$DATABASE_URL" up
+
+migrate-down:
+	goose -dir internal/db/migrations postgres "$$DATABASE_URL" down
+
+docker-up:
+	docker compose up -d
+
+docker-down:
+	docker compose down
+```
+
+---
+
+## AGENTS.md
+
+请在仓库根目录创建或更新 `AGENTS.md`：
+
+```markdown
+# AGENTS.md
+
+## Project
+
+This repository implements a personal local Codex-like Agent system.
+
+The project must be implemented in Go and use CloudWeGo Eino as the Agent / LLM application framework.
+
+The system is for single-user local deployment. Do not add tenant logic, organization logic, multi-user RBAC, or cloud-first assumptions unless explicitly requested.
+
+## Core Principle
+
+The model must not directly operate the external world.
+
+The LLM may only produce structured Tool Proposals. All external effects must go through:
+
+1. Tool Router
+2. Effect Inference
+3. Policy Engine
+4. Approval Center
+5. Executor
+6. Event/Audit Log
+
+Read-only operations may auto-execute if policy allows and confidence is high enough.
+
+Write operations, installs, sensitive reads, dangerous operations, network writes, and unknown/low-confidence actions must request approval.
+
+Approval applies to an exact input snapshot. After approval, the executor must run only that approved snapshot. If the command, path, parameters, files, effects, or risk level change, request approval again.
+
+## Eino Usage
+
+Use Eino for:
+
+- ChatModel integration
+- Agent orchestration
+- Tool abstraction
+- Retriever / Embedding integration
+- Workflow / Graph / ADK patterns
+- Streaming and callbacks
+- Human-in-the-loop interrupt/resume design
+
+Do not let Eino tools directly execute shell commands or write files.
+
+Eino tool adapters should create Tool Proposals and pass them into the local Tool Router.
+
+## No Dead Keyword Routing
+
+Do not implement user intent or command risk decisions using simple fixed keyword matching as the primary mechanism.
+
+Use:
+
+- Intent Planner
+- Tool Proposal
+- Effect Inference
+- Tool manifest effects
+- Command structure analysis
+- Sensitive resource analysis
+- Policy Engine
+- Low-confidence fallback to approval
+
+Hard guardrails may exist only as a safety fallback.
+
+## Memory
+
+Long-term memory and preference memory use Markdown as the source of truth.
+
+PostgreSQL stores only:
+
+- conversations
+- messages
+- message usage
+- conversation usage rollups
+- optional lightweight agent_events
+
+Qdrant is only a vector index, not a source of truth.
+
+Do not store long-term memory正文 in PostgreSQL.
+
+## Security
+
+Never store secrets, tokens, passwords, private keys, cookies, or full `.env` contents in:
+
+- messages
+- JSONL logs
+- agent_events
+- Markdown memory
+- Qdrant payloads
+
+Sensitive reads require approval.
+
+Unknown effects require approval.
+
+Low confidence requires approval.
+
+## Shell Execution
+
+Never pass ordinary LLM text directly to os/exec.
+
+Shell execution is allowed only through:
+
+ToolProposal -> EffectInference -> PolicyEngine -> ApprovalCenter when needed -> ShellExecutor.
+
+Read-only shell commands may execute automatically only when high-confidence and policy-approved.
+
+Write, install, dangerous, sensitive, unknown, or low-confidence shell commands must require user approval.
+
+After approval, execute only approval.input_snapshot.
+
+## Testing
+
+Add or update tests for:
+
+- policy decisions
+- effect inference
+- shell structure analysis
+- Markdown memory store
+- approval snapshot behavior
+- API smoke flows
+
+Run `go test ./...` before completing a task when practical.
+
+## Style
+
+Prefer small, clear packages.
+
+Use typed Go structs and interfaces.
+
+Keep executors separate from planners.
+
+Do not let planner code execute tools directly.
+
+Do not let LLM response text become executable shell commands without structured validation and policy.
+```
+
+---
+
+## 实现顺序
+
+请不要一次生成所有文件后不验证。按下面顺序做：
+
+```text
+Phase 1: Go 项目骨架
+  - go.mod
+  - cmd/agent-server
+  - cmd/agent
+  - config loader
+  - HTTP health
+  - README 初稿
+  - AGENTS.md
+
+Phase 2: PostgreSQL
+  - pgx connection
+  - goose migrations
+  - repositories
+  - conversations/messages/usage API
+
+Phase 3: Event log
+  - JSONL event writer
+  - agent_events optional repository
+
+Phase 4: Tool system
+  - ToolSpec
+  - ToolRegistry
+  - ToolRouter
+  - Shell Executor
+  - Shell command structure analyzer
+
+Phase 5: Policy
+  - Effect taxonomy
+  - EffectInference
+  - PolicyEngine
+  - ApprovalCenter
+  - approval API
+
+Phase 6: Eino Agent Runtime
+  - Eino ChatModel 初始化
+  - Mock model for tests
+  - Tool adapter: Eino Tool -> ToolProposal
+  - ContextBuilder
+  - basic chat flow
+  - WebSocket streaming events
+
+Phase 7: Markdown Memory
+  - MarkdownMemoryStore
+  - MemoryIndexer
+  - memory API
+  - memory patch flow
+
+Phase 8: Qdrant
+  - VectorIndex
+  - fake embedding for tests
+  - real embedding provider config
+  - memory indexing
+  - knowledge upload/search
+
+Phase 9: Code Workspace
+  - read/search/propose patch/apply patch
+  - approval before apply_patch
+
+Phase 10: Skills and MCP
+  - skill registry and upload
+  - skill manifest validation
+  - MCP config manager
+  - MCP tool policy override
+
+Phase 11: Tests and docs
+  - go test ./...
+  - gofmt
+  - README 完整化
+  - smoke run
+```
+
+每完成一个 Phase，请运行相关测试或最小 smoke check，并修复错误。
+
+---
+
+## 最小可验收 MVP
+
+最终至少要满足：
+
+```text
+1. docker compose up 可以启动 PostgreSQL 和 Qdrant。
+2. goose migration 可以创建数据库表。
+3. Go Agent Server 可以启动。
+4. CLI 可以创建对话并发送消息。
+5. WebSocket 可以发送 user.message 并收到 run.started / assistant.message。
+6. Eino ChatModel/Agent Runtime 被正确封装。
+7. Eino Tool Adapter 只生成 Tool Proposal，不直接执行外部动作。
+8. Shell read-only 查询经过 effect inference 后可以自动执行。
+9. 写操作 proposal 会生成 approval，不会直接执行。
+10. 用户 approve 后，Executor 执行 approval input_snapshot。
+11. PostgreSQL 保存 messages 和 usage。
+12. JSONL 保存 run/tool/approval 事件。
+13. Markdown memory 可以读取、patch、应用、reindex。
+14. Qdrant 可以索引 memory/kb chunks。
+15. Skill 可以上传并注册 ToolSpec。
+16. MCP server 配置可以增删改查，tool policy 可以 override。
+17. go test ./... 通过。
+```
+
+---
+
+## 特别注意
+
+```text
+- 不要把模型输出的普通文本直接 exec.Command。
+- 不要让 LLM 直接写文件。
+- 不要让 LLM 直接改 Markdown memory。
+- 不要让 Eino Tool 直接执行 shell。
+- 不要把审批前的 proposal 和审批后执行内容重新生成。
+- 不要使用死关键词作为主要风险判断逻辑。
+- 不要把长期记忆正文存 PostgreSQL。
+- 不要让 Qdrant 成为事实源。
+- 不要把密钥写入日志、消息、memory 或 agent_events。
+- 不要为了快速实现而绕过 Policy Engine。
+```
+
+请现在开始实现。先检查仓库状态，给出你将执行的实现计划，然后按 Phase 逐步修改代码并运行测试。
+
+```
+
+---
+
+
+[1]: https://www.cloudwego.io/docs/eino/overview/ "Eino: Overview | CloudWeGo"

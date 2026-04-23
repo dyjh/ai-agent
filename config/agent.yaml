@@ -1,0 +1,57 @@
+server:
+  host: 127.0.0.1
+  port: 8765
+
+database:
+  url: ${DATABASE_URL}
+
+kb:
+  enabled: true
+  registry_path: ./knowledge/registry.yaml
+
+vector:
+  backend: qdrant
+  fallback_to_memory: true
+  embedding_dimension: 1536
+  distance: cosine
+
+qdrant:
+  url: ${QDRANT_URL}
+  api_key: ${QDRANT_API_KEY}
+  timeout_seconds: 10
+  collections:
+    kb: kb_chunks
+    memory: memory_chunks
+    code: code_chunks
+
+owner:
+  preferred_language: zh-CN
+  default_shell: bash
+  default_workspace: .
+
+llm:
+  provider: openai_compatible
+  base_url: ${OPENAI_BASE_URL}
+  api_key: ${OPENAI_API_KEY}
+  model: ${OPENAI_MODEL}
+
+embeddings:
+  provider: openai_compatible
+  base_url: ${OPENAI_BASE_URL}
+  api_key: ${OPENAI_API_KEY}
+  model: text-embedding-3-small
+
+memory:
+  root_dir: ./memory
+  auto_extract: true
+  auto_apply_low_risk_preferences: false
+  write_as_markdown: true
+
+events:
+  jsonl_root: ./runs
+  audit_root: ./audit
+
+shell:
+  enabled: true
+  default_timeout_seconds: 60
+  max_output_chars: 20000

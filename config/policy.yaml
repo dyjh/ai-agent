@@ -1,0 +1,10 @@
+policy:
+  min_confidence_for_auto_execute: 0.85
+  sensitive_paths:
+    - .env
+    - .env.local
+    - id_rsa
+    - id_ed25519
+    - credentials
+    - cookies
+    - session

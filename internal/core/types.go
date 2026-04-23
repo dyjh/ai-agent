@@ -1,0 +1,214 @@
+package core
+
+import "time"
+
+// ToolSpec describes a tool exposed to the planner/runtime.
+type ToolSpec struct {
+	ID             string         `json:"id"`
+	Provider       string         `json:"provider"`
+	Name           string         `json:"name"`
+	Description    string         `json:"description"`
+	InputSchema    map[string]any `json:"input_schema"`
+	DefaultEffects []string       `json:"default_effects"`
+	Metadata       map[string]any `json:"metadata,omitempty"`
+}
+
+// ToolProposal is the only structure the model may emit for side effects.
+type ToolProposal struct {
+	ID              string         `json:"id"`
+	Tool            string         `json:"tool"`
+	Input           map[string]any `json:"input"`
+	Purpose         string         `json:"purpose"`
+	ExpectedEffects []string       `json:"expected_effects"`
+	CreatedAt       time.Time      `json:"created_at"`
+}
+
+// ToolResult captures executor output.
+type ToolResult struct {
+	ToolCallID string         `json:"tool_call_id"`
+	Output     map[string]any `json:"output"`
+	Error      string         `json:"error,omitempty"`
+	StartedAt  time.Time      `json:"started_at"`
+	FinishedAt time.Time      `json:"finished_at"`
+}
+
+// EffectInferenceResult is derived from structure-aware proposal analysis.
+type EffectInferenceResult struct {
+	Effects          []string `json:"effects"`
+	RiskLevel        string   `json:"risk_level"`
+	Sensitive        bool     `json:"sensitive"`
+	ApprovalRequired bool     `json:"approval_required"`
+	Confidence       float64  `json:"confidence"`
+	ReasonSummary    string   `json:"reason_summary"`
+}
+
+// PolicyDecision controls whether execution is automatic or gated by approval.
+type PolicyDecision struct {
+	Allowed          bool           `json:"allowed"`
+	RequiresApproval bool           `json:"requires_approval"`
+	RiskLevel        string         `json:"risk_level"`
+	Reason           string         `json:"reason"`
+	ApprovalPayload  map[string]any `json:"approval_payload,omitempty"`
+}
+
+// ApprovalStatus tracks approval lifecycle.
+type ApprovalStatus string
+
+const (
+	ApprovalPending  ApprovalStatus = "pending"
+	ApprovalApproved ApprovalStatus = "approved"
+	ApprovalRejected ApprovalStatus = "rejected"
+)
+
+// ApprovalRecord stores an immutable input snapshot awaiting resolution.
+type ApprovalRecord struct {
+	ID             string                `json:"id"`
+	RunID          string                `json:"run_id,omitempty"`
+	ConversationID string                `json:"conversation_id,omitempty"`
+	Proposal       ToolProposal          `json:"proposal"`
+	Inference      EffectInferenceResult `json:"inference"`
+	Decision       PolicyDecision        `json:"decision"`
+	InputSnapshot  map[string]any        `json:"input_snapshot"`
+	Summary        string                `json:"summary"`
+	Status         ApprovalStatus        `json:"status"`
+	Reason         string                `json:"reason,omitempty"`
+	CreatedAt      time.Time             `json:"created_at"`
+	ResolvedAt     *time.Time            `json:"resolved_at,omitempty"`
+}
+
+// Conversation represents a chat session.
+type Conversation struct {
+	ID         string    `json:"id"`
+	Title      string    `json:"title"`
+	ProjectKey string    `json:"project_key,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	Archived   bool      `json:"archived"`
+}
+
+// Message represents a chat message.
+type Message struct {
+	ID             string         `json:"id"`
+	ConversationID string         `json:"conversation_id"`
+	Role           string         `json:"role"`
+	Content        string         `json:"content,omitempty"`
+	ContentJSON    map[string]any `json:"content_json,omitempty"`
+	CreatedAt      time.Time      `json:"created_at"`
+}
+
+// MessageUsage stores token accounting.
+type MessageUsage struct {
+	ID             string    `json:"id"`
+	MessageID      string    `json:"message_id"`
+	ConversationID string    `json:"conversation_id"`
+	Model          string    `json:"model,omitempty"`
+	InputTokens    int       `json:"input_tokens"`
+	OutputTokens   int       `json:"output_tokens"`
+	TotalTokens    int       `json:"total_tokens"`
+	ToolCallCount  int       `json:"tool_call_count"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+// ConversationUsageRollup stores aggregated usage.
+type ConversationUsageRollup struct {
+	ConversationID    string    `json:"conversation_id"`
+	TotalInputTokens  int64     `json:"total_input_tokens"`
+	TotalOutputTokens int64     `json:"total_output_tokens"`
+	TotalTokens       int64     `json:"total_tokens"`
+	TotalMessages     int64     `json:"total_messages"`
+	TotalRuns         int64     `json:"total_runs"`
+	UpdatedAt         time.Time `json:"updated_at"`
+}
+
+// AgentEvent stores an event row.
+type AgentEvent struct {
+	ID             string         `json:"id"`
+	ConversationID string         `json:"conversation_id,omitempty"`
+	RunID          string         `json:"run_id,omitempty"`
+	EventType      string         `json:"event_type"`
+	Payload        map[string]any `json:"payload,omitempty"`
+	CreatedAt      time.Time      `json:"created_at"`
+}
+
+// Event is the JSONL/audit event shape.
+type Event struct {
+	Type           string         `json:"type"`
+	RunID          string         `json:"run_id,omitempty"`
+	ConversationID string         `json:"conversation_id,omitempty"`
+	ApprovalID     string         `json:"approval_id,omitempty"`
+	Tool           string         `json:"tool,omitempty"`
+	ToolCallID     string         `json:"tool_call_id,omitempty"`
+	RiskLevel      string         `json:"risk_level,omitempty"`
+	Content        string         `json:"content,omitempty"`
+	Payload        map[string]any `json:"payload,omitempty"`
+	CreatedAt      time.Time      `json:"created_at"`
+}
+
+// MemoryFile is a Markdown-backed memory document.
+type MemoryFile struct {
+	Path        string            `json:"path"`
+	Frontmatter map[string]string `json:"frontmatter,omitempty"`
+	Body        string            `json:"body"`
+}
+
+// MemoryPatch represents a proposed markdown mutation.
+type MemoryPatch struct {
+	ID          string            `json:"id"`
+	Path        string            `json:"path"`
+	Frontmatter map[string]string `json:"frontmatter,omitempty"`
+	Body        string            `json:"body"`
+	Summary     string            `json:"summary"`
+	Sensitive   bool              `json:"sensitive"`
+	CreatedAt   time.Time         `json:"created_at"`
+}
+
+// KnowledgeBase stores metadata for an indexed KB.
+type KnowledgeBase struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// KBChunk represents a searchable chunk.
+type KBChunk struct {
+	ID       string            `json:"id"`
+	KBID     string            `json:"kb_id"`
+	Document string            `json:"document"`
+	Content  string            `json:"content"`
+	Metadata map[string]string `json:"metadata,omitempty"`
+	Score    float64           `json:"score,omitempty"`
+}
+
+// SkillRegistration stores uploaded skill metadata.
+type SkillRegistration struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	ArchivePath string    `json:"archive_path,omitempty"`
+	Enabled     bool      `json:"enabled"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// MCPServer stores an MCP server config.
+type MCPServer struct {
+	ID          string            `json:"id"`
+	Name        string            `json:"name"`
+	Transport   string            `json:"transport"`
+	Command     string            `json:"command,omitempty"`
+	URL         string            `json:"url,omitempty"`
+	Enabled     bool              `json:"enabled"`
+	Environment map[string]string `json:"environment,omitempty"`
+	CreatedAt   time.Time         `json:"created_at"`
+	UpdatedAt   time.Time         `json:"updated_at"`
+}
+
+// MCPToolPolicy stores local policy overrides for MCP tools.
+type MCPToolPolicy struct {
+	ID               string    `json:"id"`
+	ToolName         string    `json:"tool_name"`
+	RequiresApproval bool      `json:"requires_approval"`
+	RiskLevel        string    `json:"risk_level"`
+	Reason           string    `json:"reason,omitempty"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
