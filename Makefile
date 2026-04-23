@@ -1,4 +1,4 @@
-.PHONY: run server cli test fmt vet migrate-up migrate-down docker-up docker-down
+.PHONY: run server cli test fmt vet swagger docs migrate-up migrate-down docker-up docker-down
 
 run:
 	go run ./cmd/agent-server
@@ -17,6 +17,11 @@ fmt:
 
 vet:
 	go vet ./...
+
+swagger:
+	go run ./cmd/openapi -out docs/openapi.json
+
+docs: swagger
 
 migrate-up:
 	goose -dir internal/db/migrations postgres "$$DATABASE_URL" up

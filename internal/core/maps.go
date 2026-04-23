@@ -1,6 +1,8 @@
 package core
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 )
 
@@ -39,4 +41,14 @@ func MapsEqual(a, b map[string]any) bool {
 		return false
 	}
 	return string(aj) == string(bj)
+}
+
+// HashMap returns a stable SHA-256 hash for an input snapshot.
+func HashMap(input map[string]any) (string, error) {
+	raw, err := json.Marshal(input)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(raw)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }

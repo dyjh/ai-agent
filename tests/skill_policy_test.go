@@ -110,6 +110,8 @@ func newSkillBootstrap(t *testing.T) *app.Bootstrap {
 	cfg.Events.AuditRoot = t.TempDir()
 	cfg.Vector.Backend = config.VectorBackendMemory
 	cfg.Vector.EmbeddingDimension = 16
+	cfg.KB.Enabled = false
+	cfg.KB.Provider = ""
 
 	bootstrap, err := app.NewBootstrap(context.Background(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {

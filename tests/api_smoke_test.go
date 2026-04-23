@@ -23,6 +23,8 @@ func TestAPISmoke(t *testing.T) {
 	cfg.Events.AuditRoot = t.TempDir()
 	cfg.Vector.Backend = config.VectorBackendMemory
 	cfg.Vector.EmbeddingDimension = 16
+	cfg.KB.Enabled = false
+	cfg.KB.Provider = ""
 
 	bootstrap, err := app.NewBootstrap(context.Background(), cfg, slog.Default())
 	if err != nil {
@@ -54,12 +56,12 @@ func TestAPISmoke(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
 		t.Fatalf("decode health: %v", err)
 	}
-	vector, ok := health["vector"].(map[string]any)
+	knowledgeBase, ok := health["knowledge_base"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected vector health payload")
+		t.Fatalf("expected knowledge_base health payload")
 	}
-	if vector["vector_backend"] != "memory" {
-		t.Fatalf("vector backend = %v, want memory", vector["vector_backend"])
+	if knowledgeBase["status"] != "disabled" {
+		t.Fatalf("knowledge_base status = %v, want disabled", knowledgeBase["status"])
 	}
 
 	var conversation struct {
@@ -96,8 +98,8 @@ func TestAPISmoke(t *testing.T) {
 
 	var kbHealth map[string]any
 	mustRequestJSON(t, http.MethodGet, server.URL+"/v1/kbs/health", nil, &kbHealth)
-	if kbHealth["vector_backend"] != "memory" {
-		t.Fatalf("kb health vector backend = %v, want memory", kbHealth["vector_backend"])
+	if kbHealth["status"] != "disabled" {
+		t.Fatalf("kb health status = %v, want disabled", kbHealth["status"])
 	}
 
 	skillRoot := createSkillFixture(t, skillFixtureOptions{

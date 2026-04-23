@@ -69,6 +69,7 @@ type ApprovalRecord struct {
 	Inference      EffectInferenceResult `json:"inference"`
 	Decision       PolicyDecision        `json:"decision"`
 	InputSnapshot  map[string]any        `json:"input_snapshot"`
+	SnapshotHash   string                `json:"snapshot_hash"`
 	Summary        string                `json:"summary"`
 	Status         ApprovalStatus        `json:"status"`
 	Reason         string                `json:"reason,omitempty"`

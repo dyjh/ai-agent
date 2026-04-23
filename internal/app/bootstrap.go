@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -40,6 +41,9 @@ type Bootstrap struct {
 
 // NewBootstrap wires the base application dependencies.
 func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Bootstrap, error) {
+	if err := config.ValidateKnowledgeBase(cfg); err != nil {
+		return nil, err
+	}
 	_ = os.MkdirAll(cfg.Memory.RootDir, 0o755)
 	_ = os.MkdirAll(cfg.Events.JSONLRoot, 0o755)
 	_ = os.MkdirAll(cfg.Events.AuditRoot, 0o755)
@@ -70,7 +74,17 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 		logger.Warn("memory reindex failed", "error", err)
 	}
 
-	knowledgeService := kb.NewService(index, embedder, cfg.CollectionName("kb"))
+	var knowledgeService *kb.Service
+	if cfg.KB.Enabled {
+		kbCfg := cfg
+		kbCfg.Vector.Backend = config.VectorBackendQdrant
+		kbCfg.Vector.FallbackToMemory = false
+		kbIndex, err := kb.NewVectorIndexFactory(logger).NewVectorIndex(ctx, kbCfg, embedder)
+		if err != nil {
+			return nil, fmt.Errorf("knowledge base qdrant unavailable: %w", err)
+		}
+		knowledgeService = kb.NewService(kbIndex, embedder, cfg.CollectionName("kb"))
+	}
 	skillsManager := skills.NewManager("skills")
 	mcpManager := mcp.NewManager()
 	if err := mcpManager.LoadConfig(resolveConfigPath("config/mcp.servers.yaml"), resolveConfigPath("config/mcp.tool-policies.yaml")); err != nil {
@@ -182,23 +196,25 @@ func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb
 		InputSchema:    map[string]any{"path": "string", "body": "string"},
 		DefaultEffects: []string{"fs.write", "memory.modify"},
 	}, &memstore.PatchExecutor{Store: memoryStore})
-	registry.Register(core.ToolSpec{
-		ID:          "kb.search",
-		Provider:    "local",
-		Name:        "kb.search",
-		Description: "Search local knowledge base by semantic query",
-		InputSchema: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"kb_id":   map[string]any{"type": "string"},
-				"query":   map[string]any{"type": "string"},
-				"limit":   map[string]any{"type": "integer"},
-				"filters": map[string]any{"type": "object"},
+	if cfg.KB.Enabled && knowledge != nil {
+		registry.Register(core.ToolSpec{
+			ID:          "kb.search",
+			Provider:    "local",
+			Name:        "kb.search",
+			Description: "Search local knowledge base by semantic query",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"kb_id":   map[string]any{"type": "string"},
+					"query":   map[string]any{"type": "string"},
+					"limit":   map[string]any{"type": "integer"},
+					"filters": map[string]any{"type": "object"},
+				},
+				"required": []string{"query"},
 			},
-			"required": []string{"query"},
-		},
-		DefaultEffects: []string{"kb.read"},
-	}, &kb.SearchExecutor{Service: knowledge})
+			DefaultEffects: []string{"kb.read"},
+		}, &kb.SearchExecutor{Service: knowledge})
+	}
 	registry.Register(core.ToolSpec{
 		ID:          "skill.run",
 		Provider:    "skill",

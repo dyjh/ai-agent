@@ -122,6 +122,11 @@ func (r *LocalRouter) ExecuteApproved(ctx context.Context, approvalID string) (*
 	if approval.Status != core.ApprovalApproved {
 		return nil, fmt.Errorf("approval %s is not approved", approvalID)
 	}
+	if verifier, ok := r.approvals.(interface{ VerifySnapshotHash(string) error }); ok {
+		if err := verifier.VerifySnapshotHash(approvalID); err != nil {
+			return nil, err
+		}
+	}
 
 	proposal := approval.Proposal
 	proposal.Input = core.CloneMap(approval.InputSnapshot)

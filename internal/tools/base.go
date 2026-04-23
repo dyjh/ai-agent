@@ -51,7 +51,7 @@ type Router interface {
 	ExecuteReadOnly(ctx context.Context, proposal core.ToolProposal) (*core.ToolResult, error)
 }
 
-// NotImplementedExecutor is a placeholder executor for not-yet-wired tools.
+// NotImplementedExecutor returns a disabled-tool response for guard paths.
 type NotImplementedExecutor struct {
 	Tool string
 }

@@ -2,36 +2,45 @@ package tests
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"testing"
 
-	"local-agent/internal/app"
+	"local-agent/internal/agent"
 	"local-agent/internal/config"
 	"local-agent/internal/core"
 	toolscore "local-agent/internal/tools"
+	"local-agent/internal/tools/kb"
 )
 
 func TestKBSearchTool(t *testing.T) {
 	cfg := config.Default()
-	cfg.Database.URL = ""
-	cfg.Memory.RootDir = t.TempDir()
-	cfg.Events.JSONLRoot = t.TempDir()
-	cfg.Events.AuditRoot = t.TempDir()
-	cfg.Vector.Backend = config.VectorBackendMemory
 	cfg.Vector.EmbeddingDimension = 16
 
-	bootstrap, err := app.NewBootstrap(context.Background(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	if err != nil {
-		t.Fatalf("NewBootstrap() error = %v", err)
-	}
+	embedder := kb.FakeEmbedder{Dimensions: cfg.Vector.EmbeddingDimension}
+	index := kb.NewInMemoryVectorIndex(embedder, kb.VectorRuntimeStatus{VectorBackend: "memory"})
+	service := kb.NewService(index, embedder, "kb_chunks")
+	registry := toolscore.NewRegistry()
+	registry.Register(core.ToolSpec{
+		ID:             "kb.search",
+		Provider:       "local",
+		Name:           "kb.search",
+		Description:    "Search local knowledge base by semantic query",
+		DefaultEffects: []string{"kb.read"},
+	}, &kb.SearchExecutor{Service: service})
+	approvals := agent.NewApprovalCenter()
+	router := toolscore.NewRouter(
+		registry,
+		agent.NewEffectInferrer(cfg.Policy),
+		agent.NewPolicyEngine(cfg.Policy),
+		approvals,
+		nil,
+	)
 
-	base := bootstrap.Knowledge.CreateKB("docs", "local docs")
-	if _, err := bootstrap.Knowledge.UploadDocument(context.Background(), base.ID, "intro.md", "# Intro\n\nhello world\n\nvector search"); err != nil {
+	base := service.CreateKB("docs", "local docs")
+	if _, err := service.UploadDocument(context.Background(), base.ID, "intro.md", "# Intro\n\nhello world\n\nvector search"); err != nil {
 		t.Fatalf("UploadDocument() error = %v", err)
 	}
 
-	spec, err := bootstrap.Registry.Spec("kb.search")
+	spec, err := registry.Spec("kb.search")
 	if err != nil {
 		t.Fatalf("Spec() error = %v", err)
 	}
@@ -39,7 +48,7 @@ func TestKBSearchTool(t *testing.T) {
 		t.Fatalf("default effects = %v, want [kb.read]", spec.DefaultEffects)
 	}
 
-	executor, err := bootstrap.Registry.Executor("kb.search")
+	executor, err := registry.Executor("kb.search")
 	if err != nil {
 		t.Fatalf("Executor() error = %v", err)
 	}
@@ -47,7 +56,7 @@ func TestKBSearchTool(t *testing.T) {
 		t.Fatalf("kb.search should not use NotImplementedExecutor")
 	}
 
-	outcome, err := bootstrap.Router.Propose(context.Background(), "run_1", "conv_1", core.ToolProposal{
+	outcome, err := router.Propose(context.Background(), "run_1", "conv_1", core.ToolProposal{
 		ID:   "tool_1",
 		Tool: "kb.search",
 		Input: map[string]any{

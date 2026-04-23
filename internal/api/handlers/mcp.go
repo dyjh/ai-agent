@@ -41,6 +41,20 @@ func (h *MCPHandler) CreateServer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, item)
 }
 
+// GetServer handles GET /v1/mcp/servers/{id}.
+func (h *MCPHandler) GetServer(w http.ResponseWriter, r *http.Request) {
+	item, err := h.Deps.MCP.GetServer(chi.URLParam(r, "id"))
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": err.Error()})
+		return
+	}
+	state, _ := h.Deps.MCP.RuntimeState(chi.URLParam(r, "id"))
+	writeJSON(w, http.StatusOK, map[string]any{
+		"server": item,
+		"state":  state,
+	})
+}
+
 // UpdateServer handles PATCH /v1/mcp/servers/{id}.
 func (h *MCPHandler) UpdateServer(w http.ResponseWriter, r *http.Request) {
 	var body mcp.ServerInput

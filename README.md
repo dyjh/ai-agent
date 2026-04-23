@@ -61,6 +61,8 @@
 cp .env.example .env
 ```
 
+当前配置通过进程环境变量展开；启动前请将 `.env` 内容导入 shell 环境，或用同等方式传入环境变量。
+
 3. 填写模型相关配置：
 
 ```env
@@ -68,14 +70,18 @@ OPENAI_BASE_URL=
 OPENAI_API_KEY=
 OPENAI_MODEL=
 DATABASE_URL=postgresql://agent:agent@localhost:5432/local_agent
+USE_KONWAGE_BASE=true
+KONWAGE_BASE_PROVIDER=qdrant
 QDRANT_URL=http://localhost:6333
 QDRANT_API_KEY=
 ```
 
-4. 选择向量后端模式：
+4. 配置知识库开关和向量后端：
 
-- `vector.backend=memory`：本地 smoke / 测试优先，不依赖 Qdrant
-- `vector.backend=qdrant`：走真实 Qdrant 索引；如果 `fallback_to_memory=true`，Qdrant 不可用时会自动降级到内存索引并输出 warning
+- `USE_KONWAGE_BASE=false`：不初始化 KB runtime，`ContextBuilder` 不检索 KB，`kb.search` 不注册，KB API 返回 `feature_disabled`
+- `USE_KONWAGE_BASE=true`：必须设置 `KONWAGE_BASE_PROVIDER=qdrant`
+- 当前 runtime KB provider 只支持 `qdrant`，非法 provider 会启动失败
+- `vector.backend=memory` 仍保留给 memory index、本地 smoke 和单元测试使用
 
 Qdrant 只作为向量索引，不是事实源。长期记忆事实源仍然是 `memory/*.md`，知识库事实源仍然是上传的 KB 文档内容。
 
@@ -97,12 +103,15 @@ make migrate-up
 ## 启动 Agent Server
 
 ```bash
+go run ./cmd/agent-server --check-config
 make run
 ```
 
 默认监听：
 
 - `GET /v1/health`
+- `GET /swagger/index.html`
+- `GET /swagger/doc.json`
 - `GET /v1/kbs/health`
 - `POST /v1/conversations`
 - `POST /v1/conversations/{conversation_id}/messages`
@@ -122,6 +131,19 @@ go run ./cmd/agent memory search "偏好"
 go run ./cmd/agent skills list
 go run ./cmd/agent mcp list
 ```
+
+## Swagger / OpenAPI
+
+生成 OpenAPI 文档：
+
+```bash
+make swagger
+```
+
+生成文件位于 [docs/openapi.json](/www/wwwroot/ai-agent/docs/openapi.json)。服务启动后可访问：
+
+- Swagger UI: `http://127.0.0.1:8765/swagger/index.html`
+- OpenAPI JSON: `http://127.0.0.1:8765/swagger/doc.json`
 
 ## WebSocket 示例
 
@@ -166,11 +188,12 @@ WS /v1/conversations/{conversation_id}/ws
 
 ```yaml
 kb:
-  enabled: true
+  enabled: ${USE_KONWAGE_BASE}
+  provider: ${KONWAGE_BASE_PROVIDER}
   registry_path: ./knowledge/registry.yaml
 
 vector:
-  backend: qdrant # memory | qdrant
+  backend: qdrant
   fallback_to_memory: true
   embedding_dimension: 1536
   distance: cosine
@@ -183,6 +206,30 @@ qdrant:
     kb: kb_chunks
     memory: memory_chunks
     code: code_chunks
+```
+
+禁用知识库时：
+
+```env
+USE_KONWAGE_BASE=false
+KONWAGE_BASE_PROVIDER=
+```
+
+此时 runtime 不会构建 KB 检索上下文，`kb.search` 不会出现在 ToolRegistry 中，`POST /v1/kbs`、`POST /v1/kbs/{kb_id}/search` 等接口返回：
+
+```json
+{
+  "code": "feature_disabled",
+  "message": "knowledge base is disabled"
+}
+```
+
+启用知识库时：
+
+```env
+USE_KONWAGE_BASE=true
+KONWAGE_BASE_PROVIDER=qdrant
+QDRANT_URL=http://localhost:6333
 ```
 
 1. 创建 KB：
@@ -254,6 +301,7 @@ curl http://127.0.0.1:8765/v1/kbs/health
 
 - `GET /v1/mcp/servers`
 - `POST /v1/mcp/servers`
+- `GET /v1/mcp/servers/{id}`
 - `PATCH /v1/mcp/servers/{id}`
 - `POST /v1/mcp/servers/{id}/refresh`
 - `POST /v1/mcp/servers/{id}/test`
@@ -302,6 +350,7 @@ tools:
 - 读操作且高置信：自动执行
 - 写操作、敏感读、未知效果、低置信：生成 approval
 - approval 绑定的是精确 `input_snapshot`
+- approval 同时保存 `snapshot_hash`，执行前会校验快照未被篡改
 - 审批通过后，Executor 只会执行批准过的那个 snapshot
 - 如果命令、参数、目录、目标文件变化，必须重新审批
 - Agent Workflow 会把需要审批的 run 标记为 `paused_for_approval`
@@ -364,15 +413,24 @@ go test ./...
 - shell parser
 - markdown memory
 - qdrant store / vector factory / kb.search tool
+- config validation / KB feature gate / Swagger docs
 - skill manifest / runner / policy
 - mcp config / transport / policy / call_tool / API
-- approval snapshot behavior
+- approval snapshot behavior and hash integrity
 - workflow start / pause / resume / reject / idempotency
 - API smoke flows
 
+可选外部依赖集成测试建议通过环境变量显式开启，例如：
+
+```bash
+RUN_INTEGRATION=1 go test ./...
+RUN_QDRANT_INTEGRATION=1 go test ./...
+RUN_POSTGRES_INTEGRATION=1 go test ./...
+```
+
 ## 当前 MVP 限制和后续 TODO
 
-- 当前支持 `memory` 和 `qdrant` 两种向量后端；本地测试默认更偏向 `memory`，生产部署可切到 `qdrant`
+- Runtime KB provider 当前只支持 `qdrant`；`memory` 向量索引用于本地 memory index、测试和开发辅助
 - Eino Workflow / HITL interrupt-resume 已覆盖单次工具调用主链路；更复杂的多步通用 graph 仍是后续硬化方向
 - Skill Runtime 已支持本地 manifest + executable/script 执行，但 zip 上传、运行时沙箱和更细粒度权限隔离仍待继续收口
 - MCP runtime 已支持 stdio/http 与 `mcp.call_tool`，但更完整的 MCP 协议兼容矩阵仍待后续集成测试扩展

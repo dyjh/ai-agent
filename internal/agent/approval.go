@@ -25,14 +25,22 @@ func NewApprovalCenter() *ApprovalCenter {
 
 // Create stores a new approval request with an immutable input snapshot.
 func (a *ApprovalCenter) Create(runID, conversationID string, proposal core.ToolProposal, inference core.EffectInferenceResult, decision core.PolicyDecision) (*core.ApprovalRecord, error) {
+	snapshot := core.CloneMap(proposal.Input)
+	hash, err := core.HashMap(snapshot)
+	if err != nil {
+		return nil, err
+	}
+	storedProposal := proposal
+	storedProposal.Input = core.CloneMap(proposal.Input)
 	record := core.ApprovalRecord{
 		ID:             ids.New("apr"),
 		RunID:          runID,
 		ConversationID: conversationID,
-		Proposal:       proposal,
+		Proposal:       storedProposal,
 		Inference:      inference,
 		Decision:       decision,
-		InputSnapshot:  core.CloneMap(proposal.Input),
+		InputSnapshot:  snapshot,
+		SnapshotHash:   hash,
 		Summary:        approvalSummary(proposal, inference),
 		Status:         core.ApprovalPending,
 		CreatedAt:      time.Now().UTC(),
@@ -42,8 +50,7 @@ func (a *ApprovalCenter) Create(runID, conversationID string, proposal core.Tool
 	defer a.mu.Unlock()
 	a.approvals[record.ID] = record
 
-	cp := record
-	return &cp, nil
+	return cloneApproval(record), nil
 }
 
 // Get returns an approval record by ID.
@@ -54,8 +61,7 @@ func (a *ApprovalCenter) Get(id string) (*core.ApprovalRecord, error) {
 	if !ok {
 		return nil, errors.New("approval not found")
 	}
-	cp := record
-	return &cp, nil
+	return cloneApproval(record), nil
 }
 
 // Pending returns all unresolved approvals.
@@ -65,7 +71,7 @@ func (a *ApprovalCenter) Pending() ([]core.ApprovalRecord, error) {
 	items := make([]core.ApprovalRecord, 0, len(a.approvals))
 	for _, record := range a.approvals {
 		if record.Status == core.ApprovalPending {
-			items = append(items, record)
+			items = append(items, *cloneApproval(record))
 		}
 	}
 	return items, nil
@@ -93,6 +99,24 @@ func (a *ApprovalCenter) SnapshotMatches(id string, proposal core.ToolProposal) 
 	return core.MapsEqual(record.InputSnapshot, proposal.Input), nil
 }
 
+// VerifySnapshotHash checks that the stored snapshot still matches its hash.
+func (a *ApprovalCenter) VerifySnapshotHash(id string) error {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	record, ok := a.approvals[id]
+	if !ok {
+		return errors.New("approval not found")
+	}
+	hash, err := core.HashMap(record.InputSnapshot)
+	if err != nil {
+		return err
+	}
+	if hash != record.SnapshotHash {
+		return fmt.Errorf("approval %s input snapshot hash mismatch", id)
+	}
+	return nil
+}
+
 func (a *ApprovalCenter) resolve(id string, approved bool, reason string) (*core.ApprovalRecord, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -114,8 +138,7 @@ func (a *ApprovalCenter) resolve(id string, approved bool, reason string) (*core
 	}
 	a.approvals[id] = record
 
-	cp := record
-	return &cp, nil
+	return cloneApproval(record), nil
 }
 
 func approvalSummary(proposal core.ToolProposal, inference core.EffectInferenceResult) string {
@@ -144,4 +167,15 @@ func approvalSummary(proposal core.ToolProposal, inference core.EffectInferenceR
 		}
 	}
 	return fmt.Sprintf("准备执行 `%s`，风险等级为 %s。", proposal.Tool, inference.RiskLevel)
+}
+
+func cloneApproval(record core.ApprovalRecord) *core.ApprovalRecord {
+	cp := record
+	cp.Proposal.Input = core.CloneMap(record.Proposal.Input)
+	cp.InputSnapshot = core.CloneMap(record.InputSnapshot)
+	cp.Inference.Effects = append([]string(nil), record.Inference.Effects...)
+	if record.Decision.ApprovalPayload != nil {
+		cp.Decision.ApprovalPayload = core.CloneMap(record.Decision.ApprovalPayload)
+	}
+	return &cp
 }

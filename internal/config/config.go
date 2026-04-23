@@ -38,6 +38,7 @@ const (
 // KBConfig stores KB metadata configuration.
 type KBConfig struct {
 	Enabled      bool   `yaml:"enabled"`
+	Provider     string `yaml:"provider"`
 	RegistryPath string `yaml:"registry_path"`
 }
 
@@ -116,6 +117,7 @@ func Default() Config {
 		},
 		KB: KBConfig{
 			Enabled:      true,
+			Provider:     string(VectorBackendQdrant),
 			RegistryPath: "./knowledge/registry.yaml",
 		},
 		Vector: VectorConfig{

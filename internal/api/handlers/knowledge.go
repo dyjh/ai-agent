@@ -18,6 +18,9 @@ func NewKnowledgeHandler(deps Dependencies) *KnowledgeHandler {
 
 // CreateKB handles POST /v1/kbs.
 func (h *KnowledgeHandler) CreateKB(w http.ResponseWriter, r *http.Request) {
+	if !h.requireEnabled(w) {
+		return
+	}
 	var body struct {
 		Name        string `json:"name"`
 		Description string `json:"description"`
@@ -32,16 +35,30 @@ func (h *KnowledgeHandler) CreateKB(w http.ResponseWriter, r *http.Request) {
 
 // ListKBs handles GET /v1/kbs.
 func (h *KnowledgeHandler) ListKBs(w http.ResponseWriter, r *http.Request) {
+	if !h.requireEnabled(w) {
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": h.Deps.Knowledge.ListKBs()})
 }
 
 // Health handles GET /v1/kbs/health.
 func (h *KnowledgeHandler) Health(w http.ResponseWriter, r *http.Request) {
+	if !h.Deps.Config.KB.Enabled || h.Deps.Knowledge == nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"enabled":  false,
+			"provider": h.Deps.Config.KB.Provider,
+			"status":   "disabled",
+		})
+		return
+	}
 	writeJSON(w, http.StatusOK, h.Deps.Knowledge.Health(r.Context()))
 }
 
 // Upload handles POST /v1/kbs/{kb_id}/documents/upload.
 func (h *KnowledgeHandler) Upload(w http.ResponseWriter, r *http.Request) {
+	if !h.requireEnabled(w) {
+		return
+	}
 	var body struct {
 		Filename string `json:"filename"`
 		Content  string `json:"content"`
@@ -60,6 +77,9 @@ func (h *KnowledgeHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 // Search handles POST /v1/kbs/{kb_id}/search.
 func (h *KnowledgeHandler) Search(w http.ResponseWriter, r *http.Request) {
+	if !h.requireEnabled(w) {
+		return
+	}
 	var body struct {
 		Query string `json:"query"`
 		Limit int    `json:"limit"`
@@ -74,4 +94,15 @@ func (h *KnowledgeHandler) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (h *KnowledgeHandler) requireEnabled(w http.ResponseWriter) bool {
+	if h.Deps.Config.KB.Enabled && h.Deps.Knowledge != nil {
+		return true
+	}
+	writeError(w, http.StatusServiceUnavailable, "feature_disabled", "knowledge base is disabled", map[string]any{
+		"enabled":  false,
+		"provider": h.Deps.Config.KB.Provider,
+	})
+	return false
 }

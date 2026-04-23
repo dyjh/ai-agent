@@ -24,7 +24,12 @@ func NewRouter(deps Dependencies) http.Handler {
 	knowledge := handlers.NewKnowledgeHandler(deps)
 	skillsHandler := handlers.NewSkillsHandler(deps)
 	mcpHandler := handlers.NewMCPHandler(deps)
+	docsHandler := handlers.NewDocsHandler()
 	wsHandler := ws.NewChatHandler(deps)
+
+	r.Get("/swagger", docsHandler.Redirect)
+	r.Get("/swagger/index.html", docsHandler.Index)
+	r.Get("/swagger/doc.json", docsHandler.DocJSON)
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/health", health.Get)
@@ -62,6 +67,7 @@ func NewRouter(deps Dependencies) http.Handler {
 
 		r.Get("/mcp/servers", mcpHandler.ListServers)
 		r.Post("/mcp/servers", mcpHandler.CreateServer)
+		r.Get("/mcp/servers/{id}", mcpHandler.GetServer)
 		r.Patch("/mcp/servers/{id}", mcpHandler.UpdateServer)
 		r.Post("/mcp/servers/{id}/refresh", mcpHandler.RefreshServer)
 		r.Post("/mcp/servers/{id}/test", mcpHandler.TestServer)

@@ -1,15 +1,15 @@
 {
   "project": "local-agent",
   "source": "promote.txt",
-  "last_updated": "2026-04-23T18:40:00+08:00",
-  "overall_status": "mvp_completed_with_followups",
-  "current_task_id": "phase-11-hardening-and-integration",
-  "current_task_title": "集成测试、运行时硬化与文档收口",
+  "last_updated": "2026-04-23T19:30:00+08:00",
+  "overall_status": "production_ready_mvp",
+  "current_task_id": "post-mvp-backlog",
+  "current_task_title": "Post-MVP backlog",
   "summary": {
-    "headline": "MVP 首轮实现已完成，主链路可运行，当前进入占位模块补全和生产化收口阶段。",
+    "headline": "MVP 主链路、运行时硬化、KB feature gate、Swagger/OpenAPI 和文档收口已完成。",
     "progress": {
-      "completed": 10,
-      "pending": 1,
+      "completed": 11,
+      "pending": 0,
       "total": 11
     },
     "verified": [
@@ -19,11 +19,12 @@
       "2026-04-23 已完成 vector backend factory、Qdrant HTTP adapter、kb.search executor、/v1/kbs/health 和对应测试。",
       "2026-04-23 已完成 skill manifest 校验、skill.run 执行器、Skill API 扩展和 phase-8 测试。",
       "2026-04-23 已完成 MCP stdio/http transport、mcp.call_tool executor、policy override 接入、MCP API runtime 和 phase-9 测试。",
-      "2026-04-23 已完成 Eino Workflow facade、RunState 状态机、approval interrupt-resume、HTTP/WS resume 接入和 phase-10 测试。"
+      "2026-04-23 已完成 Eino Workflow facade、RunState 状态机、approval interrupt-resume、HTTP/WS resume 接入和 phase-10 测试。",
+      "2026-04-23 已完成 Phase 11：配置校验、USE_KONWAGE_BASE/KONWAGE_BASE_PROVIDER、KB feature gate、Swagger/OpenAPI、approval snapshot hash、硬化测试和文档收口，并确认 go test ./... 通过。"
     ],
     "unfinished_overview": [
-      "PostgreSQL / Qdrant / MCP 的集成测试矩阵和依赖恢复场景仍待继续硬化。",
-      "Skill Runtime 已支持本地执行，但 zip 上传、运行时沙箱和更细粒度权限隔离仍待继续硬化。"
+      "更复杂的多步通用 Eino graph、跨进程 run state 持久化仍属于 post-MVP backlog。",
+      "Skill zip 上传、执行沙箱、更细粒度权限隔离和更广 MCP 方言兼容矩阵仍属于 post-MVP backlog。"
     ]
   },
   "tasks": [
@@ -215,17 +216,20 @@
     {
       "id": "phase-11-hardening-and-integration",
       "title": "集成测试、运行时硬化与文档收口",
-      "status": "pending",
-      "why_pending": "当前测试以核心单元和本地 smoke 为主，生产化运行时的外部依赖、降级策略和文档闭环还需要继续收口。",
-      "evidence": [
-        "tests/ 目前覆盖 policy / effect inference / approval snapshot / markdown memory / MCP runtime / workflow / API smoke。",
-        "README 当前 MVP 限制和后续 TODO 已明确复杂多步 graph、集成测试和运行时硬化仍待补齐。"
+      "status": "completed",
+      "completed_items": [
+        "新增配置校验入口和 agent-server --check-config，启动前检查 database.url、runtime 目录、policy/skills/MCP 配置文件、KB provider 和 qdrant.url。",
+        "按精确 env 名称支持 USE_KONWAGE_BASE 和 KONWAGE_BASE_PROVIDER；KB runtime provider 当前只允许 qdrant。",
+        "完成 KB feature gate：disabled 时不初始化 KB service、不注册 kb.search、ContextBuilder 不检索 KB，KB API 返回 feature_disabled。",
+        "补齐 /v1/health 的 database、qdrant、knowledge_base、workflow、docs 状态输出。",
+        "新增 OpenAPI spec、/swagger/index.html、/swagger/doc.json、cmd/openapi 和 make swagger，并生成 docs/openapi.json。",
+        "新增 Approval snapshot hash，执行 approved snapshot 前校验 hash，并修复 ApprovalCenter 返回记录的深拷贝。",
+        "补充 config validation、KB feature gate、Swagger docs、approval snapshot hash 测试，并确认 go test ./... 通过。",
+        "同步 README、.env.example 和 task.json。"
       ],
       "remaining_items": [
-        "补充 PostgreSQL / Qdrant / MCP 的集成测试或可重复 mock 套件。",
-        "补充启动配置校验、依赖不可用降级和恢复场景测试。",
-        "完善运行手册，保证 task.json、README 和实际能力列表持续同步。",
-        "梳理 not_implemented 工具与实验性能力，避免对外能力描述过度领先于实现。"
+        "PostgreSQL / Qdrant / MCP 的真实外部依赖矩阵可继续通过 RUN_*_INTEGRATION 环境变量扩展。",
+        "复杂多步 graph、跨进程 run state 持久化、Skill 沙箱和 zip 上传留作 post-MVP backlog。"
       ],
       "deliverables": [
         "更完整的集成测试矩阵",
@@ -274,6 +278,11 @@
       "at": "2026-04-23T18:40:00+08:00",
       "task_id": "phase-10-eino-workflow-hitl",
       "summary": "完成 Eino Workflow facade、RunState 状态机、approval interrupt-resume、HTTP/WS resume 接入和 workflow 测试，当前任务切换到 phase-11 hardening/integration。"
+    },
+    {
+      "at": "2026-04-23T19:30:00+08:00",
+      "task_id": "phase-11-hardening-and-integration",
+      "summary": "完成配置校验、KB provider feature gate、Swagger/OpenAPI、approval snapshot hash、硬化测试和 README/.env/task.json 收口，当前进入 post-MVP backlog。"
     }
   ]
 }

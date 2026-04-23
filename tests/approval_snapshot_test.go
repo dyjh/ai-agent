@@ -43,6 +43,24 @@ func TestApprovalSnapshotBehavior(t *testing.T) {
 	if outcome.Approval == nil {
 		t.Fatalf("expected approval to be created")
 	}
+	if outcome.Approval.SnapshotHash == "" {
+		t.Fatalf("expected snapshot hash")
+	}
+	recordCopy, err := approvals.Get(outcome.Approval.ID)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	recordCopy.InputSnapshot["command"] = "pnpm add lodash"
+	storedRecord, err := approvals.Get(outcome.Approval.ID)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if storedRecord.InputSnapshot["command"] != "pnpm add axios" {
+		t.Fatalf("approval snapshot should be immutable, got %v", storedRecord.InputSnapshot["command"])
+	}
+	if err := approvals.VerifySnapshotHash(outcome.Approval.ID); err != nil {
+		t.Fatalf("VerifySnapshotHash() error = %v", err)
+	}
 
 	if _, err := router.ExecuteApproved(context.Background(), outcome.Approval.ID); err == nil {
 		t.Fatalf("expected pending approval to block execution")

@@ -6,7 +6,8 @@ database:
   url: ${DATABASE_URL}
 
 kb:
-  enabled: true
+  enabled: ${USE_KONWAGE_BASE}
+  provider: ${KONWAGE_BASE_PROVIDER}
   registry_path: ./knowledge/registry.yaml
 
 vector:

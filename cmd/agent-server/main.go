@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"flag"
 	"log"
 	"os"
 	"os/signal"
@@ -13,12 +15,35 @@ import (
 )
 
 func main() {
-	cfg, err := config.Load("config/agent.yaml")
+	configPath := flag.String("config", "config/agent.yaml", "path to agent config")
+	checkConfig := flag.Bool("check-config", false, "validate config and create runtime directories")
+	flag.Parse()
+
+	cfg, err := config.Load(*configPath)
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
 
 	logger := appLog.New()
+	if *checkConfig {
+		report, err := app.CheckConfig(context.Background(), cfg, logger)
+		raw, _ := json.MarshalIndent(report, "", "  ")
+		_, _ = os.Stdout.Write(append(raw, '\n'))
+		if err != nil {
+			log.Fatalf("check config: %v", err)
+		}
+		return
+	}
+	if report, err := app.CheckConfig(context.Background(), cfg, logger); err != nil {
+		log.Fatalf("check config: %v", err)
+	} else {
+		logger.Info("startup config verified",
+			"knowledge_base", report.Knowledge,
+			"provider", report.Provider,
+			"docs_route", report.DocsRoute,
+		)
+	}
+
 	bootstrap, err := app.NewBootstrap(context.Background(), cfg, logger)
 	if err != nil {
 		log.Fatalf("bootstrap app: %v", err)
