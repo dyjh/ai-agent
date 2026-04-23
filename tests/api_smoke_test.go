@@ -99,6 +99,43 @@ func TestAPISmoke(t *testing.T) {
 	if kbHealth["vector_backend"] != "memory" {
 		t.Fatalf("kb health vector backend = %v, want memory", kbHealth["vector_backend"])
 	}
+
+	skillRoot := createSkillFixture(t, skillFixtureOptions{
+		ID:      "api_skill",
+		Effects: []string{"process.read"},
+		Script:  "#!/bin/sh\nprintf '{\"ok\":true}'\n",
+	})
+
+	var skill map[string]any
+	mustRequestJSON(t, http.MethodPost, server.URL+"/v1/skills/upload", map[string]any{
+		"path": skillRoot,
+	}, &skill)
+	if skill["id"] != "api_skill" {
+		t.Fatalf("skill id = %v, want api_skill", skill["id"])
+	}
+
+	var skillDetail map[string]any
+	mustRequestJSON(t, http.MethodGet, server.URL+"/v1/skills/api_skill", nil, &skillDetail)
+	if _, ok := skillDetail["manifest"].(map[string]any); !ok {
+		t.Fatalf("expected skill manifest in detail response")
+	}
+
+	var runSkill map[string]any
+	mustRequestJSON(t, http.MethodPost, server.URL+"/v1/skills/api_skill/run", map[string]any{}, &runSkill)
+	result, ok := runSkill["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected run result")
+	}
+	if result["status"] != nil {
+		t.Fatalf("unexpected top-level result status payload: %v", result["status"])
+	}
+	output, ok := result["output"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected tool output payload")
+	}
+	if output["status"] != "ok" {
+		t.Fatalf("skill run status = %v, want ok", output["status"])
+	}
 }
 
 func mustRequestJSON(t *testing.T, method, url string, body any, target any) {

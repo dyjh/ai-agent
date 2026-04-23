@@ -230,10 +230,23 @@ curl http://127.0.0.1:8765/v1/kbs/health
 
 - `POST /v1/skills/upload`
 - `GET /v1/skills`
+- `GET /v1/skills/{id}`
 - `POST /v1/skills/{id}/enable`
 - `POST /v1/skills/{id}/disable`
+- `POST /v1/skills/{id}/test`
+- `POST /v1/skills/{id}/run`
 
-当前 MVP 先完成注册与启停；真实 skill 执行仍保留为后续扩展点。
+当前 Skill Runtime 已支持通过 `skill.yaml` 声明本地 skill，并通过 `skill.run -> ToolRouter -> EffectInference -> PolicyEngine -> Executor` 链路执行。
+
+- 当前支持的 runtime 类型：`executable`、`script`
+- 当前支持的输入模式：`json_stdin`、`args`、`env`
+- 当前支持的输出模式：`json_stdout`、`text`
+- manifest `effects` 会参与 effect inference 和 policy 判定
+- 只读高置信 skill 可自动执行
+- 写入、敏感、未知 effect，或 `approval.default=require` 的 skill 会进入审批
+- `POST /v1/skills/{id}/run` 会走与 Agent 内部相同的 ToolRouter / Approval 链路
+
+当前上传接口接受本地 skill 目录或 `skill.yaml` 路径；zip 解包和更强的执行沙箱仍留待后续阶段。
 
 ## MCP 配置说明
 
@@ -287,6 +300,7 @@ go test ./...
 - shell parser
 - markdown memory
 - qdrant store / vector factory / kb.search tool
+- skill manifest / runner / policy
 - approval snapshot behavior
 - API smoke flows
 
@@ -294,7 +308,8 @@ go test ./...
 
 - 当前支持 `memory` 和 `qdrant` 两种向量后端；本地测试默认更偏向 `memory`，生产部署可切到 `qdrant`
 - Eino Graph / Workflow / interrupt-resume 目前保留了封装入口，尚未做完整编排
-- Skill Runner / MCP Client 目前是管理与骨架优先，真实执行尚未打通
+- Skill Runtime 已支持本地 manifest + executable/script 执行，但 zip 上传、运行时沙箱和更细粒度权限隔离仍待继续收口
+- MCP Client 目前仍是配置管理与骨架优先，真实 transport / tool 调用尚未打通
 - CLI 已走 HTTP API，但仍是轻量控制台，不包含富交互 TUI
 
 ## 任务清单

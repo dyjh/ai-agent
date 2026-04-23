@@ -182,12 +182,24 @@ type KBChunk struct {
 
 // SkillRegistration stores uploaded skill metadata.
 type SkillRegistration struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description,omitempty"`
-	ArchivePath string    `json:"archive_path,omitempty"`
-	Enabled     bool      `json:"enabled"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	Version         string    `json:"version,omitempty"`
+	Description     string    `json:"description,omitempty"`
+	ArchivePath     string    `json:"archive_path,omitempty"`
+	RuntimeType     string    `json:"runtime_type,omitempty"`
+	Effects         []string  `json:"effects,omitempty"`
+	ApprovalDefault string    `json:"approval_default,omitempty"`
+	Enabled         bool      `json:"enabled"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+// SkillPolicyProfile describes the effect/approval model for a registered skill.
+type SkillPolicyProfile struct {
+	ID              string   `json:"id"`
+	Effects         []string `json:"effects"`
+	ApprovalDefault string   `json:"approval_default,omitempty"`
+	Enabled         bool     `json:"enabled"`
 }
 
 // MCPServer stores an MCP server config.

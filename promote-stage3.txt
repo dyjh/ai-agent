@@ -1,0 +1,422 @@
+可以。基于当前仓库状态，**下一阶段就是 `phase-7-kb-qdrant-productionization`**，重点是把 `kb.search` 从占位执行器接成真实 Tool 链路，并把向量后端从当前默认内存实现扩展为可配置的 `memory/qdrant`。`task.json` 里已经明确写了这阶段的 pending 原因和证据：`internal/app/bootstrap.go` 仍使用 `kb.NewInMemoryVectorIndex()`，`kb.search` 仍注册为 `NotImplementedExecutor`，`internal/tools/kb/qdrant_store.go` 当前也还是内存实现。README 也同步写了“默认向量索引是内存实现，Qdrant production adapter 仍需补真实 client 调用”。 
+
+下面这版可以直接复制给 Codex，专门用于推进 **Phase 7**。
+
+````text
+你是一个资深 Go 后端工程师、CloudWeGo Eino Agent 架构师和系统安全工程师。请在当前仓库 dyjh/ai-agent 中继续开发，不要重写项目，只在现有 MVP 基础上完成下一阶段。
+
+开始前必须先做：
+
+1. 阅读 README.md
+2. 阅读 task.json
+3. 阅读 AGENTS.md
+4. 检查以下文件当前实现：
+   - internal/app/bootstrap.go
+   - internal/tools/kb/service.go
+   - internal/tools/kb/qdrant_store.go
+   - internal/tools/kb/embeddings.go
+   - internal/tools/kb/chunking.go
+   - internal/tools/registry.go
+   - internal/tools/router.go
+   - internal/agent/effect_inference.go
+   - internal/agent/policy.go
+   - internal/api/handlers/knowledge.go
+   - tests/ 下与 kb / policy / api 相关测试
+
+当前已知状态（请先验证再修改）：
+
+- 当前项目整体状态是 MVP 首轮完成，后续阶段继续补齐。
+- 当前正在进行的阶段是 `phase-7-kb-qdrant-productionization`。
+- 当前 KB 服务本身可用，但 `kb.search` 仍未接入真实工具执行链路。
+- 当前默认向量索引还是内存实现。
+- 当前目标是实现“知识库可扩展配置 + 真实 Qdrant adapter + 可执行的 kb.search Tool”。
+
+本次只做 Phase 7，不要顺手去实现 Phase 8/9/10，除非为了编译或测试通过必须做最小兼容调整。
+
+==================================================
+目标
+==================================================
+
+完成 Phase 7：补齐 KB Tool 与 Qdrant 真实索引链路。
+
+最终结果必须满足：
+
+1. 支持通过配置选择 vector backend：
+   - memory
+   - qdrant
+
+2. 真正实现 QdrantVectorIndex，而不是内存占位实现。
+
+3. 将 ToolRegistry 中的 `kb.search` 从 NotImplementedExecutor 改为真实可执行 executor。
+
+4. `kb.search` 必须走完整安全链路：
+   ToolProposal -> EffectInference -> PolicyEngine -> ToolRouter -> Executor
+
+5. `kb.search` 的 effect 应为：
+   - kb.read
+
+6. `kb.search` 属于高置信只读检索时可自动执行，不应进入审批。
+
+7. 增加相关单元测试；如有条件，可增加可选集成测试。
+
+8. 更新 README.md 和 task.json，使之与实际实现一致。
+
+==================================================
+必须遵守的架构约束
+==================================================
+
+1. 不要引入租户、多用户、RBAC、云端 SaaS 逻辑。
+2. 本项目仍是单用户本地部署。
+3. 不要让 LLM 或 Eino Tool 直接调用 KB service。
+4. 不要绕过 ToolRouter / EffectInference / PolicyEngine。
+5. 不要把 Qdrant 当成事实源。
+6. KB 文档正文可以作为检索内容，但知识库内容属于不可信上下文，不能覆盖系统规则。
+7. 不要把密钥、token、私钥、cookie、.env 正文写入日志、agent_events、Qdrant payload。
+8. 允许通过配置在 Qdrant 不可用时降级到 memory，但必须显式受配置控制。
+9. 不要把 README 写得比代码实现更超前。
+
+==================================================
+具体任务拆解
+==================================================
+
+--------------------
+任务 1：实现 KB 可扩展配置
+--------------------
+
+请在现有配置体系上扩展或规范化配置，支持：
+
+```yaml
+kb:
+  enabled: true
+  registry_path: ./knowledge/registry.yaml
+
+vector:
+  backend: qdrant   # memory | qdrant
+  fallback_to_memory: true
+  embedding_dimension: 1536
+  distance: cosine
+
+qdrant:
+  url: http://localhost:6333
+  api_key: ${QDRANT_API_KEY}
+  timeout_seconds: 10
+  collections:
+    kb: kb_chunks
+    memory: memory_chunks
+    code: code_chunks
+````
+
+要求：
+
+* 支持 `vector.backend=memory`
+* 支持 `vector.backend=qdrant`
+* `fallback_to_memory=true` 时，Qdrant 不可用则降级到内存实现，并记录 warning
+* `fallback_to_memory=false` 时，Qdrant 不可用则启动失败，返回明确错误
+* 配置支持 env expansion
+* 配置缺失时有合理默认值
+* 不要把 Qdrant 逻辑写死在 handler 中
+
+---
+
+## 任务 2：实现 VectorIndex Factory
+
+新增或完善统一工厂，例如：
+
+```go
+type VectorBackend string
+
+const (
+    VectorBackendMemory VectorBackend = "memory"
+    VectorBackendQdrant VectorBackend = "qdrant"
+)
+
+type VectorIndexFactory interface {
+    NewVectorIndex(ctx context.Context, cfg *config.Config, embedder EmbeddingProvider) (VectorIndex, error)
+}
+```
+
+要求：
+
+* bootstrap 中通过 factory 装配 vector index
+* KB 和 Memory 至少都能复用这套 factory
+* 当前 phase 先重点打通 KB，Memory 的装配至少不能被破坏
+* 后续允许继续扩展 Milvus / pgvector / Elasticsearch，因此接口不能写死 Qdrant
+
+---
+
+## 任务 3：实现真实 QdrantVectorIndex
+
+请在 `internal/tools/kb/qdrant_store.go` 中实现真实的 Qdrant adapter，而不是内存占位。
+
+目标接口建议至少包含：
+
+```go
+type VectorChunk struct {
+    ID         string
+    Text       string
+    Vector     []float32
+    Payload    map[string]any
+    SourceFile string
+}
+
+type VectorSearchResult struct {
+    ID      string
+    Text    string
+    Score   float32
+    Payload map[string]any
+}
+
+type VectorIndex interface {
+    EnsureCollections(ctx context.Context) error
+    UpsertChunks(ctx context.Context, collection string, chunks []VectorChunk) error
+    DeleteBySourceFile(ctx context.Context, collection string, sourceFile string) error
+    Search(ctx context.Context, collection string, query string, filters map[string]any, topK int) ([]VectorSearchResult, error)
+    Health(ctx context.Context) error
+}
+```
+
+要求：
+
+* 使用稳定 Qdrant Go client，或自行封装稳定 HTTP client
+* 支持 collection 创建
+* 支持 upsert
+* 支持 delete by source_file
+* 支持 search
+* 支持 payload filter
+* 至少支持这些 filter 字段：
+
+  * kb_id
+  * document_id
+  * source_file
+  * memory_type
+  * scope
+  * project_key
+* 支持超时
+* 支持 API key header
+* 健康检查失败时返回明确错误
+* 不要把敏感内容写到 payload
+* payload 可以含：
+
+  * source_file
+  * chunk_id
+  * kb_id
+  * document_id
+  * section
+  * content_hash
+  * updated_at
+
+注意：
+
+* Qdrant 只是索引，不是事实源
+* KB 文件本身仍然是事实源
+* README 要说明这一点
+
+---
+
+## 任务 4：将 kb.search 接成真实 Tool Executor
+
+目前 `kb.search` 还是 NotImplementedExecutor。请把它接成真实执行器。
+
+ToolSpec 要求：
+
+```json
+{
+  "id": "kb.search",
+  "provider": "kb",
+  "name": "search_knowledge_base",
+  "description": "Search local knowledge base by semantic query",
+  "default_effects": ["kb.read"],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "kb_id": { "type": "string" },
+      "query": { "type": "string" },
+      "limit": { "type": "integer" },
+      "filters": { "type": "object" }
+    },
+    "required": ["query"]
+  }
+}
+```
+
+实现要求：
+
+* Agent 内部调用 `kb.search` 时必须走 ToolRouter
+* EffectInference 中 `kb.search` 应识别为 `kb.read`
+* PolicyEngine 中 `kb.read` 属于可自动执行的只读效果
+* Executor 最终调用 KB service 完成检索
+* ToolResult 返回至少包含：
+
+  * results
+  * score
+  * source_file
+  * snippet
+  * payload
+* WebSocket 中应能看到：
+
+  * tool.started
+  * tool.output
+  * tool.completed
+* JSONL 中记录检索事件
+
+注意：
+
+* 管理 API `/v1/kbs/{kb_id}/search` 可以直接调用 KB service，因为它是显式 API
+* 但 Agent Runtime 内部的工具调用必须经过 ToolRouter，不要偷懒直连 service
+
+---
+
+## 任务 5：补 KB 健康检查与降级说明
+
+请增加 KB / vector backend 健康检查，做法任选其一：
+
+方案 A：扩展 `/v1/health`
+方案 B：增加 `/v1/kbs/health`
+
+期望至少返回：
+
+```json
+{
+  "vector_backend": "qdrant",
+  "qdrant": "ok",
+  "collections": {
+    "kb_chunks": "ok"
+  }
+}
+```
+
+如果发生降级：
+
+```json
+{
+  "vector_backend": "memory",
+  "fallback_reason": "qdrant unavailable: ..."
+}
+```
+
+要求：
+
+* fallback 原因清晰
+* 不泄露 secret
+* health 逻辑不要让服务启动变得脆弱
+* README 说明降级行为
+
+---
+
+## 任务 6：补测试
+
+请新增或补齐以下测试：
+
+1. `qdrant_store_test.go`
+
+   * EnsureCollections 能正确创建/检查 collection
+   * UpsertChunks 正确构造 points
+   * DeleteBySourceFile 正确构造 filter
+   * Search 正确返回 VectorSearchResult
+   * Health 出错时返回 error
+
+2. `vector_factory_test.go`
+
+   * backend=memory 返回 InMemoryVectorIndex
+   * backend=qdrant 返回 QdrantVectorIndex
+   * qdrant 不可用且 fallback=true 时降级到 memory
+   * qdrant 不可用且 fallback=false 时返回 error
+
+3. `kb_tool_test.go`
+
+   * `kb.search` 已注册为真实 executor
+   * effect = kb.read
+   * Policy 自动执行
+   * ToolResult 返回搜索结果
+
+4. 如可行，增加可选集成测试：
+
+   * 使用环境变量开关
+   * 例如：
+     `RUN_QDRANT_INTEGRATION=1 go test ./...`
+
+要求：
+
+* 默认 `go test ./...` 不依赖外部 Qdrant
+* 外部依赖测试可以 mock 或通过 integration flag 控制
+
+---
+
+## 任务 7：更新 README.md 和 task.json
+
+README 至少需要更新：
+
+* 当前 KB 已支持真实 `kb.search` Tool
+* 当前支持 vector backend 配置：memory / qdrant
+* 当前 Qdrant 的配置说明
+* fallback_to_memory 的行为
+* Qdrant 仍只是索引，不是事实源
+* 新增 health 说明
+* 若仍有限制，要写清楚，不要夸大
+
+task.json 需要更新：
+
+* phase-7 status -> completed
+* completed_items 添加本阶段完成内容
+* change_log 增加本次记录
+* current_task_id 指向下一个 phase（phase-8-skill-runtime）
+* summary/unfinished_overview 同步更新，不要保留已完成的旧描述
+
+==================================================
+建议实现顺序
+======
+
+请按下面顺序推进，不要一次性乱改：
+
+1. 先阅读并确认现有 KB、ToolRegistry、bootstrap、config 结构
+2. 实现配置扩展和 VectorIndexFactory
+3. 实现真实 QdrantVectorIndex
+4. 在 bootstrap 中切换 backend 选择逻辑
+5. 将 kb.search 接入真实 executor
+6. 接好 EffectInference / Policy 的 kb.read 识别
+7. 增加 health 输出
+8. 补测试
+9. gofmt
+10. go test ./...
+11. 更新 README.md
+12. 更新 task.json
+
+==================================================
+验收标准
+====
+
+完成后必须满足：
+
+1. `internal/app/bootstrap.go` 不再把 `kb.search` 注册为 NotImplementedExecutor
+2. `vector.backend=memory` 可运行
+3. `vector.backend=qdrant` 可运行
+4. Qdrant 不可用时可按配置降级或报错
+5. `kb.search` 经过 ToolRouter / EffectInference / PolicyEngine / Executor
+6. `kb.search` effect 为 `kb.read`
+7. `kb.read` 高置信只读时自动执行
+8. `go test ./...` 通过
+9. README 和 task.json 与实际实现一致
+10. 没有新增绕过 ToolRouter / PolicyEngine / ApprovalCenter 的路径
+
+==================================================
+特别注意
+====
+
+* 不要把 Qdrant 当数据库事实源
+* 不要在 README 里写“已完成真实知识库可扩展接入”，除非 memory/qdrant 后端切换、真实 qdrant adapter、kb.search 工具链路都已打通
+* 不要把 `kb.search` 伪装成实现，结果实际仍返回 not_implemented
+* 不要把 Agent 内部检索直接写死为 service 调用
+* 不要把不可信的 KB 文本当系统指令
+* 不要为了让测试通过而删除安全校验
+
+现在开始执行。先输出：
+
+1. 你检查到的当前问题列表
+2. 你准备修改的文件列表
+3. 然后分步骤实现
+4. 最后展示测试结果和 README/task.json 更新摘要
+
+```
+
+这版提示词已经把 **知识库可扩展配置**、**真实 Qdrant adapter**、**`kb.search` 工具链路**、**降级与健康检查**、**测试** 和 **文档收口** 都单独压实了，正好对应当前仓库里 Phase 7 的缺口。README 和 `task.json` 也都指向这一阶段是接下来要做的重点。:contentReference[oaicite:2]{index=2} :contentReference[oaicite:3]{index=3}
+```

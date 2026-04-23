@@ -54,8 +54,11 @@ func NewRouter(deps Dependencies) http.Handler {
 
 		r.Post("/skills/upload", skillsHandler.Upload)
 		r.Get("/skills", skillsHandler.List)
+		r.Get("/skills/{id}", skillsHandler.Get)
 		r.Post("/skills/{id}/enable", skillsHandler.Enable)
 		r.Post("/skills/{id}/disable", skillsHandler.Disable)
+		r.Post("/skills/{id}/test", skillsHandler.Test)
+		r.Post("/skills/{id}/run", skillsHandler.Run)
 
 		r.Get("/mcp/servers", mcpHandler.ListServers)
 		r.Post("/mcp/servers", mcpHandler.CreateServer)

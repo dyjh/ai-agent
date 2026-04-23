@@ -74,10 +74,10 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 	mcpManager := mcp.NewManager()
 	approvals := agent.NewApprovalCenter()
 	eventWriter := events.NewJSONLWriter(cfg.Events.JSONLRoot, cfg.Events.AuditRoot)
-	registry := registerTools(cfg, memoryStore, knowledgeService)
+	registry := registerTools(cfg, memoryStore, knowledgeService, skillsManager)
 	router := toolscore.NewRouter(
 		registry,
-		agent.NewEffectInferrer(cfg.Policy),
+		agent.NewEffectInferrer(cfg.Policy, skillsManager),
 		agent.NewPolicyEngine(cfg.Policy),
 		approvals,
 		eventWriter,
@@ -118,7 +118,7 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 	}, nil
 }
 
-func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb.Service) *toolscore.Registry {
+func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb.Service, skillsManager *skills.Manager) *toolscore.Registry {
 	registry := toolscore.NewRegistry()
 	workspace := code.Workspace{Root: cfg.Owner.DefaultWorkspace}
 
@@ -193,13 +193,20 @@ func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb
 		DefaultEffects: []string{"kb.read"},
 	}, &kb.SearchExecutor{Service: knowledge})
 	registry.Register(core.ToolSpec{
-		ID:             "skill.run",
-		Provider:       "local",
-		Name:           "skill.run",
-		Description:    "Run a local skill",
-		InputSchema:    map[string]any{"name": "string"},
+		ID:          "skill.run",
+		Provider:    "skill",
+		Name:        "skill.run",
+		Description: "Run a local registered skill by id",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"skill_id": map[string]any{"type": "string"},
+				"args":     map[string]any{"type": "object"},
+			},
+			"required": []string{"skill_id"},
+		},
 		DefaultEffects: []string{"unknown.effect"},
-	}, &skills.Runner{})
+	}, &skills.Runner{Manager: skillsManager, MaxOutputChars: cfg.Shell.MaxOutputChars})
 	registry.Register(core.ToolSpec{
 		ID:             "mcp.call_tool",
 		Provider:       "mcp",

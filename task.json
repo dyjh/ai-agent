@@ -1,27 +1,28 @@
 {
   "project": "local-agent",
   "source": "promote.txt",
-  "last_updated": "2026-04-23T16:10:00+08:00",
+  "last_updated": "2026-04-23T17:20:00+08:00",
   "overall_status": "mvp_completed_with_followups",
-  "current_task_id": "phase-8-skill-runtime",
-  "current_task_title": "补齐 skill.run 真实执行链路",
+  "current_task_id": "phase-9-mcp-runtime",
+  "current_task_title": "补齐 MCP transport 与 mcp.call_tool 执行链路",
   "summary": {
     "headline": "MVP 首轮实现已完成，主链路可运行，当前进入占位模块补全和生产化收口阶段。",
     "progress": {
-      "completed": 7,
-      "pending": 4,
+      "completed": 8,
+      "pending": 3,
       "total": 11
     },
     "verified": [
       "2026-04-23 已检查仓库结构，HTTP API / WebSocket / CLI / memory / kb / skills / mcp / tests 均已存在。",
       "2026-04-23 已执行 go test ./... 并通过。",
       "README 已同步记录 MVP 限制和后续 TODO。",
-      "2026-04-23 已完成 vector backend factory、Qdrant HTTP adapter、kb.search executor、/v1/kbs/health 和对应测试。"
+      "2026-04-23 已完成 vector backend factory、Qdrant HTTP adapter、kb.search executor、/v1/kbs/health 和对应测试。",
+      "2026-04-23 已完成 skill manifest 校验、skill.run 执行器、Skill API 扩展和 phase-8 测试。"
     ],
     "unfinished_overview": [
-      "skill.run 目前只返回 registered_only 占位结果，未执行真实技能。",
       "mcp.call_tool 尚未实现真实 transport/client 与调用链路。",
-      "Eino Graph / Workflow / interrupt-resume 仍为占位骨架，审批暂停恢复尚未接入正式编排。"
+      "Eino Graph / Workflow / interrupt-resume 仍为占位骨架，审批暂停恢复尚未接入正式编排。",
+      "Skill Runtime 已支持本地执行，但 zip 上传、运行时沙箱和更细粒度权限隔离仍待继续硬化。"
     ]
   },
   "tasks": [
@@ -147,17 +148,17 @@
     {
       "id": "phase-8-skill-runtime",
       "title": "补齐 skill.run 真实执行链路",
-      "status": "pending",
-      "why_pending": "当前 Skill 管理只完成注册和启停，skill.run 仍是占位执行器。",
-      "evidence": [
-        "internal/tools/skills/runner.go 返回 status=registered_only。",
-        "README 已注明“真实 skill 执行仍保留为后续扩展点”。"
+      "status": "completed",
+      "completed_items": [
+        "扩展 skill.yaml manifest，支持 runtime/input_schema/output_schema/effects/approval/permissions，并补齐校验与默认值。",
+        "将 SkillManager 升级为基于 manifest 的注册表，使用 manifest.id 作为稳定 skill ID，并暴露 policy profile 供 effect inference 使用。",
+        "将 skill.run 从占位执行器替换为真实 Runner，支持 executable/script、json_stdin/args/env、json_stdout/text、超时控制与输出脱敏。",
+        "将 skill manifest effects 和 approval.default 接入 ToolRouter -> EffectInference -> PolicyEngine，实现只读自动执行与写入/敏感/未知 effect 审批。",
+        "新增 GET /v1/skills/{id}、POST /v1/skills/{id}/test、POST /v1/skills/{id}/run，并让 run 走同一条审批链路。",
+        "补充 skill manifest / runner / policy / API smoke 测试，并确认 go test ./... 通过。"
       ],
       "remaining_items": [
-        "定义 Skill 执行输入输出协议，并把执行结果纳入 ToolResult。",
-        "将 Skill manifest / runner / approval policy 接入 ToolRouter。",
-        "明确 Skill 的只读/写入/敏感效果声明，避免 unknown.effect 长期兜底。",
-        "补充 skill.run 的成功、失败、审批分支测试。"
+        "如需更强生产隔离，可继续补充 zip 上传、执行沙箱和更细粒度 skill permissions enforcement。"
       ],
       "deliverables": [
         "真实 skill.run 执行器",
@@ -216,7 +217,7 @@
       "why_pending": "当前测试以核心单元和本地 smoke 为主，生产化运行时的外部依赖、降级策略和文档闭环还需要继续收口。",
       "evidence": [
         "tests/ 目前覆盖 policy / effect inference / approval snapshot / markdown memory / API smoke。",
-        "README 当前 MVP 限制和后续 TODO 已明确真实 Qdrant、Skill、MCP、Workflow 尚待补齐。"
+        "README 当前 MVP 限制和后续 TODO 已明确 MCP、Workflow 和运行时硬化尚待补齐。"
       ],
       "remaining_items": [
         "补充 PostgreSQL / Qdrant / MCP 的集成测试或可重复 mock 套件。",
@@ -256,6 +257,11 @@
       "at": "2026-04-23T16:10:00+08:00",
       "task_id": "phase-7-kb-qdrant-productionization",
       "summary": "完成 vector backend 配置与工厂、Qdrant HTTP adapter、kb.search executor、KB 健康检查和 phase-7 测试，当前任务切换到 phase-8 skill.run。"
+    },
+    {
+      "at": "2026-04-23T17:20:00+08:00",
+      "task_id": "phase-8-skill-runtime",
+      "summary": "完成 skill manifest 校验、skill.run 真正执行链路、Skill API 扩展和 phase-8 测试，当前任务切换到 phase-9 mcp.call_tool。"
     }
   ]
 }

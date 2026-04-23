@@ -12,12 +12,22 @@ import (
 
 // EffectInferrer derives effects from tool proposals and shell structure.
 type EffectInferrer struct {
-	cfg config.PolicyConfig
+	cfg    config.PolicyConfig
+	skills SkillProfileResolver
+}
+
+// SkillProfileResolver exposes registered skill effects to the inferrer.
+type SkillProfileResolver interface {
+	PolicyProfile(id string) (core.SkillPolicyProfile, error)
 }
 
 // NewEffectInferrer constructs an inferrer.
-func NewEffectInferrer(cfg config.PolicyConfig) *EffectInferrer {
-	return &EffectInferrer{cfg: cfg}
+func NewEffectInferrer(cfg config.PolicyConfig, resolvers ...SkillProfileResolver) *EffectInferrer {
+	var skills SkillProfileResolver
+	if len(resolvers) > 0 {
+		skills = resolvers[0]
+	}
+	return &EffectInferrer{cfg: cfg, skills: skills}
 }
 
 // Infer infers effects for a tool proposal.
@@ -69,7 +79,9 @@ func (e *EffectInferrer) Infer(_ context.Context, proposal core.ToolProposal) (c
 			Confidence:       0.95,
 			ReasonSummary:    "memory patch modifies markdown facts",
 		}, nil
-	case "skill.run", "mcp.call_tool":
+	case "skill.run":
+		return e.inferSkill(proposal), nil
+	case "mcp.call_tool":
 		return core.EffectInferenceResult{
 			Effects:          []string{"unknown.effect"},
 			RiskLevel:        "unknown",
@@ -86,6 +98,76 @@ func (e *EffectInferrer) Infer(_ context.Context, proposal core.ToolProposal) (c
 			ReasonSummary:    "tool has no known effect profile",
 		}, nil
 	}
+}
+
+func (e *EffectInferrer) inferSkill(proposal core.ToolProposal) core.EffectInferenceResult {
+	skillID, _ := proposal.Input["skill_id"].(string)
+	if skillID == "" || e.skills == nil {
+		return core.EffectInferenceResult{
+			Effects:          []string{"unknown.effect"},
+			RiskLevel:        "unknown",
+			ApprovalRequired: true,
+			Confidence:       0.3,
+			ReasonSummary:    "skill manifest is unavailable",
+		}
+	}
+
+	profile, err := e.skills.PolicyProfile(skillID)
+	if err != nil {
+		return core.EffectInferenceResult{
+			Effects:          []string{"unknown.effect"},
+			RiskLevel:        "unknown",
+			ApprovalRequired: true,
+			Confidence:       0.3,
+			ReasonSummary:    "skill is not registered",
+		}
+	}
+
+	effects := profile.Effects
+	if len(effects) == 0 {
+		effects = []string{"unknown.effect"}
+	}
+
+	result := core.EffectInferenceResult{
+		Effects:       append([]string(nil), effects...),
+		RiskLevel:     "read",
+		Confidence:    0.95,
+		ReasonSummary: "skill manifest declares read-only effects",
+	}
+
+	for _, effect := range effects {
+		switch {
+		case effect == "unknown.effect":
+			result.RiskLevel = "unknown"
+			result.ApprovalRequired = true
+			result.Confidence = 0.4
+			result.ReasonSummary = "skill manifest has unknown effects"
+		case effectRequiresApproval(effect):
+			result.ApprovalRequired = true
+			if strings.Contains(effect, "sensitive") || strings.Contains(effect, "env_file") {
+				result.RiskLevel = "sensitive"
+				result.Sensitive = true
+				result.ReasonSummary = "skill manifest declares sensitive access"
+				continue
+			}
+			if strings.Contains(effect, "kill") || strings.Contains(effect, "restart") || strings.Contains(effect, "stop") || strings.Contains(effect, "escalate") {
+				result.RiskLevel = "danger"
+				result.ReasonSummary = "skill manifest declares dangerous effects"
+				continue
+			}
+			result.RiskLevel = "write"
+			result.ReasonSummary = "skill manifest declares mutating effects"
+		}
+	}
+
+	if profile.ApprovalDefault == "require" {
+		result.ApprovalRequired = true
+		if result.ReasonSummary == "skill manifest declares read-only effects" {
+			result.ReasonSummary = "skill manifest requires approval by default"
+		}
+	}
+
+	return result
 }
 
 func (e *EffectInferrer) inferShell(proposal core.ToolProposal) core.EffectInferenceResult {
@@ -278,9 +360,28 @@ func containsSensitive(paths []string, extra []string) bool {
 
 func hasMutatingEffect(effects []string) bool {
 	for _, effect := range effects {
-		if effect == "fs.write" || effect == "code.modify" || effect == "package.install" || effect == "git.write" || effect == "fs.delete" || effect == "network.post" || effect == "network.put" || effect == "network.delete" || effect == "privilege.escalate" {
+		if effectRequiresApproval(effect) {
 			return true
 		}
+	}
+	return false
+}
+
+func effectRequiresApproval(effect string) bool {
+	if effect == "unknown.effect" {
+		return true
+	}
+	if strings.Contains(effect, "sensitive") || strings.Contains(effect, "env_file") {
+		return true
+	}
+	if strings.Contains(effect, "write") || strings.Contains(effect, "modify") || strings.Contains(effect, "delete") || strings.Contains(effect, "install") {
+		return true
+	}
+	if effect == "network.post" || effect == "network.put" || effect == "network.delete" {
+		return true
+	}
+	if strings.Contains(effect, "restart") || strings.Contains(effect, "stop") || strings.Contains(effect, "kill") || strings.Contains(effect, "escalate") {
+		return true
 	}
 	return false
 }

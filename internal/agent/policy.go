@@ -43,7 +43,7 @@ func (p *PolicyEngine) Decide(_ context.Context, _ core.ToolProposal, inference 
 			decision.Reason = "unknown effect requires approval"
 			break
 		}
-		if strings.Contains(effect, "write") || strings.Contains(effect, "delete") || strings.Contains(effect, "install") || strings.Contains(effect, "restart") || strings.Contains(effect, "stop") || strings.Contains(effect, "kill") || strings.Contains(effect, "escalate") {
+		if effectNeedsApproval(effect) {
 			decision.RequiresApproval = true
 		}
 	}
@@ -56,4 +56,20 @@ func (p *PolicyEngine) Decide(_ context.Context, _ core.ToolProposal, inference 
 	}
 
 	return decision, nil
+}
+
+func effectNeedsApproval(effect string) bool {
+	if strings.Contains(effect, "sensitive") || strings.Contains(effect, "env_file") {
+		return true
+	}
+	if strings.Contains(effect, "write") || strings.Contains(effect, "modify") || strings.Contains(effect, "delete") || strings.Contains(effect, "install") {
+		return true
+	}
+	if effect == "network.post" || effect == "network.put" || effect == "network.delete" {
+		return true
+	}
+	if strings.Contains(effect, "restart") || strings.Contains(effect, "stop") || strings.Contains(effect, "kill") || strings.Contains(effect, "escalate") {
+		return true
+	}
+	return false
 }
