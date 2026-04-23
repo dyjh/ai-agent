@@ -20,6 +20,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	health := handlers.NewHealthHandler(deps)
 	conversations := handlers.NewConversationsHandler(deps)
 	approvals := handlers.NewApprovalsHandler(deps)
+	runs := handlers.NewRunsHandler(deps)
 	memory := handlers.NewMemoryHandler(deps)
 	knowledge := handlers.NewKnowledgeHandler(deps)
 	skillsHandler := handlers.NewSkillsHandler(deps)
@@ -44,6 +45,12 @@ func NewRouter(deps Dependencies) http.Handler {
 		r.Get("/approvals/pending", approvals.Pending)
 		r.Post("/approvals/{approval_id}/approve", approvals.Approve)
 		r.Post("/approvals/{approval_id}/reject", approvals.Reject)
+
+		r.Get("/runs", runs.List)
+		r.Get("/runs/{run_id}", runs.Get)
+		r.Get("/runs/{run_id}/steps", runs.Steps)
+		r.Post("/runs/{run_id}/resume", runs.Resume)
+		r.Post("/runs/{run_id}/cancel", runs.Cancel)
 
 		r.Get("/memory/files", memory.ListFiles)
 		r.Get("/memory/files/*", memory.GetFile)

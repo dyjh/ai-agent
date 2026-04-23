@@ -59,6 +59,21 @@ func paths() map[string]any {
 		"/v1/approvals/{approval_id}/reject": map[string]any{
 			"post": operation("Reject pending action", []map[string]any{pathParam("approval_id")}, "RejectApprovalRequest", "ApprovalResolutionResponse", httpStatusOK()),
 		},
+		"/v1/runs": map[string]any{
+			"get": operation("List workflow runs", []map[string]any{queryParam("status"), queryIntParam("limit")}, "", "RunListResponse", httpStatusOK()),
+		},
+		"/v1/runs/{run_id}": map[string]any{
+			"get": operation("Get workflow run", []map[string]any{pathParam("run_id")}, "", "RunState", httpStatusOK()),
+		},
+		"/v1/runs/{run_id}/steps": map[string]any{
+			"get": operation("List workflow run steps", []map[string]any{pathParam("run_id")}, "", "RunStepListResponse", httpStatusOK()),
+		},
+		"/v1/runs/{run_id}/resume": map[string]any{
+			"post": operation("Resume paused workflow run", []map[string]any{pathParam("run_id")}, "ResumeRunRequest", "RunResponse", httpStatusOK()),
+		},
+		"/v1/runs/{run_id}/cancel": map[string]any{
+			"post": operation("Cancel workflow run", []map[string]any{pathParam("run_id")}, "EmptyObject", "RunState", httpStatusOK()),
+		},
 
 		"/v1/memory/files": get("List memory files", "MemoryFileListResponse"),
 		"/v1/memory/files/{path}": map[string]any{
@@ -159,6 +174,36 @@ func components() map[string]any {
 				"snapshot_hash":  stringSchema("sha256:..."),
 				"summary":        stringSchema("requires approval"),
 			}, "id", "status", "input_snapshot"),
+			"RunState": object(map[string]any{
+				"run_id":             stringSchema("run_x"),
+				"conversation_id":    stringSchema("conv_x"),
+				"status":             stringSchema("paused_for_approval"),
+				"current_step":       stringSchema("request_approval"),
+				"current_step_index": integerSchema(4),
+				"step_count":         integerSchema(2),
+				"max_steps":          integerSchema(6),
+				"user_message":       stringSchema("install axios"),
+				"approval_id":        stringSchema("apr_x"),
+				"error":              stringSchema(""),
+				"created_at":         timeSchema(),
+				"updated_at":         timeSchema(),
+			}, "run_id", "status", "created_at", "updated_at"),
+			"RunStep": object(map[string]any{
+				"step_id":     stringSchema("step_x"),
+				"run_id":      stringSchema("run_x"),
+				"index":       integerSchema(4),
+				"type":        stringSchema("request_approval"),
+				"status":      stringSchema("paused"),
+				"proposal":    map[string]any{"type": "object", "additionalProperties": true},
+				"inference":   map[string]any{"type": "object", "additionalProperties": true},
+				"policy":      map[string]any{"type": "object", "additionalProperties": true},
+				"approval":    ref("ApprovalRecord"),
+				"tool_result": ref("ToolResult"),
+				"summary":     stringSchema("requires approval"),
+				"error":       stringSchema(""),
+				"created_at":  timeSchema(),
+				"updated_at":  timeSchema(),
+			}, "step_id", "run_id", "index", "type", "status", "created_at", "updated_at"),
 			"MemoryFile":        object(map[string]any{"path": stringSchema("preferences.md"), "body": stringSchema("# Preferences")}, "path", "body"),
 			"MemoryPatch":       object(map[string]any{"id": stringSchema("mempatch_x"), "path": stringSchema("preferences.md"), "body": stringSchema("content"), "summary": stringSchema("update")}, "id", "path", "body"),
 			"KnowledgeBase":     object(map[string]any{"id": stringSchema("kb_x"), "name": stringSchema("docs"), "description": stringSchema("local docs"), "created_at": timeSchema()}, "id", "name"),
@@ -170,6 +215,7 @@ func components() map[string]any {
 			"CreateConversationRequest": object(map[string]any{"title": stringSchema("smoke"), "project_key": stringSchema("local")}),
 			"PostMessageRequest":        object(map[string]any{"content": stringSchema("hello")}, "content"),
 			"RejectApprovalRequest":     object(map[string]any{"reason": stringSchema("not needed")}),
+			"ResumeRunRequest":          object(map[string]any{"approval_id": stringSchema("apr_x"), "approved": boolSchema()}, "approved"),
 			"SearchRequest":             object(map[string]any{"query": stringSchema("hello"), "limit": integerSchema(5)}, "query"),
 			"CreateMemoryPatchRequest":  object(map[string]any{"path": stringSchema("preferences.md"), "summary": stringSchema("update"), "body": stringSchema("content"), "frontmatter": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}}}, "path", "body"),
 			"CreateKnowledgeBaseRequest": object(map[string]any{
@@ -186,6 +232,8 @@ func components() map[string]any {
 			"ConversationListResponse":    listResponse("Conversation"),
 			"MessageListResponse":         listResponse("Message"),
 			"ApprovalListResponse":        listResponse("ApprovalRecord"),
+			"RunListResponse":             listResponse("RunState"),
+			"RunStepListResponse":         listResponse("RunStep"),
 			"MemoryFileListResponse":      listResponse("MemoryFile"),
 			"KnowledgeBaseListResponse":   listResponse("KnowledgeBase"),
 			"KBChunkListResponse":         listResponse("KBChunk"),
@@ -193,7 +241,7 @@ func components() map[string]any {
 			"MCPServerListResponse":       listResponse("MCPServer"),
 			"MCPToolPolicyListResponse":   listResponse("MCPToolPolicy"),
 			"KnowledgeBaseHealthResponse": object(map[string]any{"enabled": boolSchema(), "provider": stringSchema("qdrant"), "status": stringSchema("ok")}),
-			"RunResponse":                 object(map[string]any{"run_id": stringSchema("run_x"), "assistant_message": ref("Message"), "tool_result": ref("ToolResult"), "approval": ref("ApprovalRecord")}, "run_id"),
+			"RunResponse":                 object(map[string]any{"run_id": stringSchema("run_x"), "assistant_message": ref("Message"), "tool_result": ref("ToolResult"), "approval": ref("ApprovalRecord"), "state": ref("RunState")}, "run_id"),
 			"ApprovalResolutionResponse":  object(map[string]any{"approval": ref("ApprovalRecord"), "result": ref("ToolResult"), "run": ref("RunResponse")}),
 			"ToolRouteResponse":           object(map[string]any{"decision": map[string]any{"type": "object", "additionalProperties": true}, "inference": map[string]any{"type": "object", "additionalProperties": true}, "approval": ref("ApprovalRecord"), "result": ref("ToolResult")}),
 			"SkillDetailResponse":         object(map[string]any{"skill": ref("SkillRegistration"), "manifest": map[string]any{"type": "object", "additionalProperties": true}}),
@@ -264,6 +312,24 @@ func pathParam(name string) map[string]any {
 		"in":       "path",
 		"required": true,
 		"schema":   map[string]any{"type": "string"},
+	}
+}
+
+func queryParam(name string) map[string]any {
+	return map[string]any{
+		"name":     name,
+		"in":       "query",
+		"required": false,
+		"schema":   map[string]any{"type": "string"},
+	}
+}
+
+func queryIntParam(name string) map[string]any {
+	return map[string]any{
+		"name":     name,
+		"in":       "query",
+		"required": false,
+		"schema":   map[string]any{"type": "integer"},
 	}
 }
 

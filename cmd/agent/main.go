@@ -29,6 +29,7 @@ func main() {
 	root.AddCommand(skillsCommand(&serverURL))
 	root.AddCommand(mcpCommand(&serverURL))
 	root.AddCommand(kbCommand(&serverURL))
+	root.AddCommand(runsCommand(&serverURL))
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
@@ -253,6 +254,70 @@ func kbCommand(serverURL *string) *cobra.Command {
 				"query": args[0],
 				"limit": 5,
 			})
+		},
+	})
+	return cmd
+}
+
+func runsCommand(serverURL *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "runs",
+		Short: "Inspect and manage workflow runs",
+	}
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List recent runs",
+		RunE: func(c *cobra.Command, _ []string) error {
+			status, _ := c.Flags().GetString("status")
+			limit, _ := c.Flags().GetInt("limit")
+			url := fmt.Sprintf("%s/v1/runs?limit=%d", *serverURL, limit)
+			if status != "" {
+				url += "&status=" + status
+			}
+			return printRequest(http.MethodGet, url, nil)
+		},
+	}
+	listCmd.Flags().String("status", "", "filter by status")
+	listCmd.Flags().Int("limit", 20, "max runs to return")
+	cmd.AddCommand(listCmd)
+	cmd.AddCommand(&cobra.Command{
+		Use:   "get [run_id]",
+		Short: "Get one run snapshot",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printRequest(http.MethodGet, fmt.Sprintf("%s/v1/runs/%s", *serverURL, args[0]), nil)
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "steps [run_id]",
+		Short: "List step history for a run",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printRequest(http.MethodGet, fmt.Sprintf("%s/v1/runs/%s/steps", *serverURL, args[0]), nil)
+		},
+	})
+	resumeCmd := &cobra.Command{
+		Use:   "resume [run_id]",
+		Short: "Resume a paused run",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			approvalID, _ := c.Flags().GetString("approval")
+			approved, _ := c.Flags().GetBool("approved")
+			return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/runs/%s/resume", *serverURL, args[0]), map[string]any{
+				"approval_id": approvalID,
+				"approved":    approved,
+			})
+		},
+	}
+	resumeCmd.Flags().String("approval", "", "approval ID to resolve")
+	resumeCmd.Flags().Bool("approved", true, "whether to approve the pending action")
+	cmd.AddCommand(resumeCmd)
+	cmd.AddCommand(&cobra.Command{
+		Use:   "cancel [run_id]",
+		Short: "Cancel a non-terminal run",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/runs/%s/cancel", *serverURL, args[0]), map[string]any{})
 		},
 	})
 	return cmd

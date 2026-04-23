@@ -25,15 +25,15 @@ func TestWorkflowReadOnlyAutoExecutes(t *testing.T) {
 	events := startWorkflow(t, runtime, "conv_read", "pwd")
 	runID := eventValue(t, events, "run.started").RunID
 
-	state, err := runtime.StateStore.Get(runID)
+	state, err := runtime.StateStore.Get(context.Background(), runID)
 	if err != nil {
 		t.Fatalf("Get state: %v", err)
 	}
 	if state.Status != agent.RunStatusCompleted {
 		t.Fatalf("state status = %s, want completed", state.Status)
 	}
-	if planner.calls != 1 {
-		t.Fatalf("planner calls = %d, want 1", planner.calls)
+	if planner.calls != 2 {
+		t.Fatalf("planner calls = %d, want 2", planner.calls)
 	}
 	if executor.count != 1 {
 		t.Fatalf("executor count = %d, want 1", executor.count)
@@ -58,7 +58,7 @@ func TestWorkflowApprovalResumeUsesSnapshotWithoutReplanning(t *testing.T) {
 	runID := approvalEvent.RunID
 	approvalID := approvalEvent.ApprovalID
 
-	state, err := runtime.StateStore.Get(runID)
+	state, err := runtime.StateStore.Get(context.Background(), runID)
 	if err != nil {
 		t.Fatalf("Get state: %v", err)
 	}
@@ -79,8 +79,8 @@ func TestWorkflowApprovalResumeUsesSnapshotWithoutReplanning(t *testing.T) {
 		t.Fatalf("drain resume events: %v", err)
 	}
 
-	if planner.calls != 1 {
-		t.Fatalf("planner calls after resume = %d, want 1", planner.calls)
+	if planner.calls != 2 {
+		t.Fatalf("planner calls after resume = %d, want 2", planner.calls)
 	}
 	if executor.count != 1 {
 		t.Fatalf("executor count after resume = %d, want 1", executor.count)
@@ -88,7 +88,7 @@ func TestWorkflowApprovalResumeUsesSnapshotWithoutReplanning(t *testing.T) {
 	if got := executor.lastInput["command"]; got != "pnpm add axios" {
 		t.Fatalf("executed command = %v, want approved snapshot", got)
 	}
-	state, err = runtime.StateStore.Get(runID)
+	state, err = runtime.StateStore.Get(context.Background(), runID)
 	if err != nil {
 		t.Fatalf("Get final state: %v", err)
 	}
@@ -103,6 +103,9 @@ func TestWorkflowApprovalResumeUsesSnapshotWithoutReplanning(t *testing.T) {
 	}
 	if executor.count != 1 {
 		t.Fatalf("executor count after second resume = %d, want 1", executor.count)
+	}
+	if len(planner.inputs) < 2 || planner.inputs[1].LastToolResult == nil {
+		t.Fatalf("expected follow-up planning only after tool execution")
 	}
 }
 
@@ -130,7 +133,7 @@ func TestWorkflowApprovalRejectDoesNotExecute(t *testing.T) {
 	if executor.count != 0 {
 		t.Fatalf("executor count = %d, want 0", executor.count)
 	}
-	state, err := runtime.StateStore.Get(approvalEvent.RunID)
+	state, err := runtime.StateStore.Get(context.Background(), approvalEvent.RunID)
 	if err != nil {
 		t.Fatalf("Get state: %v", err)
 	}
@@ -232,12 +235,20 @@ func eventTypes(events []core.Event) []string {
 }
 
 type workflowPlanner struct {
-	plan  agent.Plan
-	calls int
+	plan   agent.Plan
+	calls  int
+	inputs []agent.PlanInput
 }
 
-func (p *workflowPlanner) Plan(_ context.Context, _ string) (agent.Plan, error) {
+func (p *workflowPlanner) Plan(_ context.Context, input agent.PlanInput) (agent.Plan, error) {
 	p.calls++
+	p.inputs = append(p.inputs, input)
+	if input.LastToolResult != nil {
+		return agent.Plan{
+			Decision: agent.PlanDecisionStop,
+			Message:  "工具执行完成。",
+		}, nil
+	}
 	return p.plan, nil
 }
 

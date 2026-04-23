@@ -1,16 +1,16 @@
 {
   "project": "local-agent",
   "source": "promote.txt",
-  "last_updated": "2026-04-23T19:31:00+08:00",
+  "last_updated": "2026-04-24T10:45:00+08:00",
   "overall_status": "production_ready_mvp",
-  "current_task_id": "post-mvp-backlog",
-  "current_task_title": "Post-MVP backlog",
+  "current_task_id": "post-mvp-phase-a-durable-workflow",
+  "current_task_title": "Post-MVP Phase A: Durable workflow state and multi-step run loop",
   "summary": {
-    "headline": "MVP 主链路、运行时硬化、KB feature gate、Swagger/OpenAPI 和文档收口已完成。",
+    "headline": "MVP 主链路保持稳定，并已完成 durable workflow state、多步 step loop、run 管理 API 和恢复测试。",
     "progress": {
-      "completed": 11,
+      "completed": 12,
       "pending": 0,
-      "total": 11
+      "total": 12
     },
     "verified": [
       "2026-04-23 已检查仓库结构，HTTP API / WebSocket / CLI / memory / kb / skills / mcp / tests 均已存在。",
@@ -20,10 +20,12 @@
       "2026-04-23 已完成 skill manifest 校验、skill.run 执行器、Skill API 扩展和 phase-8 测试。",
       "2026-04-23 已完成 MCP stdio/http transport、mcp.call_tool executor、policy override 接入、MCP API runtime 和 phase-9 测试。",
       "2026-04-23 已完成 Eino Workflow facade、RunState 状态机、approval interrupt-resume、HTTP/WS resume 接入和 phase-10 测试。",
-      "2026-04-23 已完成 Phase 11：配置校验、USE_KONWAGE_BASE/KONWAGE_BASE_PROVIDER、KB feature gate、Swagger/OpenAPI、approval snapshot hash、硬化测试和文档收口，并确认 go test ./... 通过。"
+      "2026-04-23 已完成 Phase 11：配置校验、USE_KONWAGE_BASE/KONWAGE_BASE_PROVIDER、KB feature gate、Swagger/OpenAPI、approval snapshot hash、硬化测试和文档收口，并确认 go test ./... 通过。",
+      "2026-04-24 已完成 Post-MVP Phase A：agent_runs / agent_run_steps 持久化、step-based workflow loop、/v1/runs* API、CLI runs 命令、跨重启 resume 测试，并再次确认 go test ./... 通过。"
     ],
     "unfinished_overview": [
-      "更复杂的多步通用 Eino graph、跨进程 run state 持久化仍属于 post-MVP backlog。",
+      "当前 step loop 已覆盖本地单用户可恢复多步任务，但仍不是无限自动规划的通用 graph 平台。",
+      "无 PostgreSQL 时仍回退到内存仓储，run/step 无法跨进程恢复。",
       "Skill zip 上传、执行沙箱、更细粒度权限隔离和更广 MCP 方言兼容矩阵仍属于 post-MVP backlog。"
     ]
   },
@@ -236,6 +238,28 @@
         "启动与降级策略验证",
         "文档与任务清单收口"
       ]
+    },
+    {
+      "id": "post-mvp-phase-a-durable-workflow",
+      "title": "Durable workflow state、多步 run loop 与恢复管理 API",
+      "status": "completed",
+      "completed_items": [
+        "将 RunStateStore 升级为可插拔 store，提供 InMemoryRunStateStore 与 PersistentRunStateStore，并新增 agent_runs / agent_run_steps 持久化结构。",
+        "将 Runtime 从单次工具直线流程升级为 step-based loop，支持 plan answer/tool/continue/stop、多步 tool 执行和 MaxWorkflowSteps 限制。",
+        "新增 RunStep 模型和 step_id / step_index 事件映射，使 run.state、approval、tool 和 run terminal 事件可追踪到具体 step。",
+        "强化 Resume 语义：暂停 run 可从 durable state + persisted approval step 恢复，审批执行继续复用 approval.input_snapshot 与 snapshot hash 校验。",
+        "新增 GET /v1/runs、GET /v1/runs/{id}、GET /v1/runs/{id}/steps、POST /v1/runs/{id}/resume、POST /v1/runs/{id}/cancel，并补 CLI runs 子命令。",
+        "新增 durable run state、workflow multistep、persistent resume、run API、approval idempotency 测试，并确认 go test ./... 通过。"
+      ],
+      "remaining_items": [
+        "当前 durable run state 已覆盖 PostgreSQL/memory 仓储，但 approval 自身尚未独立建表，跨重启恢复依赖持久化 step 中保存的 approval snapshot。",
+        "更复杂的 planner 策略、多代理 graph 和跨进程 callback/stream replay 仍属于后续 backlog。"
+      ],
+      "deliverables": [
+        "持久化 RunState / RunStep 仓储",
+        "多步 workflow loop 与 resume 强化",
+        "run 管理 API、CLI 与恢复测试"
+      ]
     }
   ],
   "change_log": [
@@ -283,6 +307,11 @@
       "at": "2026-04-23T19:30:00+08:00",
       "task_id": "phase-11-hardening-and-integration",
       "summary": "完成配置校验、KB provider feature gate、Swagger/OpenAPI、approval snapshot hash、硬化测试和 README/.env/task.json 收口，当前进入 post-MVP backlog。"
+    },
+    {
+      "at": "2026-04-24T10:45:00+08:00",
+      "task_id": "post-mvp-phase-a-durable-workflow",
+      "summary": "完成 durable RunState/RunStep 持久化、多步 workflow step loop、/v1/runs* API、CLI runs 命令、跨重启审批恢复和对应测试。"
     }
   ]
 }

@@ -107,12 +107,13 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 	}
 
 	runtime := &agent.Runtime{
-		Store:      store,
-		Planner:    agent.HeuristicPlanner{},
-		Runner:     einoapp.Runner{Model: model},
-		Approvals:  approvals,
-		Events:     eventWriter,
-		StateStore: agent.NewRunStateStore(),
+		Store:            store,
+		Planner:          agent.HeuristicPlanner{},
+		Runner:           einoapp.Runner{Model: model},
+		Approvals:        approvals,
+		Events:           eventWriter,
+		StateStore:       agent.NewPersistentRunStateStore(store.AgentRuns, store.AgentRunSteps),
+		MaxWorkflowSteps: 6,
 		ContextBuilder: &agent.ContextBuilder{
 			Store:       store,
 			Memory:      memoryStore,

@@ -135,6 +135,8 @@ type AgentEvent struct {
 type Event struct {
 	Type           string         `json:"type"`
 	RunID          string         `json:"run_id,omitempty"`
+	StepID         string         `json:"step_id,omitempty"`
+	StepIndex      int            `json:"step_index,omitempty"`
 	ConversationID string         `json:"conversation_id,omitempty"`
 	ApprovalID     string         `json:"approval_id,omitempty"`
 	Tool           string         `json:"tool,omitempty"`
@@ -143,6 +145,41 @@ type Event struct {
 	Content        string         `json:"content,omitempty"`
 	Payload        map[string]any `json:"payload,omitempty"`
 	CreatedAt      time.Time      `json:"created_at"`
+}
+
+// AgentRunRecord is the durable repository shape for a workflow run.
+type AgentRunRecord struct {
+	RunID            string         `json:"run_id"`
+	ConversationID   string         `json:"conversation_id"`
+	Status           string         `json:"status"`
+	CurrentStep      string         `json:"current_step,omitempty"`
+	CurrentStepIndex int            `json:"current_step_index,omitempty"`
+	StepCount        int            `json:"step_count,omitempty"`
+	MaxSteps         int            `json:"max_steps,omitempty"`
+	UserMessage      string         `json:"user_message,omitempty"`
+	ApprovalID       string         `json:"approval_id,omitempty"`
+	Error            string         `json:"error,omitempty"`
+	StateJSON        map[string]any `json:"state_json,omitempty"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+}
+
+// AgentRunStepRecord is the durable repository shape for one workflow step.
+type AgentRunStepRecord struct {
+	StepID         string         `json:"step_id"`
+	RunID          string         `json:"run_id"`
+	StepIndex      int            `json:"step_index"`
+	StepType       string         `json:"step_type"`
+	Status         string         `json:"status"`
+	ProposalJSON   map[string]any `json:"proposal_json,omitempty"`
+	InferenceJSON  map[string]any `json:"inference_json,omitempty"`
+	PolicyJSON     map[string]any `json:"policy_json,omitempty"`
+	ApprovalJSON   map[string]any `json:"approval_json,omitempty"`
+	ToolResultJSON map[string]any `json:"tool_result_json,omitempty"`
+	Summary        string         `json:"summary,omitempty"`
+	Error          string         `json:"error,omitempty"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
 }
 
 // MemoryFile is a Markdown-backed memory document.

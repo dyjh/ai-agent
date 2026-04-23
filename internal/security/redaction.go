@@ -9,6 +9,7 @@ import (
 var redactionPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)(api[_-]?key\s*[:=]\s*)([^\s"']+)`),
 	regexp.MustCompile(`(?i)(bearer\s+)([a-z0-9\-\._~\+\/]+=*)`),
+	regexp.MustCompile(`(?i)(token\s*[:=]\s*)([^\s"']+)`),
 	regexp.MustCompile(`(?i)(password\s*[:=]\s*)([^\s"']+)`),
 	regexp.MustCompile(`(?i)(secret\s*[:=]\s*)([^\s"']+)`),
 	regexp.MustCompile(`(?is)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`),

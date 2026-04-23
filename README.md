@@ -130,6 +130,11 @@ go run ./cmd/agent memory list
 go run ./cmd/agent memory search "偏好"
 go run ./cmd/agent skills list
 go run ./cmd/agent mcp list
+go run ./cmd/agent runs list
+go run ./cmd/agent runs get run_xxx
+go run ./cmd/agent runs steps run_xxx
+go run ./cmd/agent runs resume run_xxx --approval apr_xxx --approved=true
+go run ./cmd/agent runs cancel run_xxx
 ```
 
 ## Swagger / OpenAPI
@@ -355,15 +360,18 @@ tools:
 - 如果命令、参数、目录、目标文件变化，必须重新审批
 - Agent Workflow 会把需要审批的 run 标记为 `paused_for_approval`
 - 审批通过后通过 workflow resume 执行原 approval 的 `input_snapshot`，不会重新生成 ToolProposal
+- 当 PostgreSQL 可用时，paused run 的状态和 step 会落到 `agent_runs` / `agent_run_steps`，服务重启后仍可恢复审批中的 run
 
 ## Eino Workflow / HITL 编排
 
 当前已提供 `internal/einoapp.AgentWorkflow` facade：
 
-- `Start(ctx, input)`：处理新用户消息，构建上下文、规划、提出工具调用、走 effect/policy/approval/executor 链路
-- `Resume(ctx, run_id, approval_id, approved)`：处理审批恢复，不重新规划，不替换 tool input
+- `Start(ctx, input)`：处理新用户消息，构建上下文、进入 step-based plan loop，并在每个工具步骤都走 effect/policy/approval/executor 链路
+- `Resume(ctx, run_id, approval_id, approved)`：处理审批恢复，不重新规划已审批 step，也不替换 tool input
 
-运行状态由 `RunState` 记录，核心状态包括：
+运行状态由 `RunState` 和 `RunStep` 记录。`RunState` 记录当前状态、step 游标和审批关联；`RunStep` 记录 `build_context / plan / continue / propose_tool / infer_effect / decide_policy / request_approval / execute_tool / summarize / finalize` 等步骤历史。
+
+核心状态包括：
 
 - `received_user_message`
 - `context_built`
@@ -379,7 +387,36 @@ tools:
 - `assistant_summarizing`
 - `completed`
 
-HTTP approval API 和 WebSocket `approval.respond` 已接入同一套 workflow resume；非 workflow 直接工具 API 保留兼容路径。
+当前 workflow 已支持显式 multi-step tool loop：
+
+- tool 结果返回后，planner 可以输出 `continue / stop / answer / tool`
+- 每个新 tool proposal 都会重新经过 `ToolRouter -> EffectInference -> PolicyEngine -> ApprovalCenter -> Executor`
+- 默认 `MaxWorkflowSteps=6`，超过上限会安全终止并把 run 标记为 failed
+
+RunStateStore 当前是可插拔的：
+
+- `InMemoryRunStateStore`：用于单元测试和无数据库 fallback
+- `PersistentRunStateStore`：通过仓库层持久化 run state / steps；在 PostgreSQL 可用时可跨进程恢复审批中的 run
+
+HTTP approval API、`/v1/runs/{run_id}/resume` 和 WebSocket `approval.respond` 已接入同一套 workflow resume；非 workflow 直接工具 API 保留兼容路径。
+
+## Run 管理 API
+
+当前新增的 run 可观测性与恢复接口包括：
+
+- `GET /v1/runs`
+- `GET /v1/runs/{run_id}`
+- `GET /v1/runs/{run_id}/steps`
+- `POST /v1/runs/{run_id}/resume`
+- `POST /v1/runs/{run_id}/cancel`
+
+CLI 对应子命令为：
+
+- `agent runs list`
+- `agent runs get <run_id>`
+- `agent runs steps <run_id>`
+- `agent runs resume <run_id> --approval <approval_id> --approved=true`
+- `agent runs cancel <run_id>`
 
 ## Shell 执行安全机制说明
 
@@ -417,6 +454,7 @@ go test ./...
 - skill manifest / runner / policy
 - mcp config / transport / policy / call_tool / API
 - approval snapshot behavior and hash integrity
+- durable run state / multi-step workflow / persistent resume / run API
 - workflow start / pause / resume / reject / idempotency
 - API smoke flows
 
@@ -431,7 +469,8 @@ RUN_POSTGRES_INTEGRATION=1 go test ./...
 ## 当前 MVP 限制和后续 TODO
 
 - Runtime KB provider 当前只支持 `qdrant`；`memory` 向量索引用于本地 memory index、测试和开发辅助
-- Eino Workflow / HITL interrupt-resume 已覆盖单次工具调用主链路；更复杂的多步通用 graph 仍是后续硬化方向
+- 当前 step loop 已覆盖本地单用户场景下的可恢复多步任务，但仍不是无限自动规划的通用 graph 平台
+- PostgreSQL 可用时 run/step 可持久化；无数据库 fallback 仍只提供进程内内存 run state
 - Skill Runtime 已支持本地 manifest + executable/script 执行，但 zip 上传、运行时沙箱和更细粒度权限隔离仍待继续收口
 - MCP runtime 已支持 stdio/http 与 `mcp.call_tool`，但更完整的 MCP 协议兼容矩阵仍待后续集成测试扩展
 - CLI 已走 HTTP API，但仍是轻量控制台，不包含富交互 TUI

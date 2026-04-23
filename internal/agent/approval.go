@@ -10,6 +10,8 @@ import (
 	"local-agent/internal/ids"
 )
 
+var errApprovalNotFound = errors.New("approval not found")
+
 // ApprovalCenter stores exact input snapshots and their resolution state.
 type ApprovalCenter struct {
 	mu        sync.RWMutex
@@ -59,7 +61,7 @@ func (a *ApprovalCenter) Get(id string) (*core.ApprovalRecord, error) {
 	defer a.mu.RUnlock()
 	record, ok := a.approvals[id]
 	if !ok {
-		return nil, errors.New("approval not found")
+		return nil, errApprovalNotFound
 	}
 	return cloneApproval(record), nil
 }
@@ -117,12 +119,23 @@ func (a *ApprovalCenter) VerifySnapshotHash(id string) error {
 	return nil
 }
 
+// Hydrate restores an approval record from durable workflow state.
+func (a *ApprovalCenter) Hydrate(record core.ApprovalRecord) error {
+	if record.ID == "" {
+		return errors.New("approval id is required")
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.approvals[record.ID] = *cloneApproval(record)
+	return nil
+}
+
 func (a *ApprovalCenter) resolve(id string, approved bool, reason string) (*core.ApprovalRecord, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	record, ok := a.approvals[id]
 	if !ok {
-		return nil, errors.New("approval not found")
+		return nil, errApprovalNotFound
 	}
 	if record.Status != core.ApprovalPending {
 		return nil, fmt.Errorf("approval %s already resolved", id)

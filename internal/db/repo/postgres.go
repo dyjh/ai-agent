@@ -12,6 +12,8 @@ func NewPostgresStore(pool *pgxpool.Pool) *Store {
 		Messages:      &postgresMessages{pool: pool},
 		Usage:         &postgresUsage{pool: pool},
 		AgentEvents:   &postgresEvents{pool: pool},
+		AgentRuns:     &postgresRuns{pool: pool},
+		AgentRunSteps: &postgresRunSteps{pool: pool},
 	}
 }
 
@@ -31,7 +33,17 @@ type postgresEvents struct {
 	pool *pgxpool.Pool
 }
 
+type postgresRuns struct {
+	pool *pgxpool.Pool
+}
+
+type postgresRunSteps struct {
+	pool *pgxpool.Pool
+}
+
 var _ ConversationRepository = (*postgresConversations)(nil)
 var _ MessageRepository = (*postgresMessages)(nil)
 var _ UsageRepository = (*postgresUsage)(nil)
 var _ AgentEventRepository = (*postgresEvents)(nil)
+var _ AgentRunRepository = (*postgresRuns)(nil)
+var _ AgentRunStepRepository = (*postgresRunSteps)(nil)

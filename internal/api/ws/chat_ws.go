@@ -67,12 +67,14 @@ func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ChatHandler) resumeApproval(ctx context.Context, approvalID string, approved bool, sink SocketSink) error {
-	approval, err := h.Deps.Approvals.Get(approvalID)
-	if err != nil {
-		return err
+	if h.Deps.Runtime != nil {
+		if _, err := h.Deps.Runtime.ResumeApproval(ctx, approvalID, approved, sink); err == nil {
+			return nil
+		}
 	}
-	if approval.RunID != "" && h.Deps.Runtime != nil {
-		_, err = h.Deps.Runtime.ResumeApproval(ctx, approvalID, approved, sink)
+
+	_, err := h.Deps.Approvals.Get(approvalID)
+	if err != nil {
 		return err
 	}
 
