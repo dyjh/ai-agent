@@ -6,11 +6,6 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-// AgentInput is the normalized input to the Eino-facing runner.
-type AgentInput struct {
-	Messages []*schema.Message
-}
-
 // Runner is the Eino model runner abstraction.
 type Runner struct {
 	Model ChatModel

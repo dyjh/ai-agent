@@ -14,9 +14,15 @@ type RunResponse struct {
 	AssistantMessage *core.Message        `json:"assistant_message,omitempty"`
 	Approval         *core.ApprovalRecord `json:"approval,omitempty"`
 	ToolResult       *core.ToolResult     `json:"tool_result,omitempty"`
+	State            *RunState            `json:"state,omitempty"`
 }
 
 // EventSink receives runtime events for HTTP/WS streaming.
 type EventSink interface {
 	Emit(event core.Event)
+}
+
+// EventWriter records workflow events to durable local logs.
+type EventWriter interface {
+	WriteRun(event core.Event) error
 }

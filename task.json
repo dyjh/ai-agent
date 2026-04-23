@@ -1,15 +1,15 @@
 {
   "project": "local-agent",
   "source": "promote.txt",
-  "last_updated": "2026-04-23T18:30:00+08:00",
+  "last_updated": "2026-04-23T18:40:00+08:00",
   "overall_status": "mvp_completed_with_followups",
-  "current_task_id": "phase-10-eino-workflow-hitl",
-  "current_task_title": "补齐 Eino Graph / Workflow 与审批 interrupt-resume 编排",
+  "current_task_id": "phase-11-hardening-and-integration",
+  "current_task_title": "集成测试、运行时硬化与文档收口",
   "summary": {
     "headline": "MVP 首轮实现已完成，主链路可运行，当前进入占位模块补全和生产化收口阶段。",
     "progress": {
-      "completed": 9,
-      "pending": 2,
+      "completed": 10,
+      "pending": 1,
       "total": 11
     },
     "verified": [
@@ -18,10 +18,11 @@
       "README 已同步记录 MVP 限制和后续 TODO。",
       "2026-04-23 已完成 vector backend factory、Qdrant HTTP adapter、kb.search executor、/v1/kbs/health 和对应测试。",
       "2026-04-23 已完成 skill manifest 校验、skill.run 执行器、Skill API 扩展和 phase-8 测试。",
-      "2026-04-23 已完成 MCP stdio/http transport、mcp.call_tool executor、policy override 接入、MCP API runtime 和 phase-9 测试。"
+      "2026-04-23 已完成 MCP stdio/http transport、mcp.call_tool executor、policy override 接入、MCP API runtime 和 phase-9 测试。",
+      "2026-04-23 已完成 Eino Workflow facade、RunState 状态机、approval interrupt-resume、HTTP/WS resume 接入和 phase-10 测试。"
     ],
     "unfinished_overview": [
-      "Eino Graph / Workflow / interrupt-resume 仍为占位骨架，审批暂停恢复尚未接入正式编排。",
+      "PostgreSQL / Qdrant / MCP 的集成测试矩阵和依赖恢复场景仍待继续硬化。",
       "Skill Runtime 已支持本地执行，但 zip 上传、运行时沙箱和更细粒度权限隔离仍待继续硬化。"
     ]
   },
@@ -192,18 +193,18 @@
     {
       "id": "phase-10-eino-workflow-hitl",
       "title": "补齐 Eino Graph / Workflow 与审批 interrupt-resume 编排",
-      "status": "pending",
-      "why_pending": "当前已接入 Eino ChatModel，但更完整的 Agent Graph、Workflow 和审批暂停恢复仍未落地。",
-      "evidence": [
-        "internal/einoapp/graph.go 当前为 placeholder。",
-        "internal/einoapp/workflow.go 当前为 placeholder。",
-        "internal/agent/orchestrator.go 当前只是 Runtime 别名。"
+      "status": "completed",
+      "completed_items": [
+        "在 internal/einoapp/workflow.go 定义 AgentWorkflow、AgentInput、AgentEventStream 和可测试的事件流 facade。",
+        "在 internal/einoapp/graph.go 补齐默认 workflow graph 元数据，替代 placeholder。",
+        "新增 RunStatus、RunState 和内存 RunStateStore，将 context builder、planner、tool proposal、effect inference、policy、approval、executor 和 summarize 串成显式状态机。",
+        "实现 paused_for_approval 状态和 Runtime.Resume/ResumeRun/ResumeApproval，审批恢复时不重新调用 Planner。",
+        "审批通过后通过 ToolRouter.ExecuteApproved 执行 ApprovalCenter 保存的 input_snapshot，拒绝时不执行工具。",
+        "HTTP approval API 和 WebSocket approval.respond 改为优先走 workflow resume，直接工具 API 保留兼容路径。",
+        "补充 workflow start / auto execute / approval resume / reject / idempotency 测试，并确认 go test ./... 通过。"
       ],
       "remaining_items": [
-        "将 planner、context builder、tool proposal、approval wait/resume 编排成明确 workflow。",
-        "实现审批中断后的恢复执行，避免由外层逻辑手工拼接。",
-        "补齐 callbacks / streaming 事件在 WebSocket 与 CLI 中的一致传递。",
-        "为复杂多步工具调用增加更清晰的状态迁移与失败恢复。"
+        "当前 workflow 覆盖单次工具调用主链路；复杂多步通用 graph、跨进程 run state 持久化和更完整 callback 流仍放入 phase-11 硬化。"
       ],
       "deliverables": [
         "Eino Graph/Workflow 编排实现",
@@ -217,8 +218,8 @@
       "status": "pending",
       "why_pending": "当前测试以核心单元和本地 smoke 为主，生产化运行时的外部依赖、降级策略和文档闭环还需要继续收口。",
       "evidence": [
-        "tests/ 目前覆盖 policy / effect inference / approval snapshot / markdown memory / MCP runtime / API smoke。",
-        "README 当前 MVP 限制和后续 TODO 已明确 Workflow 和运行时硬化尚待补齐。"
+        "tests/ 目前覆盖 policy / effect inference / approval snapshot / markdown memory / MCP runtime / workflow / API smoke。",
+        "README 当前 MVP 限制和后续 TODO 已明确复杂多步 graph、集成测试和运行时硬化仍待补齐。"
       ],
       "remaining_items": [
         "补充 PostgreSQL / Qdrant / MCP 的集成测试或可重复 mock 套件。",
@@ -268,6 +269,11 @@
       "at": "2026-04-23T18:30:00+08:00",
       "task_id": "phase-9-mcp-runtime",
       "summary": "完成 MCP stdio/http transport、MCPClient/Manager runtime、mcp.call_tool 执行器、policy override 生效、MCP API runtime 和测试，当前任务切换到 phase-10 Eino workflow/HITL。"
+    },
+    {
+      "at": "2026-04-23T18:40:00+08:00",
+      "task_id": "phase-10-eino-workflow-hitl",
+      "summary": "完成 Eino Workflow facade、RunState 状态机、approval interrupt-resume、HTTP/WS resume 接入和 workflow 测试，当前任务切换到 phase-11 hardening/integration。"
     }
   ]
 }

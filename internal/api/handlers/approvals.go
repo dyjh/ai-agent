@@ -29,6 +29,21 @@ func (h *ApprovalsHandler) Pending(w http.ResponseWriter, r *http.Request) {
 // Approve handles POST /v1/approvals/{approval_id}/approve.
 func (h *ApprovalsHandler) Approve(w http.ResponseWriter, r *http.Request) {
 	approvalID := chi.URLParam(r, "approval_id")
+	existing, _ := h.Deps.Approvals.Get(approvalID)
+	if existing != nil && existing.RunID != "" && h.Deps.Runtime != nil {
+		response, err := h.Deps.Runtime.ResumeApproval(r.Context(), approvalID, true, nil)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"approval": response.Approval,
+			"result":   response.ToolResult,
+			"run":      response,
+		})
+		return
+	}
+
 	approval, err := h.Deps.Approvals.Approve(approvalID)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
@@ -49,6 +64,20 @@ func (h *ApprovalsHandler) Reject(w http.ResponseWriter, r *http.Request) {
 		Reason string `json:"reason"`
 	}
 	_ = decodeJSON(r, &body)
+	existing, _ := h.Deps.Approvals.Get(approvalID)
+	if existing != nil && existing.RunID != "" && h.Deps.Runtime != nil {
+		response, err := h.Deps.Runtime.ResumeApproval(r.Context(), approvalID, false, nil)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"approval": response.Approval,
+			"run":      response,
+		})
+		return
+	}
+
 	item, err := h.Deps.Approvals.Reject(approvalID, body.Reason)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})

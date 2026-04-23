@@ -3,6 +3,7 @@ package security
 import (
 	"encoding/json"
 	"regexp"
+	"strings"
 )
 
 var redactionPatterns = []*regexp.Regexp{
@@ -14,6 +15,8 @@ var redactionPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)(cookie\s*[:=]\s*)([^\r\n]+)`),
 	regexp.MustCompile(`(?i)(session\s*[:=]\s*)([^\s"']+)`),
 }
+
+var sensitiveKeyPattern = regexp.MustCompile(`(?i)(api[_-]?key|authorization|bearer|cookie|password|private[_-]?key|secret|session|token)`)
 
 // RedactString masks high-risk secrets before logging or persistence.
 func RedactString(value string) string {
@@ -30,17 +33,43 @@ func RedactMap(input map[string]any) map[string]any {
 		return map[string]any{}
 	}
 
+	redacted, ok := redactValue(input).(map[string]any)
+	if ok {
+		return redacted
+	}
+
 	raw, err := json.Marshal(input)
 	if err != nil {
 		return input
 	}
-
-	redacted := RedactString(string(raw))
-
 	var out map[string]any
-	if err := json.Unmarshal([]byte(redacted), &out); err != nil {
+	if err := json.Unmarshal([]byte(RedactString(string(raw))), &out); err != nil {
 		return input
 	}
-
 	return out
+}
+
+func redactValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for key, item := range typed {
+			if sensitiveKeyPattern.MatchString(strings.TrimSpace(key)) {
+				out[key] = "[REDACTED]"
+				continue
+			}
+			out[key] = redactValue(item)
+		}
+		return out
+	case []any:
+		out := make([]any, len(typed))
+		for idx, item := range typed {
+			out[idx] = redactValue(item)
+		}
+		return out
+	case string:
+		return RedactString(typed)
+	default:
+		return typed
+	}
 }

@@ -304,6 +304,33 @@ tools:
 - approval 绑定的是精确 `input_snapshot`
 - 审批通过后，Executor 只会执行批准过的那个 snapshot
 - 如果命令、参数、目录、目标文件变化，必须重新审批
+- Agent Workflow 会把需要审批的 run 标记为 `paused_for_approval`
+- 审批通过后通过 workflow resume 执行原 approval 的 `input_snapshot`，不会重新生成 ToolProposal
+
+## Eino Workflow / HITL 编排
+
+当前已提供 `internal/einoapp.AgentWorkflow` facade：
+
+- `Start(ctx, input)`：处理新用户消息，构建上下文、规划、提出工具调用、走 effect/policy/approval/executor 链路
+- `Resume(ctx, run_id, approval_id, approved)`：处理审批恢复，不重新规划，不替换 tool input
+
+运行状态由 `RunState` 记录，核心状态包括：
+
+- `received_user_message`
+- `context_built`
+- `planned`
+- `tool_proposed`
+- `effect_inferred`
+- `policy_decided`
+- `paused_for_approval`
+- `approval_approved`
+- `approval_rejected`
+- `tool_executing`
+- `tool_completed`
+- `assistant_summarizing`
+- `completed`
+
+HTTP approval API 和 WebSocket `approval.respond` 已接入同一套 workflow resume；非 workflow 直接工具 API 保留兼容路径。
 
 ## Shell 执行安全机制说明
 
@@ -340,12 +367,13 @@ go test ./...
 - skill manifest / runner / policy
 - mcp config / transport / policy / call_tool / API
 - approval snapshot behavior
+- workflow start / pause / resume / reject / idempotency
 - API smoke flows
 
 ## 当前 MVP 限制和后续 TODO
 
 - 当前支持 `memory` 和 `qdrant` 两种向量后端；本地测试默认更偏向 `memory`，生产部署可切到 `qdrant`
-- Eino Graph / Workflow / interrupt-resume 目前保留了封装入口，尚未做完整编排
+- Eino Workflow / HITL interrupt-resume 已覆盖单次工具调用主链路；更复杂的多步通用 graph 仍是后续硬化方向
 - Skill Runtime 已支持本地 manifest + executable/script 执行，但 zip 上传、运行时沙箱和更细粒度权限隔离仍待继续收口
 - MCP runtime 已支持 stdio/http 与 `mcp.call_tool`，但更完整的 MCP 协议兼容矩阵仍待后续集成测试扩展
 - CLI 已走 HTTP API，但仍是轻量控制台，不包含富交互 TUI

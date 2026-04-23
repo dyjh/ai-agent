@@ -58,39 +58,43 @@ func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Content:        message.Content,
 			}, sink)
 		case "approval.respond":
-			if message.Approved {
-				if _, err = h.Deps.Approvals.Approve(message.ApprovalID); err == nil {
-					var result *core.ToolResult
-					result, err = h.Deps.Router.ExecuteApproved(context.Background(), message.ApprovalID)
-					if err == nil && result != nil {
-						sink.Emit(core.Event{
-							Type:       "tool.output",
-							ApprovalID: message.ApprovalID,
-							Payload:    result.Output,
-						})
-						sink.Emit(core.Event{
-							Type:       "tool.completed",
-							ApprovalID: message.ApprovalID,
-							ToolCallID: result.ToolCallID,
-						})
-						sink.Emit(core.Event{
-							Type:    "assistant.message",
-							Content: "审批通过后的工具执行已完成。",
-						})
-					}
-				}
-			} else {
-				_, err = h.Deps.Approvals.Reject(message.ApprovalID, "rejected from websocket")
-				if err == nil {
-					sink.Emit(core.Event{
-						Type:       "approval.rejected",
-						ApprovalID: message.ApprovalID,
-					})
-				}
-			}
+			err = h.resumeApproval(ctx, message.ApprovalID, message.Approved, sink)
 		}
 		if err != nil {
 			_ = conn.Write(ctx, websocket.MessageText, []byte(`{"type":"error","content":"`+err.Error()+`"}`))
 		}
 	}
+}
+
+func (h *ChatHandler) resumeApproval(ctx context.Context, approvalID string, approved bool, sink SocketSink) error {
+	approval, err := h.Deps.Approvals.Get(approvalID)
+	if err != nil {
+		return err
+	}
+	if approval.RunID != "" && h.Deps.Runtime != nil {
+		_, err = h.Deps.Runtime.ResumeApproval(ctx, approvalID, approved, sink)
+		return err
+	}
+
+	if approved {
+		if _, err := h.Deps.Approvals.Approve(approvalID); err != nil {
+			return err
+		}
+		result, err := h.Deps.Router.ExecuteApproved(context.Background(), approvalID)
+		if err != nil {
+			return err
+		}
+		if result != nil {
+			sink.Emit(core.Event{Type: "tool.output", ApprovalID: approvalID, Payload: result.Output})
+			sink.Emit(core.Event{Type: "tool.completed", ApprovalID: approvalID, ToolCallID: result.ToolCallID})
+			sink.Emit(core.Event{Type: "assistant.message", Content: "审批通过后的工具执行已完成。"})
+		}
+		return nil
+	}
+
+	if _, err := h.Deps.Approvals.Reject(approvalID, "rejected from websocket"); err != nil {
+		return err
+	}
+	sink.Emit(core.Event{Type: "approval.rejected", ApprovalID: approvalID})
+	return nil
 }

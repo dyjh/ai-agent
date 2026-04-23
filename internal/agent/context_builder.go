@@ -47,7 +47,10 @@ func (b *ContextBuilder) Build(ctx context.Context, conversationID, userMessage 
 		if len(items) > 12 {
 			items = items[len(items)-12:]
 		}
-		for _, item := range items {
+		for idx, item := range items {
+			if idx == len(items)-1 && item.Role == "user" && item.Content == userMessage {
+				continue
+			}
 			content := truncateForBudget(item.Content, &charBudget)
 			if content == "" {
 				continue
