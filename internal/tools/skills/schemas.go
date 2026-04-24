@@ -5,6 +5,8 @@ import (
 	"math"
 	"reflect"
 	"sort"
+
+	"local-agent/internal/core"
 )
 
 // UploadInput is the payload for skill registration.
@@ -29,6 +31,20 @@ type SkillRunResult struct {
 	Stderr     string         `json:"stderr,omitempty"`
 	ExitCode   int            `json:"exit_code"`
 	DurationMS int64          `json:"duration_ms"`
+}
+
+// UploadZipResponse describes the install result for a managed zip package.
+type UploadZipResponse struct {
+	Skill   core.SkillRegistration `json:"skill"`
+	Package core.SkillPackageInfo  `json:"package"`
+}
+
+// SkillValidateResponse is the API response for preflight validation.
+type SkillValidateResponse struct {
+	Status     string                 `json:"status"`
+	Skill      core.SkillRegistration `json:"skill"`
+	Package    core.SkillPackageInfo  `json:"package"`
+	Validation ValidationResult       `json:"validation"`
 }
 
 // ValidateSchemaDocument validates the supported subset of JSON Schema used by skills.

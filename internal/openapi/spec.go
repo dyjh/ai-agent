@@ -104,9 +104,19 @@ func paths() map[string]any {
 		"/v1/skills/upload": map[string]any{
 			"post": operation("Upload local skill", nil, "UploadSkillRequest", "SkillRegistration", httpStatusCreated()),
 		},
+		"/v1/skills/upload-zip": map[string]any{
+			"post": multipartOperation("Upload skill zip package", nil, "UploadSkillZipResponse", httpStatusCreated()),
+		},
 		"/v1/skills": get("List skills", "SkillListResponse"),
 		"/v1/skills/{id}": map[string]any{
-			"get": operation("Get skill", []map[string]any{pathParam("id")}, "", "SkillDetailResponse", httpStatusOK()),
+			"get":    operation("Get skill", []map[string]any{pathParam("id")}, "", "SkillDetailResponse", httpStatusOK()),
+			"delete": operation("Remove skill", []map[string]any{pathParam("id")}, "", "SkillRemovalResponse", httpStatusOK()),
+		},
+		"/v1/skills/{id}/manifest": map[string]any{
+			"get": operation("Get skill manifest", []map[string]any{pathParam("id")}, "", "SkillManifestResponse", httpStatusOK()),
+		},
+		"/v1/skills/{id}/package": map[string]any{
+			"get": operation("Get skill package metadata", []map[string]any{pathParam("id")}, "", "SkillPackageInfo", httpStatusOK()),
 		},
 		"/v1/skills/{id}/enable": map[string]any{
 			"post": operation("Enable skill", []map[string]any{pathParam("id")}, "EmptyObject", "SkillRegistration", httpStatusOK()),
@@ -115,10 +125,13 @@ func paths() map[string]any {
 			"post": operation("Disable skill", []map[string]any{pathParam("id")}, "EmptyObject", "SkillRegistration", httpStatusOK()),
 		},
 		"/v1/skills/{id}/test": map[string]any{
-			"post": operation("Validate skill input", []map[string]any{pathParam("id")}, "SkillRunRequest", "StatusResponse", httpStatusOK()),
+			"post": operation("Validate skill input", []map[string]any{pathParam("id")}, "SkillRunRequest", "SkillValidateResponse", httpStatusOK()),
+		},
+		"/v1/skills/{id}/validate": map[string]any{
+			"post": operation("Validate registered skill", []map[string]any{pathParam("id")}, "SkillRunRequest", "SkillValidateResponse", httpStatusOK()),
 		},
 		"/v1/skills/{id}/run": map[string]any{
-			"post": operation("Run skill through approval chain", []map[string]any{pathParam("id")}, "SkillRunRequest", "ToolRouteResponse", httpStatusOK()),
+			"post": operation("Run skill through approval chain", []map[string]any{pathParam("id")}, "SkillRunRequest", "ToolRouteResponse", httpStatusOK(), acceptedResponse("ToolRouteResponse")),
 		},
 
 		"/v1/mcp/servers": map[string]any{
@@ -204,13 +217,36 @@ func components() map[string]any {
 				"created_at":  timeSchema(),
 				"updated_at":  timeSchema(),
 			}, "step_id", "run_id", "index", "type", "status", "created_at", "updated_at"),
-			"MemoryFile":        object(map[string]any{"path": stringSchema("preferences.md"), "body": stringSchema("# Preferences")}, "path", "body"),
-			"MemoryPatch":       object(map[string]any{"id": stringSchema("mempatch_x"), "path": stringSchema("preferences.md"), "body": stringSchema("content"), "summary": stringSchema("update")}, "id", "path", "body"),
-			"KnowledgeBase":     object(map[string]any{"id": stringSchema("kb_x"), "name": stringSchema("docs"), "description": stringSchema("local docs"), "created_at": timeSchema()}, "id", "name"),
-			"KBChunk":           object(map[string]any{"id": stringSchema("kbch_x"), "kb_id": stringSchema("kb_x"), "document": stringSchema("intro.md"), "content": stringSchema("hello"), "score": numberSchema()}, "id", "kb_id", "document", "content"),
-			"SkillRegistration": object(map[string]any{"id": stringSchema("skill_x"), "name": stringSchema("demo"), "enabled": boolSchema(), "effects": arrayOfString()}, "id", "name", "enabled"),
-			"MCPServer":         object(map[string]any{"id": stringSchema("filesystem"), "name": stringSchema("filesystem"), "transport": stringSchema("http"), "url": stringSchema("http://127.0.0.1:3000"), "enabled": boolSchema()}, "id", "name", "transport", "enabled"),
-			"MCPToolPolicy":     object(map[string]any{"id": stringSchema("mcp.filesystem.read_file"), "effects": arrayOfString(), "approval": stringSchema("auto"), "risk_level": stringSchema("read")}, "id"),
+			"MemoryFile":    object(map[string]any{"path": stringSchema("preferences.md"), "body": stringSchema("# Preferences")}, "path", "body"),
+			"MemoryPatch":   object(map[string]any{"id": stringSchema("mempatch_x"), "path": stringSchema("preferences.md"), "body": stringSchema("content"), "summary": stringSchema("update")}, "id", "path", "body"),
+			"KnowledgeBase": object(map[string]any{"id": stringSchema("kb_x"), "name": stringSchema("docs"), "description": stringSchema("local docs"), "created_at": timeSchema()}, "id", "name"),
+			"KBChunk":       object(map[string]any{"id": stringSchema("kbch_x"), "kb_id": stringSchema("kb_x"), "document": stringSchema("intro.md"), "content": stringSchema("hello"), "score": numberSchema()}, "id", "kb_id", "document", "content"),
+			"SkillRegistration": object(map[string]any{
+				"id":               stringSchema("skill_x"),
+				"name":             stringSchema("demo"),
+				"version":          stringSchema("1.0.0"),
+				"description":      stringSchema("demo skill"),
+				"archive_path":     stringSchema("/skills/demo"),
+				"runtime_type":     stringSchema("executable"),
+				"effects":          arrayOfString(),
+				"approval_default": stringSchema("auto"),
+				"source_type":      stringSchema("zip"),
+				"checksum":         stringSchema("sha256:abc"),
+				"installed_at":     timeSchema(),
+				"sandbox_profile":  stringSchema("restricted"),
+				"enabled":          boolSchema(),
+				"created_at":       timeSchema(),
+			}, "id", "name", "enabled"),
+			"SkillPackageInfo": object(map[string]any{
+				"skill_id":     stringSchema("skill_x"),
+				"version":      stringSchema("1.0.0"),
+				"source_type":  stringSchema("zip"),
+				"package_path": stringSchema("/skills/packages/skill_x/1.0.0"),
+				"checksum":     stringSchema("sha256:abc"),
+				"installed_at": timeSchema(),
+			}, "skill_id", "version", "source_type", "package_path", "installed_at"),
+			"MCPServer":     object(map[string]any{"id": stringSchema("filesystem"), "name": stringSchema("filesystem"), "transport": stringSchema("http"), "url": stringSchema("http://127.0.0.1:3000"), "enabled": boolSchema()}, "id", "name", "transport", "enabled"),
+			"MCPToolPolicy": object(map[string]any{"id": stringSchema("mcp.filesystem.read_file"), "effects": arrayOfString(), "approval": stringSchema("auto"), "risk_level": stringSchema("read")}, "id"),
 
 			"CreateConversationRequest": object(map[string]any{"title": stringSchema("smoke"), "project_key": stringSchema("local")}),
 			"PostMessageRequest":        object(map[string]any{"content": stringSchema("hello")}, "content"),
@@ -224,10 +260,14 @@ func components() map[string]any {
 			}, "name"),
 			"UploadDocumentRequest": object(map[string]any{"filename": stringSchema("intro.md"), "content": stringSchema("# Intro")}, "filename", "content"),
 			"UploadSkillRequest":    object(map[string]any{"path": stringSchema("./skills/demo"), "name": stringSchema("demo"), "description": stringSchema("demo skill")}, "path"),
-			"SkillRunRequest":       object(map[string]any{"args": map[string]any{"type": "object", "additionalProperties": true}}),
-			"MCPServerInput":        object(map[string]any{"id": stringSchema("filesystem"), "name": stringSchema("filesystem"), "transport": stringSchema("http"), "url": stringSchema("http://127.0.0.1:3000"), "enabled": boolSchema(), "headers": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}}}, "name", "transport"),
-			"MCPCallToolRequest":    object(map[string]any{"arguments": map[string]any{"type": "object", "additionalProperties": true}, "purpose": stringSchema("read a local file")}),
-			"MCPToolPolicyInput":    object(map[string]any{"effects": arrayOfString(), "approval": stringSchema("require"), "risk_level": stringSchema("write"), "reason": stringSchema("mutating tool")}),
+			"UploadSkillZipResponse": object(map[string]any{
+				"skill":   ref("SkillRegistration"),
+				"package": ref("SkillPackageInfo"),
+			}, "skill", "package"),
+			"SkillRunRequest":    object(map[string]any{"args": map[string]any{"type": "object", "additionalProperties": true}}),
+			"MCPServerInput":     object(map[string]any{"id": stringSchema("filesystem"), "name": stringSchema("filesystem"), "transport": stringSchema("http"), "url": stringSchema("http://127.0.0.1:3000"), "enabled": boolSchema(), "headers": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}}}, "name", "transport"),
+			"MCPCallToolRequest": object(map[string]any{"arguments": map[string]any{"type": "object", "additionalProperties": true}, "purpose": stringSchema("read a local file")}),
+			"MCPToolPolicyInput": object(map[string]any{"effects": arrayOfString(), "approval": stringSchema("require"), "risk_level": stringSchema("write"), "reason": stringSchema("mutating tool")}),
 
 			"ConversationListResponse":    listResponse("Conversation"),
 			"MessageListResponse":         listResponse("Message"),
@@ -244,7 +284,10 @@ func components() map[string]any {
 			"RunResponse":                 object(map[string]any{"run_id": stringSchema("run_x"), "assistant_message": ref("Message"), "tool_result": ref("ToolResult"), "approval": ref("ApprovalRecord"), "state": ref("RunState")}, "run_id"),
 			"ApprovalResolutionResponse":  object(map[string]any{"approval": ref("ApprovalRecord"), "result": ref("ToolResult"), "run": ref("RunResponse")}),
 			"ToolRouteResponse":           object(map[string]any{"decision": map[string]any{"type": "object", "additionalProperties": true}, "inference": map[string]any{"type": "object", "additionalProperties": true}, "approval": ref("ApprovalRecord"), "result": ref("ToolResult")}),
-			"SkillDetailResponse":         object(map[string]any{"skill": ref("SkillRegistration"), "manifest": map[string]any{"type": "object", "additionalProperties": true}}),
+			"SkillDetailResponse":         object(map[string]any{"skill": ref("SkillRegistration"), "manifest": map[string]any{"type": "object", "additionalProperties": true}, "package": ref("SkillPackageInfo")}),
+			"SkillManifestResponse":       object(map[string]any{"skill": ref("SkillRegistration"), "manifest": map[string]any{"type": "object", "additionalProperties": true}}),
+			"SkillValidateResponse":       object(map[string]any{"status": stringSchema("ok"), "skill": ref("SkillRegistration"), "package": ref("SkillPackageInfo"), "validation": map[string]any{"type": "object", "additionalProperties": true}}, "status", "skill", "package", "validation"),
+			"SkillRemovalResponse":        object(map[string]any{"skill_id": stringSchema("skill_x"), "version": stringSchema("1.0.0"), "removed": boolSchema(), "package_deleted": boolSchema(), "package": ref("SkillPackageInfo")}, "skill_id", "removed", "package"),
 			"MCPServerDetailResponse":     object(map[string]any{"server": ref("MCPServer"), "state": map[string]any{"type": "object", "additionalProperties": true}}),
 			"MCPRefreshResponse":          object(map[string]any{"status": stringSchema("ok"), "tools": map[string]any{"type": "array", "items": map[string]any{"type": "object", "additionalProperties": true}}, "state": map[string]any{"type": "object", "additionalProperties": true}}, "status"),
 		},
@@ -284,6 +327,38 @@ func operation(summary string, params []map[string]any, requestSchema, responseS
 	return op
 }
 
+func multipartOperation(summary string, params []map[string]any, responseSchema string, success map[string]any, extraResponses ...map[string]any) map[string]any {
+	responses := map[string]any{
+		success["status"].(string): response(success["description"].(string), responseSchema),
+		"400":                      response("Bad request", "ErrorResponse"),
+		"500":                      response("Internal server error", "ErrorResponse"),
+	}
+	for _, item := range extraResponses {
+		for key, value := range item {
+			responses[key] = value
+		}
+	}
+	op := map[string]any{
+		"summary":   summary,
+		"responses": responses,
+		"requestBody": map[string]any{
+			"required": true,
+			"content": map[string]any{
+				"multipart/form-data": map[string]any{
+					"schema": object(map[string]any{
+						"file":  map[string]any{"type": "string", "format": "binary"},
+						"force": boolSchema(),
+					}, "file"),
+				},
+			},
+		},
+	}
+	if len(params) > 0 {
+		op["parameters"] = params
+	}
+	return op
+}
+
 func response(description, schema string) map[string]any {
 	item := map[string]any{"description": description}
 	if schema != "" {
@@ -304,6 +379,10 @@ func httpStatusOK() map[string]any {
 
 func httpStatusCreated() map[string]any {
 	return map[string]any{"status": "201", "description": "Created"}
+}
+
+func acceptedResponse(schema string) map[string]any {
+	return map[string]any{"202": response("Accepted", schema)}
 }
 
 func pathParam(name string) map[string]any {

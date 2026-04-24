@@ -1,16 +1,16 @@
 {
   "project": "local-agent",
   "source": "promote.txt",
-  "last_updated": "2026-04-24T10:45:00+08:00",
+  "last_updated": "2026-04-24T14:30:00+08:00",
   "overall_status": "production_ready_mvp",
-  "current_task_id": "post-mvp-phase-a-durable-workflow",
-  "current_task_title": "Post-MVP Phase A: Durable workflow state and multi-step run loop",
+  "current_task_id": "skill-package-sandbox-hardening",
+  "current_task_title": "Post-MVP Phase B: Skill ZIP install, sandbox execution, permission isolation",
   "summary": {
-    "headline": "MVP 主链路保持稳定，并已完成 durable workflow state、多步 step loop、run 管理 API 和恢复测试。",
+    "headline": "MVP 主链路保持稳定，并已完成 durable workflow、多步 run loop，以及 Skill ZIP 安装与 best-effort 沙箱硬化。",
     "progress": {
-      "completed": 12,
+      "completed": 13,
       "pending": 0,
-      "total": 12
+      "total": 13
     },
     "verified": [
       "2026-04-23 已检查仓库结构，HTTP API / WebSocket / CLI / memory / kb / skills / mcp / tests 均已存在。",
@@ -21,12 +21,13 @@
       "2026-04-23 已完成 MCP stdio/http transport、mcp.call_tool executor、policy override 接入、MCP API runtime 和 phase-9 测试。",
       "2026-04-23 已完成 Eino Workflow facade、RunState 状态机、approval interrupt-resume、HTTP/WS resume 接入和 phase-10 测试。",
       "2026-04-23 已完成 Phase 11：配置校验、USE_KONWAGE_BASE/KONWAGE_BASE_PROVIDER、KB feature gate、Swagger/OpenAPI、approval snapshot hash、硬化测试和文档收口，并确认 go test ./... 通过。",
-      "2026-04-24 已完成 Post-MVP Phase A：agent_runs / agent_run_steps 持久化、step-based workflow loop、/v1/runs* API、CLI runs 命令、跨重启 resume 测试，并再次确认 go test ./... 通过。"
+      "2026-04-24 已完成 Post-MVP Phase A：agent_runs / agent_run_steps 持久化、step-based workflow loop、/v1/runs* API、CLI runs 命令、跨重启 resume 测试，并再次确认 go test ./... 通过。",
+      "2026-04-24 已完成 Post-MVP Phase B：Skill ZIP 安装、安全解包、package metadata、SandboxRunner/LocalRestrictedRunner、permissions preflight enforcement、Skill API/CLI 扩展、OpenAPI 更新和对应测试，并再次确认 go test ./... 通过。"
     ],
     "unfinished_overview": [
       "当前 step loop 已覆盖本地单用户可恢复多步任务，但仍不是无限自动规划的通用 graph 平台。",
       "无 PostgreSQL 时仍回退到内存仓储，run/step 无法跨进程恢复。",
-      "Skill zip 上传、执行沙箱、更细粒度权限隔离和更广 MCP 方言兼容矩阵仍属于 post-MVP backlog。"
+      "当前 LocalRestrictedRunner 仍是 best-effort，本地 OS 级 seccomp/namespace/cgroup 隔离和更广 MCP 方言兼容矩阵仍属于 post-MVP backlog。"
     ]
   },
   "tasks": [
@@ -162,7 +163,7 @@
         "补充 skill manifest / runner / policy / API smoke 测试，并确认 go test ./... 通过。"
       ],
       "remaining_items": [
-        "如需更强生产隔离，可继续补充 zip 上传、执行沙箱和更细粒度 skill permissions enforcement。"
+        "如需更强生产隔离，可继续补充 seccomp/namespace/cgroup、真实网络封禁和更细粒度 host/path enforcement。"
       ],
       "deliverables": [
         "真实 skill.run 执行器",
@@ -231,7 +232,7 @@
       ],
       "remaining_items": [
         "PostgreSQL / Qdrant / MCP 的真实外部依赖矩阵可继续通过 RUN_*_INTEGRATION 环境变量扩展。",
-        "复杂多步 graph、跨进程 run state 持久化、Skill 沙箱和 zip 上传留作 post-MVP backlog。"
+        "复杂多步 graph、更强 OS 级 Skill 沙箱和更广 MCP 方言兼容矩阵留作 post-MVP backlog。"
       ],
       "deliverables": [
         "更完整的集成测试矩阵",
@@ -259,6 +260,28 @@
         "持久化 RunState / RunStep 仓储",
         "多步 workflow loop 与 resume 强化",
         "run 管理 API、CLI 与恢复测试"
+      ]
+    },
+    {
+      "id": "skill-package-sandbox-hardening",
+      "title": "Post-MVP Phase B: Skill ZIP install、sandbox execution、permission isolation",
+      "status": "completed",
+      "completed_items": [
+        "扩展 skill.yaml，增加 sandbox.profile、filesystem/network/env/tools/process permissions 默认值与一致性校验。",
+        "新增 SandboxRunner、ExecutionProfile 和 LocalRestrictedRunner，并将 skill.run 执行切换到统一 preflight + sandbox 抽象。",
+        "在执行前接入 runtime.command/cwd 校验、env allowlist、max output bytes、timeout 和显式路径参数的 permissions enforcement。",
+        "新增 Skill ZIP 安装、安全解包、防 zip slip/path traversal、checksum 记录、package metadata 持久化和重复版本策略。",
+        "新增 POST /v1/skills/upload-zip、GET /v1/skills/{id}/manifest、GET /v1/skills/{id}/package、POST /v1/skills/{id}/validate、DELETE /v1/skills/{id}，并扩展 CLI skills install/manifest/validate/run/remove。",
+        "同步 OpenAPI/Swagger、README 和 task.json，并补充 zip upload、manifest permissions、sandbox runner、Skill API 等测试，确认 go test ./... 通过。"
+      ],
+      "remaining_items": [
+        "当前 LocalRestrictedRunner 仍为 best-effort，本阶段未提供容器级或 namespace 级硬隔离。",
+        "permissions.tools.allow_shell / allow_mcp 当前保留为 manifest 能力声明，但本地 runner 不直接授权这些桥接能力。"
+      ],
+      "deliverables": [
+        "Skill ZIP install 与 package metadata",
+        "SandboxRunner / LocalRestrictedRunner",
+        "Skill permissions enforcement、API/CLI 与测试"
       ]
     }
   ],
@@ -312,6 +335,11 @@
       "at": "2026-04-24T10:45:00+08:00",
       "task_id": "post-mvp-phase-a-durable-workflow",
       "summary": "完成 durable RunState/RunStep 持久化、多步 workflow step loop、/v1/runs* API、CLI runs 命令、跨重启审批恢复和对应测试。"
+    },
+    {
+      "at": "2026-04-24T14:30:00+08:00",
+      "task_id": "skill-package-sandbox-hardening",
+      "summary": "完成 Skill ZIP install、安全解包、SandboxRunner/LocalRestrictedRunner、permissions preflight enforcement、Skill API/CLI 扩展、Swagger/OpenAPI 更新和对应测试。"
     }
   ]
 }

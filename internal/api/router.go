@@ -65,11 +65,16 @@ func NewRouter(deps Dependencies) http.Handler {
 		r.Post("/kbs/{kb_id}/search", knowledge.Search)
 
 		r.Post("/skills/upload", skillsHandler.Upload)
+		r.Post("/skills/upload-zip", skillsHandler.UploadZip)
 		r.Get("/skills", skillsHandler.List)
 		r.Get("/skills/{id}", skillsHandler.Get)
+		r.Delete("/skills/{id}", skillsHandler.Remove)
+		r.Get("/skills/{id}/manifest", skillsHandler.Manifest)
+		r.Get("/skills/{id}/package", skillsHandler.Package)
 		r.Post("/skills/{id}/enable", skillsHandler.Enable)
 		r.Post("/skills/{id}/disable", skillsHandler.Disable)
 		r.Post("/skills/{id}/test", skillsHandler.Test)
+		r.Post("/skills/{id}/validate", skillsHandler.Validate)
 		r.Post("/skills/{id}/run", skillsHandler.Run)
 
 		r.Get("/mcp/servers", mcpHandler.ListServers)

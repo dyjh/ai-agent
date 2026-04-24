@@ -228,8 +228,22 @@ type SkillRegistration struct {
 	RuntimeType     string    `json:"runtime_type,omitempty"`
 	Effects         []string  `json:"effects,omitempty"`
 	ApprovalDefault string    `json:"approval_default,omitempty"`
+	SourceType      string    `json:"source_type,omitempty"`
+	Checksum        string    `json:"checksum,omitempty"`
+	InstalledAt     time.Time `json:"installed_at,omitempty"`
+	SandboxProfile  string    `json:"sandbox_profile,omitempty"`
 	Enabled         bool      `json:"enabled"`
 	CreatedAt       time.Time `json:"created_at"`
+}
+
+// SkillPackageInfo stores package/install metadata for a skill.
+type SkillPackageInfo struct {
+	SkillID     string    `json:"skill_id"`
+	Version     string    `json:"version"`
+	SourceType  string    `json:"source_type"`
+	PackagePath string    `json:"package_path"`
+	Checksum    string    `json:"checksum,omitempty"`
+	InstalledAt time.Time `json:"installed_at"`
 }
 
 // SkillPolicyProfile describes the effect/approval model for a registered skill.

@@ -848,6 +848,9 @@
             "additionalProperties": true,
             "type": "object"
           },
+          "package": {
+            "$ref": "#/components/schemas/SkillPackageInfo"
+          },
           "skill": {
             "$ref": "#/components/schemas/SkillRegistration"
           }
@@ -868,8 +871,76 @@
         ],
         "type": "object"
       },
+      "SkillManifestResponse": {
+        "properties": {
+          "manifest": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "skill": {
+            "$ref": "#/components/schemas/SkillRegistration"
+          }
+        },
+        "type": "object"
+      },
+      "SkillPackageInfo": {
+        "properties": {
+          "checksum": {
+            "example": "sha256:abc",
+            "type": "string"
+          },
+          "installed_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "package_path": {
+            "example": "/skills/packages/skill_x/1.0.0",
+            "type": "string"
+          },
+          "skill_id": {
+            "example": "skill_x",
+            "type": "string"
+          },
+          "source_type": {
+            "example": "zip",
+            "type": "string"
+          },
+          "version": {
+            "example": "1.0.0",
+            "type": "string"
+          }
+        },
+        "required": [
+          "skill_id",
+          "version",
+          "source_type",
+          "package_path",
+          "installed_at"
+        ],
+        "type": "object"
+      },
       "SkillRegistration": {
         "properties": {
+          "approval_default": {
+            "example": "auto",
+            "type": "string"
+          },
+          "archive_path": {
+            "example": "/skills/demo",
+            "type": "string"
+          },
+          "checksum": {
+            "example": "sha256:abc",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "description": {
+            "example": "demo skill",
+            "type": "string"
+          },
           "effects": {
             "items": {
               "type": "string"
@@ -883,8 +954,28 @@
             "example": "skill_x",
             "type": "string"
           },
+          "installed_at": {
+            "format": "date-time",
+            "type": "string"
+          },
           "name": {
             "example": "demo",
+            "type": "string"
+          },
+          "runtime_type": {
+            "example": "executable",
+            "type": "string"
+          },
+          "sandbox_profile": {
+            "example": "restricted",
+            "type": "string"
+          },
+          "source_type": {
+            "example": "zip",
+            "type": "string"
+          },
+          "version": {
+            "example": "1.0.0",
             "type": "string"
           }
         },
@@ -895,6 +986,33 @@
         ],
         "type": "object"
       },
+      "SkillRemovalResponse": {
+        "properties": {
+          "package": {
+            "$ref": "#/components/schemas/SkillPackageInfo"
+          },
+          "package_deleted": {
+            "type": "boolean"
+          },
+          "removed": {
+            "type": "boolean"
+          },
+          "skill_id": {
+            "example": "skill_x",
+            "type": "string"
+          },
+          "version": {
+            "example": "1.0.0",
+            "type": "string"
+          }
+        },
+        "required": [
+          "skill_id",
+          "removed",
+          "package"
+        ],
+        "type": "object"
+      },
       "SkillRunRequest": {
         "properties": {
           "args": {
@@ -902,6 +1020,31 @@
             "type": "object"
           }
         },
+        "type": "object"
+      },
+      "SkillValidateResponse": {
+        "properties": {
+          "package": {
+            "$ref": "#/components/schemas/SkillPackageInfo"
+          },
+          "skill": {
+            "$ref": "#/components/schemas/SkillRegistration"
+          },
+          "status": {
+            "example": "ok",
+            "type": "string"
+          },
+          "validation": {
+            "additionalProperties": true,
+            "type": "object"
+          }
+        },
+        "required": [
+          "status",
+          "skill",
+          "package",
+          "validation"
+        ],
         "type": "object"
       },
       "StatusResponse": {
@@ -985,6 +1128,21 @@
         },
         "required": [
           "path"
+        ],
+        "type": "object"
+      },
+      "UploadSkillZipResponse": {
+        "properties": {
+          "package": {
+            "$ref": "#/components/schemas/SkillPackageInfo"
+          },
+          "skill": {
+            "$ref": "#/components/schemas/SkillRegistration"
+          }
+        },
+        "required": [
+          "skill",
+          "package"
         ],
         "type": "object"
       }
@@ -2718,7 +2876,111 @@
         "summary": "Upload local skill"
       }
     },
+    "/v1/skills/upload-zip": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "force": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSkillZipResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Upload skill zip package"
+      }
+    },
     "/v1/skills/{id}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRemovalResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Remove skill"
+      },
       "get": {
         "parameters": [
           {
@@ -2879,6 +3141,100 @@
         "summary": "Enable skill"
       }
     },
+    "/v1/skills/{id}/manifest": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillManifestResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Get skill manifest"
+      }
+    },
+    "/v1/skills/{id}/package": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillPackageInfo"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Get skill package metadata"
+      }
+    },
     "/v1/skills/{id}/run": {
       "post": {
         "parameters": [
@@ -2911,6 +3267,16 @@
               }
             },
             "description": "OK"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolRouteResponse"
+                }
+              }
+            },
+            "description": "Accepted"
           },
           "400": {
             "content": {
@@ -2963,7 +3329,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StatusResponse"
+                  "$ref": "#/components/schemas/SkillValidateResponse"
                 }
               }
             },
@@ -2991,6 +3357,63 @@
           }
         },
         "summary": "Validate skill input"
+      }
+    },
+    "/v1/skills/{id}/validate": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkillRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillValidateResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Validate registered skill"
       }
     }
   },

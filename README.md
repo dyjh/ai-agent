@@ -129,6 +129,11 @@ go run ./cmd/agent approvals list
 go run ./cmd/agent memory list
 go run ./cmd/agent memory search "偏好"
 go run ./cmd/agent skills list
+go run ./cmd/agent skills install ./skills/demo.zip
+go run ./cmd/agent skills manifest demo
+go run ./cmd/agent skills validate demo --args '{"top_n":3}'
+go run ./cmd/agent skills run demo --args '{"top_n":3}'
+go run ./cmd/agent skills remove demo
 go run ./cmd/agent mcp list
 go run ./cmd/agent runs list
 go run ./cmd/agent runs get run_xxx
@@ -281,11 +286,16 @@ curl http://127.0.0.1:8765/v1/kbs/health
 当前 Skill 管理支持：
 
 - `POST /v1/skills/upload`
+- `POST /v1/skills/upload-zip`
 - `GET /v1/skills`
 - `GET /v1/skills/{id}`
+- `DELETE /v1/skills/{id}`
+- `GET /v1/skills/{id}/manifest`
+- `GET /v1/skills/{id}/package`
 - `POST /v1/skills/{id}/enable`
 - `POST /v1/skills/{id}/disable`
 - `POST /v1/skills/{id}/test`
+- `POST /v1/skills/{id}/validate`
 - `POST /v1/skills/{id}/run`
 
 当前 Skill Runtime 已支持通过 `skill.yaml` 声明本地 skill，并通过 `skill.run -> ToolRouter -> EffectInference -> PolicyEngine -> Executor` 链路执行。
@@ -298,7 +308,78 @@ curl http://127.0.0.1:8765/v1/kbs/health
 - 写入、敏感、未知 effect，或 `approval.default=require` 的 skill 会进入审批
 - `POST /v1/skills/{id}/run` 会走与 Agent 内部相同的 ToolRouter / Approval 链路
 
-当前上传接口接受本地 skill 目录或 `skill.yaml` 路径；zip 解包和更强的执行沙箱仍留待后续阶段。
+当前 Skill 安装支持两种来源：
+
+- `POST /v1/skills/upload`：注册本地 skill 目录或 `skill.yaml` 路径
+- `POST /v1/skills/upload-zip`：上传 zip 包，安全解包到 `skills/packages/<skill-id>/<version>/`
+
+zip 安装会执行以下检查：
+
+- 防止 zip slip / path traversal
+- 限制文件数、单文件大小和总解压大小
+- 解包后必须存在且只能存在一个 `skill.yaml`
+- manifest 校验通过后才注册
+- 记录 `source_type`、`checksum`、`installed_at` 和 `package_path`
+- 同一 `skill_id + version` 默认拒绝重复安装，传 `force=true` 才覆盖
+
+当前支持的 manifest 关键字段示例：
+
+```yaml
+id: cpu_analyzer
+name: CPU Analyzer
+version: 1.0.0
+
+runtime:
+  type: executable
+  command: ./bin/cpu_analyzer
+  cwd: .
+  input_mode: json_stdin
+  output_mode: json_stdout
+  timeout_seconds: 30
+
+effects:
+  - process.read
+  - system.metrics.read
+
+approval:
+  default: auto
+
+permissions:
+  filesystem:
+    read:
+      - .
+      - ./workspace
+    write: []
+  network:
+    enabled: false
+    allow_hosts: []
+  env:
+    allow:
+      - LANG
+  tools:
+    allow_shell: false
+    allow_mcp: false
+  process:
+    max_runtime_seconds: 30
+    max_output_bytes: 1048576
+
+sandbox:
+  profile: restricted
+```
+
+当前执行期权限隔离行为：
+
+- `permissions` 会在运行前参与 `runtime.command`、`cwd`、env allowlist 和显式路径参数校验
+- `effects` 决定 Policy / Approval；`permissions` 决定执行前允许范围，两者不一致会校验失败
+- `GET /v1/skills/{id}/package` 返回安装元数据，不返回 zip 内容
+- `POST /v1/skills/{id}/validate` 会做 manifest / permissions / runtime 路径 / 输入的预校验，但不会真正执行 skill
+
+当前沙箱能力的真实边界：
+
+- `LocalRestrictedRunner` 是 best-effort 本地执行器，不是容器级或 namespace 级强隔离
+- 已实现：timeout、max output bytes、受控 env、`cwd`/command 路径校验、显式路径参数预检查
+- 未实现 OS 级硬阻断：文件系统 syscall 级限制、真实网络封禁、seccomp、namespace/cgroup 隔离
+- 当 manifest 声明 `network.enabled=false` 时，当前只提供 best-effort 预校验和 warning，不宣称已做内核级网络阻断
 
 ## MCP 配置说明
 
@@ -471,7 +552,7 @@ RUN_POSTGRES_INTEGRATION=1 go test ./...
 - Runtime KB provider 当前只支持 `qdrant`；`memory` 向量索引用于本地 memory index、测试和开发辅助
 - 当前 step loop 已覆盖本地单用户场景下的可恢复多步任务，但仍不是无限自动规划的通用 graph 平台
 - PostgreSQL 可用时 run/step 可持久化；无数据库 fallback 仍只提供进程内内存 run state
-- Skill Runtime 已支持本地 manifest + executable/script 执行，但 zip 上传、运行时沙箱和更细粒度权限隔离仍待继续收口
+- Skill Runtime 已支持 zip 安装、manifest permissions 校验和 best-effort 本地沙箱；更强的 OS 级隔离仍待后续阶段补齐
 - MCP runtime 已支持 stdio/http 与 `mcp.call_tool`，但更完整的 MCP 协议兼容矩阵仍待后续集成测试扩展
 - CLI 已走 HTTP API，但仍是轻量控制台，不包含富交互 TUI
 

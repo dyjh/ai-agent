@@ -47,7 +47,8 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 	_ = os.MkdirAll(cfg.Memory.RootDir, 0o755)
 	_ = os.MkdirAll(cfg.Events.JSONLRoot, 0o755)
 	_ = os.MkdirAll(cfg.Events.AuditRoot, 0o755)
-	_ = os.MkdirAll("skills", 0o755)
+	skillsRoot := filepath.Join(filepath.Dir(cfg.Memory.RootDir), "skills")
+	_ = os.MkdirAll(skillsRoot, 0o755)
 
 	store := repo.NewMemoryStore()
 	if cfg.Database.URL != "" {
@@ -85,7 +86,7 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 		}
 		knowledgeService = kb.NewService(kbIndex, embedder, cfg.CollectionName("kb"))
 	}
-	skillsManager := skills.NewManager("skills")
+	skillsManager := skills.NewManager(skillsRoot)
 	mcpManager := mcp.NewManager()
 	if err := mcpManager.LoadConfig(resolveConfigPath("config/mcp.servers.yaml"), resolveConfigPath("config/mcp.tool-policies.yaml")); err != nil {
 		return nil, err
@@ -230,7 +231,11 @@ func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb
 			"required": []string{"skill_id"},
 		},
 		DefaultEffects: []string{"unknown.effect"},
-	}, &skills.Runner{Manager: skillsManager, MaxOutputChars: cfg.Shell.MaxOutputChars})
+	}, &skills.Runner{
+		Manager:        skillsManager,
+		Sandbox:        &skills.LocalRestrictedRunner{},
+		MaxOutputChars: cfg.Shell.MaxOutputChars,
+	})
 	registry.Register(core.ToolSpec{
 		ID:          "mcp.call_tool",
 		Provider:    "mcp",

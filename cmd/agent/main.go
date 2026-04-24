@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"strings"
@@ -185,11 +186,106 @@ func skillsCommand(serverURL *string) *cobra.Command {
 			})
 		},
 	})
+	installCmd := &cobra.Command{
+		Use:   "install [zip_path]",
+		Short: "Install a skill zip package",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			force, _ := c.Flags().GetBool("force")
+			return printMultipartFileRequest(http.MethodPost, *serverURL+"/v1/skills/upload-zip", "file", args[0], map[string]string{
+				"force": fmt.Sprintf("%t", force),
+			})
+		},
+	}
+	installCmd.Flags().Bool("force", false, "overwrite the same installed version")
+	cmd.AddCommand(installCmd)
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List registered skills",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return printRequest(http.MethodGet, *serverURL+"/v1/skills", nil)
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "manifest [skill_id]",
+		Short: "Get the normalized manifest for one skill",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printRequest(http.MethodGet, fmt.Sprintf("%s/v1/skills/%s/manifest", *serverURL, args[0]), nil)
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "package [skill_id]",
+		Short: "Get package metadata for one skill",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printRequest(http.MethodGet, fmt.Sprintf("%s/v1/skills/%s/package", *serverURL, args[0]), nil)
+		},
+	})
+	validateCmd := &cobra.Command{
+		Use:   "validate [skill_id]",
+		Short: "Validate a skill without executing it",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			payload, err := argsFlagPayload(c)
+			if err != nil {
+				return err
+			}
+			return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/skills/%s/validate", *serverURL, args[0]), payload)
+		},
+	}
+	validateCmd.Flags().String("args", "{}", "JSON object passed as skill args")
+	cmd.AddCommand(validateCmd)
+	testCmd := &cobra.Command{
+		Use:   "test [skill_id]",
+		Short: "Validate skill input compatibility",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			payload, err := argsFlagPayload(c)
+			if err != nil {
+				return err
+			}
+			return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/skills/%s/test", *serverURL, args[0]), payload)
+		},
+	}
+	testCmd.Flags().String("args", "{}", "JSON object passed as skill args")
+	cmd.AddCommand(testCmd)
+	runCmd := &cobra.Command{
+		Use:   "run [skill_id]",
+		Short: "Run a registered skill through the approval chain",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			payload, err := argsFlagPayload(c)
+			if err != nil {
+				return err
+			}
+			return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/skills/%s/run", *serverURL, args[0]), payload)
+		},
+	}
+	runCmd.Flags().String("args", "{}", "JSON object passed as skill args")
+	cmd.AddCommand(runCmd)
+	cmd.AddCommand(&cobra.Command{
+		Use:   "enable [skill_id]",
+		Short: "Enable a skill",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/skills/%s/enable", *serverURL, args[0]), map[string]any{})
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "disable [skill_id]",
+		Short: "Disable a skill",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/skills/%s/disable", *serverURL, args[0]), map[string]any{})
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "remove [skill_id]",
+		Short: "Remove a registered skill",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printRequest(http.MethodDelete, fmt.Sprintf("%s/v1/skills/%s", *serverURL, args[0]), nil)
 		},
 	})
 	return cmd
@@ -380,6 +476,67 @@ func doJSONRequest(method, url string, body any) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 	return io.ReadAll(resp.Body)
+}
+
+func printMultipartFileRequest(method, url, fieldName, path string, fields map[string]string) error {
+	respBody, err := doMultipartFileRequest(method, url, fieldName, path, fields)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(os.Stdout, string(respBody))
+	return err
+}
+
+func doMultipartFileRequest(method, url, fieldName, path string, fields map[string]string) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for key, value := range fields {
+		if err := writer.WriteField(key, value); err != nil {
+			return nil, err
+		}
+	}
+	part, err := writer.CreateFormFile(fieldName, filepathBase(path))
+	if err != nil {
+		return nil, err
+	}
+	if _, err := io.Copy(part, file); err != nil {
+		return nil, err
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(method, url, &body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return io.ReadAll(resp.Body)
+}
+
+func argsFlagPayload(cmd *cobra.Command) (map[string]any, error) {
+	rawArgs, err := cmd.Flags().GetString("args")
+	if err != nil {
+		return nil, err
+	}
+	args := map[string]any{}
+	if strings.TrimSpace(rawArgs) != "" {
+		if err := json.Unmarshal([]byte(rawArgs), &args); err != nil {
+			return nil, fmt.Errorf("--args must be a JSON object: %w", err)
+		}
+	}
+	return map[string]any{"args": args}, nil
 }
 
 func filepathBase(path string) string {

@@ -1,31 +1,22 @@
 package skills
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
 
 	"local-agent/internal/core"
+	"local-agent/internal/security"
 	"local-agent/internal/tools"
 )
-
-var redactionPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)(api[_-]?key|token|password|secret|authorization|cookie)\s*[:=]\s*([^\s,;]+)`),
-	regexp.MustCompile(`(?i)(bearer)\s+[a-z0-9._\-]+`),
-}
 
 // Runner executes registered local skills via their manifest runtime.
 type Runner struct {
 	Manager        *Manager
+	Sandbox        SandboxRunner
 	MaxOutputChars int
 }
 
@@ -61,37 +52,24 @@ func (r *Runner) Execute(ctx context.Context, input map[string]any) (*core.ToolR
 }
 
 func (r *Runner) run(ctx context.Context, entry RegisteredSkill, args map[string]any) (*core.ToolResult, error) {
-	payload, err := json.Marshal(args)
+	prepared, err := prepareExecution(entry, args, int64(r.MaxOutputChars))
 	if err != nil {
-		err = fmt.Errorf("marshal skill args: %w", err)
 		return failedResult(entry.Registration.ID, time.Time{}, 0, err.Error()), err
 	}
 
-	timeout := entry.Manifest.Runtime.TimeoutSeconds
-	if timeout <= 0 {
-		timeout = 30
+	sandbox := r.Sandbox
+	if sandbox == nil {
+		sandbox = &LocalRestrictedRunner{}
 	}
-	runCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
-	defer cancel()
-
-	startedAt := time.Now().UTC()
-	cmd, err := buildCommand(runCtx, entry, payload, args)
-	if err != nil {
-		return failedResult(entry.Registration.ID, startedAt, 0, err.Error()), err
+	result, runErr := sandbox.Run(ctx, prepared.Request)
+	if result == nil {
+		return failedResult(entry.Registration.ID, time.Time{}, 0, fmt.Sprintf("skill execution failed: %v", runErr)), runErr
 	}
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	runErr := cmd.Run()
-	finishedAt := time.Now().UTC()
-	durationMS := finishedAt.Sub(startedAt).Milliseconds()
-	rawStdout := stdout.String()
-	stdoutText := truncate(redactString(rawStdout), r.MaxOutputChars)
-	stderrText := truncate(redactString(stderr.String()), r.MaxOutputChars)
-	exitCode := exitCode(runErr)
+	rawStdout := string(result.Stdout)
+	rawStderr := string(result.Stderr)
+	stdoutText := truncate(security.RedactString(rawStdout), r.MaxOutputChars)
+	stderrText := truncate(security.RedactString(rawStderr), r.MaxOutputChars)
 
 	output, parseErr := parseOutput(entry.Manifest.Runtime.OutputMode, rawStdout)
 	if parseErr != nil {
@@ -106,75 +84,31 @@ func (r *Runner) run(ctx context.Context, entry RegisteredSkill, args map[string
 
 	status := "ok"
 	switch {
-	case runCtx.Err() == context.DeadlineExceeded:
+	case runErr != nil && strings.Contains(runErr.Error(), "timed out"):
 		status = "timeout"
-		if runErr == nil {
-			runErr = fmt.Errorf("skill %s timed out after %ds", entry.Registration.ID, timeout)
-		}
 	case runErr != nil:
 		status = "error"
 	}
 
-	result := &core.ToolResult{
+	toolResult := &core.ToolResult{
 		Output: map[string]any{
-			"skill_id":    entry.Registration.ID,
-			"status":      status,
-			"output":      output,
-			"stdout":      stdoutText,
-			"stderr":      stderrText,
-			"exit_code":   exitCode,
-			"duration_ms": durationMS,
+			"skill_id":          entry.Registration.ID,
+			"status":            status,
+			"output":            output,
+			"stdout":            stdoutText,
+			"stderr":            stderrText,
+			"exit_code":         result.ExitCode,
+			"duration_ms":       result.FinishedAt.Sub(result.StartedAt).Milliseconds(),
+			"warnings":          append([]string(nil), result.Warnings...),
+			"execution_profile": prepared.Profile,
 		},
-		StartedAt:  startedAt,
-		FinishedAt: finishedAt,
+		StartedAt:  result.StartedAt,
+		FinishedAt: result.FinishedAt,
 	}
 	if runErr != nil {
-		result.Error = runErr.Error()
+		toolResult.Error = runErr.Error()
 	}
-	return result, runErr
-}
-
-func buildCommand(ctx context.Context, entry RegisteredSkill, payload []byte, args map[string]any) (*exec.Cmd, error) {
-	runtime := entry.Manifest.Runtime
-	commandPath := runtime.Command
-	if !filepath.IsAbs(commandPath) {
-		commandPath = filepath.Join(entry.Root, commandPath)
-	}
-	cwd := entry.Root
-	if runtime.Cwd != "" {
-		if filepath.IsAbs(runtime.Cwd) {
-			cwd = runtime.Cwd
-		} else {
-			cwd = filepath.Join(entry.Root, runtime.Cwd)
-		}
-	}
-
-	commandArgs := append([]string(nil), runtime.Args...)
-	if runtime.InputMode == InputModeArgs {
-		commandArgs = append(commandArgs, argsToFlags(args)...)
-	}
-
-	var cmd *exec.Cmd
-	switch runtime.Type {
-	case RuntimeTypeScript:
-		cmd = exec.CommandContext(ctx, "/bin/sh", append([]string{commandPath}, commandArgs...)...)
-	default:
-		cmd = exec.CommandContext(ctx, commandPath, commandArgs...)
-	}
-	cmd.Dir = cwd
-
-	switch runtime.InputMode {
-	case InputModeJSONStdin:
-		cmd.Stdin = bytes.NewReader(payload)
-	case InputModeEnv:
-		cmd.Env = append(os.Environ(), buildEnvArgs(payload, args)...)
-	default:
-		cmd.Env = os.Environ()
-	}
-	if runtime.InputMode != InputModeEnv {
-		cmd.Env = append(cmd.Env, "SKILL_INPUT_JSON="+string(payload))
-	}
-	return cmd, nil
+	return toolResult, runErr
 }
 
 func parseOutput(mode, stdout string) (map[string]any, error) {
@@ -245,64 +179,7 @@ func scalarString(value any) string {
 }
 
 func sanitizeOutput(input map[string]any) map[string]any {
-	output := map[string]any{}
-	for key, value := range input {
-		if isSensitiveKey(key) {
-			output[key] = "[REDACTED]"
-			continue
-		}
-		output[key] = sanitizeValue(value)
-	}
-	return output
-}
-
-func sanitizeValue(value any) any {
-	switch item := value.(type) {
-	case string:
-		return redactString(item)
-	case []any:
-		out := make([]any, 0, len(item))
-		for _, child := range item {
-			out = append(out, sanitizeValue(child))
-		}
-		return out
-	case map[string]any:
-		return sanitizeOutput(item)
-	default:
-		return value
-	}
-}
-
-func isSensitiveKey(key string) bool {
-	key = strings.ToLower(key)
-	return strings.Contains(key, "token") ||
-		strings.Contains(key, "password") ||
-		strings.Contains(key, "secret") ||
-		strings.Contains(key, "api_key") ||
-		strings.Contains(key, "apikey") ||
-		strings.Contains(key, "authorization") ||
-		strings.Contains(key, "cookie")
-}
-
-func redactString(value string) string {
-	out := value
-	for _, pattern := range redactionPatterns {
-		out = pattern.ReplaceAllStringFunc(out, func(match string) string {
-			parts := strings.SplitN(match, "=", 2)
-			if len(parts) == 2 {
-				return parts[0] + "=[REDACTED]"
-			}
-			parts = strings.SplitN(match, ":", 2)
-			if len(parts) == 2 {
-				return parts[0] + ":[REDACTED]"
-			}
-			if strings.HasPrefix(strings.ToLower(match), "bearer ") {
-				return "Bearer [REDACTED]"
-			}
-			return "[REDACTED]"
-		})
-	}
-	return out
+	return security.RedactMap(input)
 }
 
 func failedResult(skillID string, startedAt time.Time, durationMS int64, errMsg string) *core.ToolResult {
@@ -334,19 +211,4 @@ func truncate(value string, limit int) string {
 		return value
 	}
 	return value[:limit]
-}
-
-func exitCode(err error) int {
-	if err == nil {
-		return 0
-	}
-	var exitErr *exec.ExitError
-	if ok := errorAs(err, &exitErr); ok {
-		return exitErr.ExitCode()
-	}
-	return -1
-}
-
-func errorAs(err error, target interface{}) bool {
-	return errors.As(err, target)
 }

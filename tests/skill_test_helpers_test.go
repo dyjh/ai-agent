@@ -1,6 +1,8 @@
 package tests
 
 import (
+	"archive/zip"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,6 +15,7 @@ import (
 type skillFixtureOptions struct {
 	ID              string
 	Name            string
+	Version         string
 	Effects         []string
 	ApprovalDefault string
 	TimeoutSeconds  int
@@ -21,6 +24,8 @@ type skillFixtureOptions struct {
 	RuntimeType     string
 	Script          string
 	InputSchema     map[string]any
+	Permissions     skills.PermissionsConfig
+	SandboxProfile  string
 }
 
 func createSkillFixture(t *testing.T, opts skillFixtureOptions) string {
@@ -81,7 +86,7 @@ func createSkillFixture(t *testing.T, opts skillFixtureOptions) string {
 	manifest := skills.Manifest{
 		ID:          skillID,
 		Name:        name,
-		Version:     "1.0.0",
+		Version:     valueOrDefault(opts.Version, "1.0.0"),
 		Description: "fixture skill",
 		Runtime: skills.Runtime{
 			Type:           runtimeType,
@@ -93,8 +98,12 @@ func createSkillFixture(t *testing.T, opts skillFixtureOptions) string {
 		},
 		InputSchema: inputSchema,
 		Effects:     opts.Effects,
+		Permissions: opts.Permissions,
 		Approval: skills.ApprovalConfig{
 			Default: opts.ApprovalDefault,
+		},
+		Sandbox: skills.SandboxConfig{
+			Profile: opts.SandboxProfile,
 		},
 	}
 
@@ -107,4 +116,88 @@ func createSkillFixture(t *testing.T, opts skillFixtureOptions) string {
 	}
 
 	return root
+}
+
+func createSkillZipFromDir(t *testing.T, root string) string {
+	t.Helper()
+
+	zipPath := filepath.Join(t.TempDir(), "skill.zip")
+	file, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatalf("Create(zip) error = %v", err)
+	}
+	defer file.Close()
+
+	writer := zip.NewWriter(file)
+	err = filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if info.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		header, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return err
+		}
+		header.Name = filepath.ToSlash(rel)
+		header.Method = zip.Deflate
+		entry, err := writer.CreateHeader(header)
+		if err != nil {
+			return err
+		}
+		src, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer src.Close()
+		if _, err := io.Copy(entry, src); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Walk(zip) error = %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("Close(zip) error = %v", err)
+	}
+	return zipPath
+}
+
+func createZipWithEntries(t *testing.T, entries map[string]string) string {
+	t.Helper()
+
+	zipPath := filepath.Join(t.TempDir(), "entries.zip")
+	file, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatalf("Create(zip) error = %v", err)
+	}
+	defer file.Close()
+
+	writer := zip.NewWriter(file)
+	for name, body := range entries {
+		entry, err := writer.Create(name)
+		if err != nil {
+			t.Fatalf("Create(entry) error = %v", err)
+		}
+		if _, err := entry.Write([]byte(body)); err != nil {
+			t.Fatalf("Write(entry) error = %v", err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("Close(zip) error = %v", err)
+	}
+	return zipPath
+}
+
+func valueOrDefault(value, fallback string) string {
+	if value != "" {
+		return value
+	}
+	return fallback
 }

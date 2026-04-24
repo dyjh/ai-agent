@@ -48,6 +48,10 @@ func TestSwaggerRoutesAndSpec(t *testing.T) {
 		"/v1/health",
 		"/v1/conversations/{conversation_id}/messages",
 		"/v1/kbs/{kb_id}/search",
+		"/v1/skills/upload-zip",
+		"/v1/skills/{id}/manifest",
+		"/v1/skills/{id}/package",
+		"/v1/skills/{id}/validate",
 		"/v1/skills/{id}/run",
 		"/v1/mcp/servers/{id}/tools/{tool_name}/call",
 	} {

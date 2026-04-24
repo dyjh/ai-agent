@@ -1,0 +1,627 @@
+我按你指定的 **commit `351acf04e33bbaa161acc257a13d086b455b95f4`** 看了最新仓库状态。这个版本里，项目已经不是 Phase 11 未完成，而是进入了 **`production_ready_mvp`**；`current_task_id` 已切到 **`post-mvp-phase-a-durable-workflow`**，并且任务进度是 **12/12 已完成**。同时，`Runtime` 已正式实现 `AgentWorkflow`，`PersistentRunStateStore` 也已经接进 bootstrap，默认 `MaxWorkflowSteps=6`，说明 durable workflow / multi-step loop 已经做完第一阶段。README 和 task.json 现在都把后续真正还没做完的重点写成：**Skill zip 上传、执行沙箱、更细粒度权限隔离**，以及更广的 MCP 方言兼容矩阵。([GitHub][1])
+
+所以，基于这个 commit，**“再下一步”最值得做的就是：Skill ZIP Upload + Sandbox Execution + Permission Isolation**。当前 README 已明确：Skill Runtime 已支持本地 `skill.yaml` + `executable/script` 执行和 `POST /v1/skills/{id}/run`，但 **zip 解包、运行时沙箱和更细粒度权限隔离仍待继续收口**。([GitHub][2])
+
+下面这版可以直接给 Codex。
+
+````text
+你是一个资深 Go 后端工程师、CloudWeGo Eino Agent 架构师、系统安全工程师、本地执行隔离工程师和 API 文档工程师。请在当前仓库 dyjh/ai-agent 中继续开发，不要推倒重写，只在现有 production-ready MVP 和已完成的 durable workflow 基础上，实现下一个 post-MVP backlog 主题：
+
+Post-MVP Phase B — Skill ZIP Upload, Sandbox Execution, Permission Isolation
+
+开始前必须先做：
+
+1. 阅读 README.md
+2. 阅读 task.json
+3. 阅读 AGENTS.md
+4. 实际检查代码，而不是只信 README/task.json，重点检查：
+   - internal/tools/skills/manager.go
+   - internal/tools/skills/manifest.go
+   - internal/tools/skills/runner.go
+   - internal/tools/skills/schemas.go
+   - internal/agent/effect_inference.go
+   - internal/agent/policy.go
+   - internal/tools/router.go
+   - internal/api/handlers/skills.go
+   - internal/api/router.go
+   - internal/security/
+   - tests/ 下与 skills / policy / approval / api 相关测试
+   - docs/openapi.json
+   - cmd/openapi/
+   - Makefile
+5. 全局搜索：
+   - skill.run
+   - skill.yaml
+   - executable
+   - script
+   - permissions
+   - sandbox
+   - zip
+   - upload
+   - swagger
+   - @Tags
+   - @Router
+   - TODO
+   - placeholder
+6. 先输出：
+   - 当前 Skill runtime / 上传 / 权限隔离 / swagger 相关问题列表
+   - 你准备修改的文件列表
+   - 你的实现顺序
+7. 然后再开始逐步修改代码
+
+==================================================
+当前背景（必须承认，不要回退）
+==================================================
+
+本仓库当前不是未完成草稿，而是 production-ready MVP + post-MVP Phase A 已完成：
+
+- 主链路 ToolProposal -> EffectInference -> PolicyEngine -> ApprovalCenter -> Executor 已完成
+- kb.search / skill.run / mcp.call_tool 已打通
+- Eino Workflow / HITL interrupt-resume 已完成基础版
+- durable workflow state / step-based loop / /v1/runs* API 已完成
+- Swagger/OpenAPI、KB feature gate、USE_KONWAGE_BASE / KONWAGE_BASE_PROVIDER 已完成
+
+不要回退这些能力，不要把 skill.run 再改回 placeholder。
+
+==================================================
+本阶段总目标
+==================================================
+
+完成以下 7 件事：
+
+1. 为 Skill 增加 ZIP 上传与解包安装能力
+2. 引入统一的 SandboxRunner / ExecutionProfile 抽象
+3. 对 Skill 执行增加更细粒度权限隔离与运行前校验
+4. 保持 skill.run 仍走 ToolRouter -> EffectInference -> PolicyEngine -> ApprovalCenter -> Executor
+5. 增加 Skill 管理、查看、校验、安装、运行、卸载的 API/CLI
+6. 如果本次修改了 API/DTO/路由，必须同步补 swag 注释并重新生成 Swagger/OpenAPI 文档
+7. 补齐测试、README、Swagger、task.json，把这项纳入 post-MVP backlog 已完成项
+
+==================================================
+必须遵守的架构约束
+==================================================
+
+1. 不要引入租户、多用户、RBAC、云端 SaaS 逻辑
+2. 本项目仍然是单用户本地部署
+3. 不要让 LLM / Eino Tool 直接执行 skill 包内容
+4. 模型仍然不能直接操作外部世界
+5. Skill 最终执行仍必须经过：
+   ToolProposal -> EffectInference -> PolicyEngine -> ApprovalCenter(需要时) -> Skill Executor
+6. approval 后只能执行 approval.input_snapshot
+7. 不要因为加入 zip 上传而绕过 manifest 校验
+8. 不要直接解压到任意目录，必须防止 Zip Slip / path traversal
+9. 不要泄露 secret、token、cookie、私钥、.env 正文到日志、messages、JSONL、agent_events、Swagger 示例
+10. 不要让 README 或 Swagger 领先于实现
+11. 不要破坏当前 skill.run 对本地 manifest 目录的兼容路径
+12. 不要回退现有 KB feature gate、MCP runtime、durable workflow、run APIs、Swagger 路由
+
+==================================================
+本阶段要解决的真实问题
+==================================================
+
+当前 README 已明确：
+
+- Skill Runtime 已支持本地 manifest + executable/script 执行
+- 但 zip 上传、运行时沙箱和更细粒度权限隔离仍待继续收口
+
+本阶段重点不是“让 Skill 更能跑”，而是：
+
+- 更安全地分发 Skill
+- 更安全地安装 Skill
+- 更安全地运行 Skill
+- 更明确地限制 Skill 能读什么、写什么、联网什么、调哪些本地能力
+
+==================================================
+任务 1：增加 Skill ZIP 上传与安装流程
+==================================================
+
+请在现有 skill 管理基础上，增加 ZIP 上传与安装能力。
+
+目标：
+
+1. 支持通过 API 上传 zip 包
+2. 解压到受控目录，例如：
+   - skills/packages/<skill-id>/<version>/
+   - 或等价安全目录
+3. 校验 skill.yaml
+4. 更新 registry
+5. 成功后可被 manager 发现和运行
+
+新增能力建议：
+
+- `POST /v1/skills/upload-zip`
+- 或复用现有 upload，但必须明确支持 multipart zip
+
+要求：
+
+1. Zip 解压前做安全检查：
+   - 防止 path traversal
+   - 防止 zip slip
+   - 限制文件数量
+   - 限制总解压大小
+   - 限制单文件大小
+2. 解压后必须找到：
+   - skill.yaml
+3. manifest 校验通过后才注册
+4. 记录：
+   - skill id
+   - version
+   - source type = zip
+   - checksum（建议 sha256）
+   - installed_at
+5. 同一个 skill id + version 重复安装的行为要明确：
+   - 可以拒绝
+   - 或 allow overwrite with force flag
+   - 但必须一致、可测试
+6. 上传失败时要清理临时目录
+7. 不要在上传阶段直接运行 skill
+
+建议新增：
+
+```go
+type SkillPackageInfo struct {
+    SkillID      string
+    Version      string
+    SourceType   string
+    PackagePath  string
+    Checksum     string
+    InstalledAt  time.Time
+}
+````
+
+==================================================
+任务 2：扩展 Skill manifest，增加 sandbox / isolation / permissions
+===========================================================
+
+请在现有 skill.yaml 基础上扩展以下语义。
+
+建议 manifest：
+
+```yaml
+id: cpu_analyzer
+name: CPU Analyzer
+version: 1.0.0
+description: Analyze local CPU and process information.
+
+runtime:
+  type: executable # executable | script
+  command: ./bin/cpu_analyzer
+  args: []
+  cwd: .
+  input_mode: json_stdin
+  output_mode: json_stdout
+  timeout_seconds: 30
+
+effects:
+  - process.read
+  - system.metrics.read
+
+approval:
+  default: auto
+
+permissions:
+  filesystem:
+    read:
+      - ./workspace
+      - ./logs
+    write: []
+  network:
+    enabled: false
+    allow_hosts: []
+  env:
+    allow:
+      - LANG
+  tools:
+    allow_shell: false
+    allow_mcp: false
+  process:
+    max_runtime_seconds: 30
+    max_output_bytes: 1048576
+
+sandbox:
+  profile: restricted # restricted | trusted_local | best_effort_local
+```
+
+要求：
+
+1. 兼容旧 manifest，给出合理默认值
+2. 缺失 permissions 时采用最保守默认：
+
+   * no network
+   * no write
+   * minimal env
+3. `effects` 和 `permissions` 不是一回事：
+
+   * effects 决定 Policy / Approval
+   * permissions 决定执行期允许的行为
+4. manifest 校验必须覆盖：
+
+   * sandbox.profile 合法值
+   * path 列表格式
+   * timeout / output 限制
+   * network allow_hosts 格式
+5. README 和 Swagger 示例需要同步更新 manifest 结构
+
+==================================================
+任务 3：引入 SandboxRunner / ExecutionProfile 抽象
+===========================================
+
+请不要把 runner 继续做成“直接 exec 就完了”。
+
+新增一个抽象层，例如：
+
+```go
+type ExecutionProfile struct {
+    SandboxProfile    string
+    AllowedReadPaths  []string
+    AllowedWritePaths []string
+    NetworkEnabled    bool
+    AllowedHosts      []string
+    AllowedEnv        []string
+    TimeoutSeconds    int
+    MaxOutputBytes    int64
+}
+
+type SandboxRunner interface {
+    Run(ctx context.Context, req SandboxRequest) (*SandboxResult, error)
+}
+```
+
+其中：
+
+```go
+type SandboxRequest struct {
+    Command     string
+    Args        []string
+    CWD         string
+    Env         map[string]string
+    Stdin       []byte
+    Profile     ExecutionProfile
+}
+```
+
+要求：
+
+1. 当前阶段不要求做重量级容器沙箱，但要有统一抽象
+2. 默认先实现一个 `LocalRestrictedRunner`
+3. `LocalRestrictedRunner` 至少做到：
+
+   * timeout
+   * max output bytes
+   * env allowlist
+   * cwd 限制
+   * 可执行文件路径校验
+   * 受控 read/write path 检查（尽可能在运行前校验 + 明确限制）
+4. 如果某些文件系统/网络限制在本阶段不能完全做到 OS 级隔离：
+
+   * 必须在 README 明确说明
+   * 代码中保留清晰的 SandboxRunner 扩展点
+5. 不要假装做到了强隔离而实际只是普通 exec
+
+==================================================
+任务 4：将 permissions enforcement 接入 SkillRunner
+=============================================
+
+请把 manifest.permissions 真正用起来，而不只是解析后放着。
+
+要求：
+
+1. SkillRunner 在执行前：
+
+   * 校验 runtime.command 路径是否在允许范围
+   * 校验 cwd
+   * 组装受限 env
+   * 组装 ExecutionProfile
+2. 如果 manifest 声明：
+
+   * network.enabled=false
+   * 本阶段若无法 OS 级完全阻断，必须：
+
+     * 记录 warning
+     * 将 sandbox.profile 标记为 best_effort
+     * README 明确说明
+3. 如果 manifest 声明 write path，但 skill 运行输入或配置超出范围：
+
+   * 拒绝执行
+4. 如果 skill 需要 shell / mcp / network / write：
+
+   * effects 和 policy 必须匹配
+   * 不允许 manifest.permissions 比 policy 更宽松
+5. 执行结果仍要经过脱敏与结构化输出
+
+==================================================
+任务 5：对 Skill API 和 CLI 做增强
+==========================
+
+请在现有 Skill API 基础上补强：
+
+至少新增或完善：
+
+* `POST /v1/skills/upload-zip`
+* `GET /v1/skills/{id}/manifest`
+* `GET /v1/skills/{id}/package`
+* `DELETE /v1/skills/{id}` 或 uninstall
+* `POST /v1/skills/{id}/validate`
+* `POST /v1/skills/{id}/run`
+
+要求：
+
+1. upload-zip：
+
+   * multipart/form-data
+   * 明确响应 skill id / version / installed path / checksum
+2. validate：
+
+   * 校验 manifest、permissions、runtime 路径
+   * 不真正执行 skill
+3. package：
+
+   * 返回 package metadata，不返回完整 zip 内容
+4. uninstall：
+
+   * 禁用或删除已安装 package
+   * 行为必须明确、可测试
+5. run：
+
+   * 继续走 ToolRouter，不得绕过
+
+CLI 至少新增：
+
+* `agent skills install <zip_path>`
+* `agent skills validate <skill_id>`
+* `agent skills manifest <skill_id>`
+* `agent skills remove <skill_id>`
+
+并保持现有 list/enable/disable/test/run 不回退。
+
+==================================================
+任务 6：补更细粒度的 Skill Policy / Approval 映射
+======================================
+
+请进一步强化 Skill 的 effect -> approval 映射。
+
+要求：
+
+1. 如果 permissions 包含写路径或 network.enabled=true，但 effects 仍声明为纯 read：
+
+   * 视为 manifest 不一致
+   * validate 失败，或至少 warning + require approval
+2. 如果 sandbox.profile=trusted_local：
+
+   * 不能自动提升权限
+   * 仍必须服从 policy
+3. `approval.default=require` 仍优先要求审批
+4. unknown effects 仍默认审批
+5. 只读高置信 skill 仍可自动执行
+
+建议增加 manifest consistency 校验：
+
+* permissions.network.enabled=true 但 effects 没有 network.*
+* write paths 非空但 effects 没有 fs.write / code.modify / config.modify
+* tools.allow_shell=true 但 effects 没有与 shell 行为相关声明
+
+不要求过度智能，但要尽可能防止明显不一致。
+
+==================================================
+任务 7：Swagger / swag 注释同步要求
+==========================
+
+如果本次修改涉及以下任何内容：
+
+* 新增 HTTP API
+* 修改已有 API 的 request / response DTO
+* 修改路由
+* 修改错误响应格式
+* 新增 Skill zip / validate / manifest / package / uninstall 相关接口
+
+则必须同步完成以下事情：
+
+1. 为相关 handler 增加或更新 swag 注释。
+2. 注释风格参考下面这个格式，不要写成散乱注释：
+
+```go
+// GetCabinetCanUseGateway 获取机柜可用网关
+// @Tags 机柜管理
+// @Summary 获取机柜可用网关
+// @accept application/json
+// @Produce application/json
+// @Param data query physicalServerReq.GetCabinetCanUseGateway true "查询参数"
+// @Success 200 {object} response.Response{data=[]physicalServerRes.CabinetCanUseGatewayItem,msg=string} "获取成功"
+// @Router /cabinet/getCabinetCanUseGateway [get]
+```
+
+3. 在本项目中，按实际 API 改写成对应的：
+
+   * @Tags
+   * @Summary
+   * @Accept
+   * @Produce
+   * @Param
+   * @Success
+   * @Failure
+   * @Router
+
+4. 为错误响应补清楚：
+
+   * invalid_request
+   * not_found
+   * feature_disabled（如适用）
+   * approval_required（如适用）
+   * internal_error
+   * validation_failed
+
+5. 重新生成 swag / OpenAPI 文档。
+
+   * 优先使用项目现有命令
+   * 如果仓库已有 `make swagger`，就直接用它
+   * 不要手工改 docs 产物替代生成步骤
+
+6. 确保以下路径继续可用：
+
+   * `/swagger/index.html`
+   * `/swagger/doc.json`
+
+7. 如果本次没有改动 HTTP API / DTO / 路由，可以不重写 swag 注释；
+   但如果改了 API，就必须重新生成文档。
+
+==================================================
+任务 8：测试
+=======
+
+请至少新增或补齐以下测试。
+
+1. skill_zip_upload_test.go
+
+   * zip 成功安装
+   * 缺少 skill.yaml 失败
+   * zip slip / path traversal 拒绝
+   * checksum 记录成功
+   * 重复版本安装策略正确
+
+2. skill_manifest_permissions_test.go
+
+   * 默认 permissions 最保守
+   * invalid sandbox/profile 报错
+   * write path / network / effects 不一致时报错或强警告
+
+3. sandbox_runner_test.go
+
+   * timeout 生效
+   * max output bytes 生效
+   * env allowlist 生效
+   * 非法 cwd / command 被拒绝
+   * 输出脱敏
+
+4. skill_policy_integration_test.go
+
+   * read-only skill auto execute
+   * write skill require approval
+   * approval 后只执行 snapshot
+   * 不一致 manifest 导致 validate/run 失败
+
+5. skill_api_test.go
+
+   * upload-zip
+   * validate
+   * manifest
+   * remove/uninstall
+   * run
+
+6. 如果本次修改了 HTTP API：
+
+   * 补 Swagger/OpenAPI 路由测试
+   * 验证文档中包含新增/修改的 Skill 接口
+
+要求：
+
+* 默认 `go test ./...` 不依赖外部服务
+* 可以用临时目录构造 fake zip
+* 不要删除现有安全测试
+
+==================================================
+任务 9：README / task.json / post-MVP backlog 收口
+=============================================
+
+README 需要补充：
+
+1. Skill zip 上传方式
+2. manifest 新字段说明
+3. sandbox/profile 说明
+4. permissions 说明
+5. 当前隔离能力的真实边界
+6. 已知限制：
+
+   * 当前是否仅 best-effort 限制
+   * 哪些能力仍不是 OS 级硬隔离
+
+task.json 需要更新：
+
+* overall_status 保持 production_ready_mvp
+* current_task_id 保持 post-mvp-backlog 或切到更细的 backlog 子项
+* 新增一个 backlog 记录，例如：
+
+  * skill-package-sandbox-hardening
+* unfinished_overview 更新为新的剩余项，例如：
+
+  * 更广 MCP 方言兼容矩阵
+  * 更强 OS 级沙箱
+  * 更复杂 graph / branch / parallel workflow（如果仍未覆盖）
+
+如果 task.json 当前没有 backlog 结构，可以新增一个 post_mvp_backlog 数组，但要保持风格一致、可读、可扩展。
+
+==================================================
+建议实现顺序
+======
+
+请严格按这个顺序推进：
+
+1. 检查现有 Skill runtime / API / tests
+2. 设计 zip install 流程与 package metadata
+3. 扩展 manifest schema 与 validation
+4. 引入 SandboxRunner 抽象
+5. 接入 SkillRunner permissions enforcement
+6. 增强 Skill API / CLI
+7. 如有 API 变更，则补 swag 注释并重新生成 swagger
+8. 补测试
+9. gofmt
+10. go test ./...
+11. 更新 Swagger / README / task.json
+
+==================================================
+验收标准
+====
+
+完成后必须满足：
+
+1. 支持 Skill ZIP 上传并安全安装
+2. zip 解压防 zip slip / path traversal
+3. Skill manifest 支持 permissions / sandbox 并真正校验
+4. SkillRunner 使用 SandboxRunner / ExecutionProfile
+5. skill.run 仍走 ToolRouter / Policy / Approval
+6. 更细粒度 permissions 真正参与执行前判断
+7. API / CLI 增强可用
+8. 如果本次改了 API，swag 注释已更新，Swagger/OpenAPI 已重新生成
+9. `/swagger/index.html` 和 `/swagger/doc.json` 仍可访问
+10. `go test ./...` 通过
+11. README / task.json 与实现一致
+12. 没有新增绕过 ToolRouter / Policy / Approval 的路径
+
+==================================================
+特别注意
+====
+
+* 不要把“普通 exec + timeout”包装成强沙箱后在 README 里夸大
+* 不要让 zip 上传后自动执行
+* 不要让 manifest.permissions 成为摆设
+* 不要泄露安装包内容中的敏感配置
+* 不要回退现有 Skill Runtime、Swagger、KB feature gate、MCP runtime、durable workflow
+* 不要引入租户、多用户、RBAC
+
+现在开始执行。
+
+先输出：
+
+1. 当前 Skill ZIP / Sandbox / Permissions 相关问题列表
+2. 计划修改的文件列表
+3. 实现顺序
+
+然后再开始逐步修改，最后给出：
+
+* 测试结果
+* 新增 Skill 安装/校验 API 摘要
+* Sandbox 设计摘要
+* 如果有 API 变更，Swagger 注释与文档更新摘要
+* README 更新摘要
+* task.json 更新摘要
+
+```
+
+这版是按 **commit `351acf...`** 的真实状态写的：它默认 durable workflow 已完成，剩余 backlog 里最明确的一块就是 **Skill zip 上传、执行沙箱和更细粒度权限隔离**，同时保留了你要求的 **swag 注释风格参考** 和 **改 API 就重生 Swagger/OpenAPI 文档** 的要求。:contentReference[oaicite:2]{index=2}
+
+如果你还要，我下一条可以继续给你 **“再再下一步”**：  
+**更广的 MCP 方言兼容矩阵 + transport conformance 测试**。
+::contentReference[oaicite:3]{index=3}
+```
+
+[1]: https://raw.githubusercontent.com/dyjh/ai-agent/351acf04e33bbaa161acc257a13d086b455b95f4/task.json "raw.githubusercontent.com"
+[2]: https://raw.githubusercontent.com/dyjh/ai-agent/351acf04e33bbaa161acc257a13d086b455b95f4/README.md "raw.githubusercontent.com"
