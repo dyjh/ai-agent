@@ -1,16 +1,17 @@
 {
   "project": "local-agent",
-  "source": "promote.txt",
-  "last_updated": "2026-04-24T17:30:00+08:00",
-  "overall_status": "production_ready_mvp",
-  "current_task_id": "mcp-compatibility-conformance-matrix",
-  "current_task_title": "Post-MVP Phase C3: MCP Compatibility Matrix and Conformance Testing",
+  "source": "promote-stage11.txt",
+  "last_updated": "2026-04-24T18:20:00+08:00",
+  "overall_status": "post_mvp_full_agent_in_progress",
+  "current_task_id": "full-agent-code-capability",
+  "current_task_title": "Phase F1: Code Capability Loop (F1-A/F1-B)",
   "summary": {
-    "headline": "MVP 主链路保持稳定，并已完成 durable workflow、Skill sandbox hardening，以及 MCP compatibility/conformance matrix。",
+    "headline": "MVP 主链路保持稳定，已完成 F0 状态治理，并开始推进全能型本地 Agent 的代码能力闭环。",
     "progress": {
-      "completed": 15,
-      "pending": 0,
-      "total": 15
+      "completed": 16,
+      "in_progress": 1,
+      "pending": 6,
+      "total": 23
     },
     "verified": [
       "2026-04-23 已检查仓库结构，HTTP API / WebSocket / CLI / memory / kb / skills / mcp / tests 均已存在。",
@@ -24,13 +25,16 @@
       "2026-04-24 已完成 Post-MVP Phase A：agent_runs / agent_run_steps 持久化、step-based workflow loop、/v1/runs* API、CLI runs 命令、跨重启 resume 测试，并再次确认 go test ./... 通过。",
       "2026-04-24 已完成 Post-MVP Phase B：Skill ZIP 安装、安全解包、package metadata、SandboxRunner/LocalRestrictedRunner、permissions preflight enforcement、Skill API/CLI 扩展、OpenAPI 更新和对应测试，并再次确认 go test ./... 通过。",
       "2026-04-24 已完成 Post-MVP Phase C1+C2：SandboxProfile/ExecutionProfile/runner selection 重构、LinuxIsolatedRunner、sandbox fallback -> approval 收紧、Skill validate 审计信息扩展、Swagger/README/task.json 收口，并再次确认 go test ./... 通过。",
-      "2026-04-24 已完成 Post-MVP Phase C3：MCP dialect / compatibility profile、transport decode 兼容层、结构化 MCP error code、conformance matrix 测试、README/task.json 收口，并再次确认 go test ./... 通过。"
+      "2026-04-24 已完成 Post-MVP Phase C3：MCP dialect / compatibility profile、transport decode 兼容层、结构化 MCP error code、conformance matrix 测试、README/task.json 收口，并再次确认 go test ./... 通过。",
+      "2026-04-24 已完成 Phase F0：README/task.json 对齐全能型 Agent 路线图，确认 Swagger/OpenAPI 与 router 现有 HTTP 路由保持一致。",
+      "2026-04-24 已完成 Phase F1-A/F1-B 首轮：补齐 code.list_files / search_text / search_symbol / inspect_project / detect_language / detect_test_command / explain_diff，强化 code.propose_patch / code.apply_patch 的 diff preview、hash guard、敏感路径审批和失败回滚，并确认 go test ./... 通过。"
     ],
     "unfinished_overview": [
       "当前 step loop 已覆盖本地单用户可恢复多步任务，但仍不是无限自动规划的通用 graph 平台。",
       "无 PostgreSQL 时仍回退到内存仓储，run/step 无法跨进程恢复。",
       "当前 LinuxIsolatedRunner 已提供 namespace/chroot 优先的 stronger path，但 seccomp、cgroup、host allowlist、bind mount rootfs 和动态依赖自动封装仍属于 post-MVP backlog。",
       "MCP runtime 已有 stdio/http compatibility profile 和默认 conformance matrix，但 SSE、流式结果、capability negotiation 和真实外部 server 集成矩阵仍属于后续 backlog。",
+      "Code Workspace 已覆盖读/搜/项目检测和审批后 patch apply，但 Git workflow、测试执行、失败解析和自动修复循环仍属于 F1 后续 backlog。",
       "更复杂的 graph/branch/parallel workflow 仍属于后续 backlog。"
     ]
   },
@@ -330,6 +334,110 @@
         "Transport-level decode compatibility layer",
         "MCP conformance matrix tests"
       ]
+    },
+    {
+      "id": "full-agent-governance-alignment",
+      "title": "Phase F0: Governance and Current-State Alignment",
+      "status": "completed",
+      "completed_items": [
+        "将 task.json 的 current_task_id 从已完成的 MCP C3 切换到全能型 Agent 代码能力阶段。",
+        "在 README 中新增全能型 Agent 路线图，并同步当前 code workspace / patch 能力边界。",
+        "核对 router 与 docs/openapi.json 现有 HTTP routes，未发现需要本轮新增 Swagger route 的 API 变更。",
+        "确认本轮变更没有绕过 ToolRouter / EffectInference / PolicyEngine / ApprovalCenter / Executor 主链路。"
+      ],
+      "remaining_items": [
+        "后续阶段如新增 HTTP API，仍需补 swag 注释并执行 make swagger。"
+      ],
+      "deliverables": [
+        "README 全能型 Agent 路线图",
+        "task.json post-MVP full-agent backlog",
+        "当前任务指针切换到 F1"
+      ]
+    },
+    {
+      "id": "full-agent-code-capability",
+      "title": "Phase F1: Code Capability Loop",
+      "status": "in_progress",
+      "completed_items": [
+        "补齐 code.list_files、code.search_text、code.search_symbol、code.inspect_project、code.detect_language、code.detect_test_command 和 code.explain_diff ToolSpec / executor。",
+        "保留 code.search 作为 code.search_text 的兼容 alias。",
+        "修正 Workspace path resolution，使用绝对 workspace root 和 filepath.Rel 防止路径逃逸。",
+        "code.search_text 默认跳过敏感文件；include_sensitive=true 或直接读取敏感路径会被 EffectInference 标记为 sensitive_read 并要求审批。",
+        "code.propose_patch 生成 diff preview、changed files、old/new sha256 和 expected_sha256，不写文件。",
+        "code.apply_patch 支持单文件和多文件 full-file replacement，必须审批，执行时支持 expected_sha256 基线校验、原子写入和失败回滚。",
+        "新增 code workspace / patch / sensitive inference / approval snapshot 测试，并确认 go test ./... 通过。"
+      ],
+      "remaining_items": [
+        "实现 code.run_tests、code.parse_test_failure 和一次失败修复循环。",
+        "实现 git.status / git.diff / git.log 的只读工具，以及 git.add / git.commit / git.restore / git.clean 的审批工具。",
+        "将 patch 系统升级为更完整的 unified diff parser / validator / conflict detection。",
+        "让 planner 更稳定地使用 code tools 完成真实代码任务，而不是依赖简单启发式 intent。"
+      ],
+      "deliverables": [
+        "Code workspace read/search/project inspection tools",
+        "Patch proposal / approval / apply 基线",
+        "敏感路径审批和 patch snapshot 测试"
+      ]
+    },
+    {
+      "id": "full-agent-ops-capability",
+      "title": "Phase F2: Ops Capability Loop",
+      "status": "pending",
+      "deliverables": [
+        "Host profile",
+        "Ops tools",
+        "Runbook and rollback plan"
+      ]
+    },
+    {
+      "id": "full-agent-rag-reliability",
+      "title": "Phase F3: RAG Reliability",
+      "status": "pending",
+      "deliverables": [
+        "Knowledge connectors",
+        "Incremental indexing",
+        "Hybrid search / rerank / citations / RAG eval"
+      ]
+    },
+    {
+      "id": "full-agent-memory-governance",
+      "title": "Phase F4: Memory Governance",
+      "status": "pending",
+      "deliverables": [
+        "Memory classification",
+        "Memory review/edit/delete",
+        "Sensitive memory write prevention"
+      ]
+    },
+    {
+      "id": "full-agent-security-policy",
+      "title": "Phase F5: Security Policy and Secret Guard",
+      "status": "pending",
+      "deliverables": [
+        "Secret guard",
+        "Policy explanations",
+        "Expanded command/resource analysis"
+      ]
+    },
+    {
+      "id": "full-agent-eval-replay",
+      "title": "Phase F6: Eval and Replay",
+      "status": "pending",
+      "deliverables": [
+        "Run replay",
+        "Golden task suites",
+        "Safety regression tests"
+      ]
+    },
+    {
+      "id": "full-agent-ui-tui",
+      "title": "Phase F7: Web UI / TUI",
+      "status": "pending",
+      "deliverables": [
+        "Approval center UI",
+        "Run timeline",
+        "Memory / KB / code / ops views"
+      ]
     }
   ],
   "change_log": [
@@ -397,6 +505,11 @@
       "at": "2026-04-24T17:30:00+08:00",
       "task_id": "mcp-compatibility-conformance-matrix",
       "summary": "完成 MCP dialect / compatibility profile、transport decode 兼容层、结构化错误映射、conformance matrix 测试、README/task.json 更新和对应验证。"
+    },
+    {
+      "at": "2026-04-24T18:20:00+08:00",
+      "task_id": "full-agent-code-capability",
+      "summary": "完成 F0 路线图治理和 F1-A/F1-B 首轮代码能力：code workspace 读/搜/项目检测工具、patch proposal/apply、敏感路径审批、hash guard、失败回滚、README/task.json 更新和 go test ./... 验证。"
     }
   ]
 }

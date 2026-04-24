@@ -1,0 +1,941 @@
+下面是一版可以直接复制给 Codex 的**总路线提示词**，目标是把当前项目从“production-ready MVP / post-MVP 平台雏形”继续推进到更完整的全能型本地 Agent：**聊天、知识问答、运维、写代码** 四条能力闭环都成型。
+
+````text
+你是一个资深 Go 后端工程师、CloudWeGo Eino Agent 架构师、RAG 工程师、代码 Agent 工程师、运维自动化工程师、系统安全工程师、测试平台工程师和 API 文档工程师。
+
+请在当前仓库 dyjh/ai-agent 中继续开发，不要推倒重写，只在现有 production-ready MVP 和已完成 post-MVP 能力基础上，推进“全能型本地 Agent”路线。
+
+目标不是重新做一个新项目，而是把现有系统逐步增强为可长期使用的本地 Agent 平台，覆盖：
+
+1. 日常聊天
+2. 本地知识问答
+3. 运维排障与安全执行
+4. 代码阅读、修改、测试、修复闭环
+5. 长期记忆治理
+6. 安全策略、沙箱、审批、审计
+7. 评测与回放
+8. Web UI / TUI 用户体验
+
+==================================================
+开始前必须做
+==================================================
+
+先阅读并检查：
+
+1. README.md
+2. task.json
+3. AGENTS.md
+4. .env.example
+5. config/
+6. docs/openapi.json
+7. Makefile
+8. internal/agent/
+9. internal/einoapp/
+10. internal/tools/
+11. internal/api/
+12. internal/db/
+13. internal/events/
+14. tests/
+
+重点检查当前已有能力：
+
+- ToolProposal -> EffectInference -> PolicyEngine -> ApprovalCenter -> Executor 主链路
+- Eino Workflow / HITL / Resume
+- Durable RunState / RunStep
+- KB / Qdrant / Markdown Memory
+- Skill ZIP / Sandbox / permissions
+- MCP runtime / compatibility matrix
+- Shell executor / approval snapshot
+- Swagger/OpenAPI
+- CLI
+- WebSocket
+- JSONL / agent_events
+- tests/
+
+先输出：
+
+1. 当前能力基线摘要
+2. 已完成能力列表
+3. 仍未完成或不够完善的能力列表
+4. 你准备执行的阶段计划
+5. 本次优先实现的阶段
+6. 计划修改的文件列表
+
+然后再开始修改代码。
+
+==================================================
+绝对不能破坏的既有原则
+==================================================
+
+1. 不要引入租户、多用户、RBAC、云端 SaaS 假设。
+2. 本系统仍是单用户本地部署。
+3. 模型不能直接操作外部世界。
+4. LLM / Eino Tool 只能生成结构化 ToolProposal。
+5. 所有外部动作必须继续经过：
+
+   ToolProposal
+   -> EffectInference
+   -> PolicyEngine
+   -> ApprovalCenter（需要时）
+   -> Executor
+
+6. 只读高置信操作可以自动执行。
+7. 写操作、安装依赖、敏感读取、危险操作、网络写入、unknown.effect、低置信操作必须审批。
+8. approval 后只能执行 approval.input_snapshot。
+9. Resume 时不能重新规划替换已审批 input_snapshot。
+10. 不要让 HTTP handler / WebSocket handler / CLI 直接绕过 workflow 或 ToolRouter。
+11. 不要把 secret、token、cookie、私钥、.env 正文写进：
+    - messages
+    - JSONL
+    - agent_events
+    - Markdown memory
+    - Qdrant payload
+    - Swagger 示例
+12. Qdrant 仍只是索引，不是事实源。
+13. Markdown Memory 仍是长期记忆事实源。
+14. 如果新增或修改 API，必须补 swag 注释并重新生成 Swagger/OpenAPI。
+15. README、task.json、Swagger 不允许领先于实际实现。
+16. 不要回退已有 KB / Skill / MCP / Workflow / Sandbox / Swagger 能力。
+
+==================================================
+整体目标：全能型 Agent 完成标准
+==================================================
+
+最终希望系统能稳定完成四类任务：
+
+一、聊天：
+- 能自然多轮对话
+- 能使用长期记忆
+- 能区分用户偏好、项目记忆、操作经验和临时上下文
+- 不乱记敏感信息
+- 用户可以查看、编辑、删除记忆
+
+二、问答：
+- 能基于本地知识库可靠回答
+- 支持引用来源
+- 支持增量索引
+- 支持混合检索、rerank
+- 支持“只基于知识库回答”
+- 知识库内容不能覆盖系统规则
+
+三、运维：
+- 能执行安全的只读排查
+- 写操作、高危操作需要审批
+- 支持 local / SSH / Docker / Kubernetes 等 host profile
+- 支持 runbook
+- 支持 rollback plan
+- 不泄露凭证
+
+四、写代码：
+- 能读仓库
+- 能搜索代码
+- 能理解依赖和测试命令
+- 能生成 patch
+- 审批后 apply patch
+- 能运行测试
+- 能根据测试失败继续修复
+- 能总结 diff / commit message / PR summary
+
+==================================================
+路线总览
+==================================================
+
+请按阶段推进，不要一次性做完所有内容。
+
+推荐阶段：
+
+Phase F0：治理与当前状态对齐
+Phase F1：代码能力闭环
+Phase F2：运维能力闭环
+Phase F3：RAG 可靠性增强
+Phase F4：长期记忆治理
+Phase F5：安全策略与 Secret Guard
+Phase F6：评测与回放系统
+Phase F7：Web UI / TUI 用户体验
+
+每个阶段完成后都必须：
+
+1. gofmt
+2. go test ./...
+3. 如修改 API，执行 make swagger 或现有 swagger 生成命令
+4. 更新 README.md
+5. 更新 task.json
+6. 确认没有新增绕过 ToolRouter / Policy / Approval 的路径
+7. 确认 Swagger 与实际 API 一致
+8. 确认日志和事件脱敏
+
+==================================================
+Phase F0：治理与当前状态对齐
+==================================================
+
+目标：
+
+把 README、task.json、Swagger、代码状态统一起来，为后续大阶段打基础。
+
+任务：
+
+1. 检查 task.json 当前 current_task_id 是否仍指向已完成项。
+2. 新增 full-agent roadmap 或 post_mvp_full_agent_backlog。
+3. 将后续阶段列入 task.json，例如：
+
+   - full-agent-code-capability
+   - full-agent-ops-capability
+   - full-agent-rag-reliability
+   - full-agent-memory-governance
+   - full-agent-security-policy
+   - full-agent-eval-replay
+   - full-agent-ui-tui
+
+4. 清理 README 中过期 TODO。
+5. 确认 README 中没有把已完成能力写成未完成，也没有把未完成能力写成完成。
+6. 确认 Swagger routes 与 router 实际接口一致。
+7. 新增“全能型 Agent 路线图”小节。
+
+验收：
+
+- task.json 有明确下一阶段 backlog。
+- README 与当前代码一致。
+- docs/openapi.json 与 router 一致。
+- go test ./... 通过。
+
+==================================================
+Phase F1：代码能力闭环
+==================================================
+
+这是最高优先级阶段。
+
+目标：
+
+让 Agent 从“能调用工具”升级为“能完成真实代码任务”。
+
+最终流程：
+
+用户说：“帮我实现/修复这个功能”
+Agent 应该能：
+
+1. 分析需求
+2. 检查仓库结构
+3. 搜索相关代码
+4. 读取相关文件
+5. 制定修改计划
+6. 生成 patch
+7. 请求用户审批
+8. apply patch
+9. 运行测试
+10. 根据测试失败继续修复
+11. 输出变更总结
+12. 输出测试结果
+13. 可选生成 commit message
+
+----------------------------------------
+F1.1 Code Workspace 能力
+----------------------------------------
+
+新增或完善工具：
+
+- code.list_files
+- code.read_file
+- code.search_text
+- code.search_symbol
+- code.inspect_project
+- code.detect_language
+- code.detect_test_command
+- code.propose_patch
+- code.apply_patch
+- code.run_tests
+- code.explain_diff
+
+要求：
+
+1. `code.read_file` 普通文件只读可自动执行。
+2. 读取敏感文件，例如 `.env`、private key、credentials，必须 sensitive_read 审批。
+3. `code.propose_patch` 不修改文件，可自动执行。
+4. `code.apply_patch` 修改文件，必须审批。
+5. 审批对象是具体 diff / patch snapshot。
+6. approval 后只能应用 approval.input_snapshot 中的 patch。
+7. 运行测试可按策略判断：
+   - 只读测试命令可自动执行
+   - 安装依赖、写文件、修改 lockfile 的测试准备步骤必须审批
+8. 所有代码工具调用写入 run steps 和 JSONL。
+
+----------------------------------------
+F1.2 代码索引
+----------------------------------------
+
+实现 Code Index Service：
+
+- 文件树索引
+- 文件 hash
+- language detection
+- package/config detection
+- code chunking
+- Qdrant code_chunks 可选索引
+- symbol index 预留
+- ripgrep based search
+- AST/LSP 预留接口
+
+建议结构：
+
+```go
+type CodeProject struct {
+    ProjectID string
+    RootPath  string
+    Language  string
+    Framework string
+    TestCommands []string
+    BuildCommands []string
+}
+
+type CodeIndexService interface {
+    IndexProject(ctx context.Context, root string) (*CodeProject, error)
+    SearchText(ctx context.Context, projectID string, query string) ([]CodeSearchResult, error)
+    ReadFile(ctx context.Context, path string) (string, error)
+    DetectTestCommands(ctx context.Context, root string) ([]string, error)
+}
+````
+
+---
+
+## F1.3 Patch 系统
+
+实现：
+
+* unified diff generation
+* patch validation
+* patch apply
+* patch rollback snapshot
+* multi-file patch
+* conflict detection
+
+要求：
+
+1. patch proposal 存为 run step。
+2. 用户可以查看 patch。
+3. apply 前必须审批。
+4. apply 后记录 changed files。
+5. apply 失败要能回滚或至少不写半成品。
+6. README 说明 patch 审批机制。
+
+---
+
+## F1.4 Git 工具
+
+新增工具：
+
+* git.status
+* git.diff
+* git.branch
+* git.add
+* git.commit
+* git.restore
+* git.clean
+* git.log
+
+策略：
+
+* git.status / git.diff / git.log 自动执行
+* git.add / commit / restore / clean 需要审批
+* git.clean、reset --hard 强审批
+
+---
+
+## F1.5 测试闭环
+
+新增：
+
+* code.run_tests
+* code.parse_test_failure
+* code.fix_test_failure_loop
+
+流程：
+
+1. Agent 运行测试。
+2. 解析失败。
+3. 搜索相关代码。
+4. 生成修复 patch。
+5. 审批后 apply。
+6. 再跑测试。
+7. 达到 max_fix_iterations 后停止。
+
+配置：
+
+```yaml
+code:
+  max_fix_iterations: 3
+  max_test_runtime_seconds: 300
+  allow_auto_run_readonly_tests: true
+```
+
+验收：
+
+* 能完成一个简单 Go 项目的 bugfix。
+* 能生成 patch 并审批后应用。
+* 能运行 go test ./...。
+* 测试失败后能继续尝试一次修复。
+* go test ./... 通过。
+* 新增代码能力 tests 通过。
+
+==================================================
+Phase F2：运维能力闭环
+===============
+
+目标：
+
+让 Agent 成为安全运维助手，而不是简单 shell runner。
+
+---
+
+## F2.1 Host Profile
+
+新增 Host 管理：
+
+```go
+type HostProfile struct {
+    HostID string
+    Name string
+    Type string // local, ssh, docker, k8s
+    DefaultShell string
+    WorkingDirectory string
+    PolicyProfile string
+}
+```
+
+支持：
+
+* local
+* ssh
+* docker
+* kubernetes
+
+API：
+
+* GET /v1/ops/hosts
+* POST /v1/ops/hosts
+* GET /v1/ops/hosts/{id}
+* PATCH /v1/ops/hosts/{id}
+* DELETE /v1/ops/hosts/{id}
+* POST /v1/ops/hosts/{id}/test
+
+CLI：
+
+* agent ops hosts list
+* agent ops hosts add
+* agent ops hosts test <host_id>
+
+---
+
+## F2.2 Ops Tools
+
+新增工具：
+
+* ops.local.exec
+* ops.ssh.exec
+* ops.docker.ps
+* ops.docker.logs
+* ops.docker.restart
+* ops.k8s.get
+* ops.k8s.describe
+* ops.k8s.logs
+* ops.k8s.apply
+* ops.systemd.status
+* ops.systemd.restart
+
+策略：
+
+* status/logs/get/describe 自动执行
+* restart/apply/delete/scale 需要审批
+* destructive 操作强审批
+
+---
+
+## F2.3 Runbook
+
+支持 Markdown Runbook：
+
+```markdown
+---
+id: diagnose-api-timeout
+scope: ops
+---
+
+# API Timeout 排查
+
+1. 查看服务状态
+2. 查看最近日志
+3. 查看 CPU / 内存
+4. 检查依赖服务
+5. 给出修复建议
+```
+
+新增：
+
+* runbook.list
+* runbook.read
+* runbook.execute_step
+* runbook.execute
+
+要求：
+
+* 每个步骤都走 ToolRouter / Policy / Approval。
+* 可 dry-run。
+* 可暂停。
+* 可 resume。
+* 可导出 run report。
+
+---
+
+## F2.4 Rollback Plan
+
+对于写操作，Agent 应尽可能生成 rollback plan：
+
+* 修改配置前备份
+* restart 前记录服务状态
+* apply manifest 前记录旧资源
+* 删除前要求强确认
+
+验收：
+
+* 可完成一次“排查本地服务日志”的只读任务。
+* 可生成“重启服务”审批卡片。
+* 可执行 runbook dry-run。
+* 可拒绝危险命令。
+* 不泄露 secret。
+
+==================================================
+Phase F3：RAG 可靠性增强
+==================
+
+目标：
+
+让知识问答从“能搜”变成“可靠可溯源”。
+
+---
+
+## F3.1 Knowledge Connectors
+
+新增连接器：
+
+* local folder sync
+* Git docs sync
+* URL import
+* PDF parser
+* Office parser
+* API docs import
+
+API：
+
+* POST /v1/kbs/{id}/sources
+* GET /v1/kbs/{id}/sources
+* POST /v1/kbs/{id}/sources/{source_id}/sync
+* DELETE /v1/kbs/{id}/sources/{source_id}
+
+---
+
+## F3.2 增量索引
+
+实现：
+
+* file hash
+* content hash
+* source metadata
+* deleted file cleanup
+* modified file partial reindex
+* index job status
+
+---
+
+## F3.3 Hybrid Search
+
+新增：
+
+* vector search
+* keyword/BM25 search
+* metadata filter
+* rerank interface
+* hybrid score fusion
+
+建议：
+
+```go
+type Retriever interface {
+    Retrieve(ctx context.Context, query RetrievalQuery) ([]RetrievalResult, error)
+}
+
+type Reranker interface {
+    Rerank(ctx context.Context, query string, docs []RetrievalResult) ([]RetrievalResult, error)
+}
+```
+
+---
+
+## F3.4 Citations
+
+回答必须支持来源引用：
+
+* source file
+* document title
+* section
+* chunk id
+* updated_at
+* score
+
+支持模式：
+
+* normal
+* kb_only
+* no_citation_no_answer
+
+要求：
+
+知识库内容属于不可信上下文，不能覆盖系统规则。
+
+---
+
+## F3.5 RAG Eval
+
+新增：
+
+* golden questions
+* expected sources
+* expected answer hints
+* retrieval recall
+* citation correctness
+* hallucination check
+
+验收：
+
+* 可以同步本地文件夹。
+* 修改文件后增量 reindex。
+* 问答返回引用。
+* kb_only 模式下没有证据就拒答。
+* RAG eval 可运行。
+
+==================================================
+Phase F4：长期记忆治理
+===============
+
+目标：
+
+让 Memory 从“可存 Markdown”升级为“可治理的长期记忆系统”。
+
+任务：
+
+1. Memory Extractor
+2. Memory Merge
+3. Memory Conflict Detection
+4. Memory Expiration
+5. Memory Review Queue
+6. Sensitive Memory Guard
+7. Memory CRUD API
+8. Memory UI/TUI 预留
+
+新增 API：
+
+* GET /v1/memory/items
+* POST /v1/memory/items
+* PATCH /v1/memory/items/{id}
+* DELETE /v1/memory/items/{id}
+* GET /v1/memory/review
+* POST /v1/memory/review/{id}/approve
+* POST /v1/memory/review/{id}/reject
+
+策略：
+
+* 普通偏好可自动写入
+* 敏感记忆必须审批
+* token/password/private key 不得写入
+* project memory 与 user memory 分开
+
+验收：
+
+* 用户能查看、编辑、删除记忆。
+* Agent 不自动保存 secret。
+* 冲突记忆进入 review。
+* Markdown 仍是事实源。
+
+==================================================
+Phase F5：安全策略与 Secret Guard
+===========================
+
+目标：
+
+从“审批”升级到完整安全策略系统。
+
+任务：
+
+1. Policy Profiles
+
+   * default
+   * strict
+   * developer
+   * ops
+   * offline
+
+2. Network Policy
+
+   * domain allowlist
+   * deny private IP
+   * deny metadata IP
+   * POST/PUT/DELETE approval
+   * egress logging
+
+3. Secret Guard
+
+   * detect API keys
+   * detect bearer tokens
+   * detect private keys
+   * detect .env secrets
+   * redact logs
+   * block memory write
+   * block Qdrant payload secret
+
+4. Strong Sandbox
+
+   * seccomp
+   * cgroup
+   * rootfs
+   * network namespace
+   * egress proxy
+
+5. Approval Explanation
+
+   * why this action
+   * exact input snapshot
+   * expected side effects
+   * risk level
+   * rollback option
+
+验收：
+
+* secret 不进日志/记忆/向量库。
+* network write 审批。
+* strict profile 更保守。
+* dangerous operation 强审批。
+* sandbox tests 通过。
+
+==================================================
+Phase F6：评测与回放系统
+================
+
+目标：
+
+让 Agent 能力可度量、可回归。
+
+新增 Eval Harness：
+
+* chat eval
+* RAG eval
+* code eval
+* ops eval
+* safety eval
+
+数据结构：
+
+```go
+type EvalCase struct {
+    ID string
+    Category string
+    Input string
+    ExpectedBehavior string
+    ExpectedTools []string
+    ForbiddenTools []string
+    ExpectedApproval bool
+}
+```
+
+Run Replay：
+
+* 记录真实 run
+* 脱敏
+* 离线 replay
+* 比较工具调用、审批、输出
+
+API：
+
+* GET /v1/evals
+* POST /v1/evals/run
+* GET /v1/evals/runs/{id}
+* POST /v1/runs/{id}/replay
+
+CLI：
+
+* agent eval run
+* agent eval report
+* agent runs replay <run_id>
+
+验收：
+
+* 有最小 eval set。
+* 修改策略后能跑回归。
+* 能发现“本该审批却自动执行”的风险回归。
+
+==================================================
+Phase F7：Web UI / TUI
+=====================
+
+目标：
+
+从工程 API 变成可日常使用的产品。
+
+Web UI 功能：
+
+1. Chat
+2. Run Timeline
+3. Approval Cards
+4. Tool Output
+5. Code Diff Preview
+6. Memory Manager
+7. KB Manager
+8. Skill Manager
+9. MCP Manager
+10. Eval Dashboard
+
+TUI 功能：
+
+* streaming chat
+* approval prompt
+* diff viewer
+* run steps
+* tool logs
+* memory search
+* kb search
+
+要求：
+
+* 不绕过后端安全链路。
+* approval 仍由后端 snapshot 决定。
+* UI 不能自己拼执行命令。
+* WebSocket 断线可恢复 run events。
+
+验收：
+
+* 用户可以不用 curl/Swagger 完成日常使用。
+* 审批体验清晰。
+* 代码 diff 可视化。
+* run timeline 可回放。
+
+==================================================
+Swagger / swag 注释要求
+===================
+
+如果任意阶段新增或修改 HTTP API、DTO、路由、错误响应，都必须：
+
+1. 增加或更新 swag 注释。
+2. 参考格式：
+
+```go
+// GetCabinetCanUseGateway 获取机柜可用网关
+// @Tags 机柜管理
+// @Summary 获取机柜可用网关
+// @accept application/json
+// @Produce application/json
+// @Param data query physicalServerReq.GetCabinetCanUseGateway true "查询参数"
+// @Success 200 {object} response.Response{data=[]physicalServerRes.CabinetCanUseGatewayItem,msg=string} "获取成功"
+// @Router /cabinet/getCabinetCanUseGateway [get]
+```
+
+3. 在本项目中按实际接口使用：
+
+   * @Tags
+   * @Summary
+   * @Accept
+   * @Produce
+   * @Param
+   * @Success
+   * @Failure
+   * @Router
+
+4. 执行现有 swagger 生成命令，优先：
+
+```bash
+make swagger
+```
+
+5. 确认：
+
+```text
+/swagger/index.html
+/swagger/doc.json
+```
+
+仍可访问。
+
+==================================================
+建议执行顺序
+======
+
+不要一次性做完全部。
+
+请按以下顺序推进：
+
+1. Phase F0：治理与状态对齐
+2. Phase F1：代码能力闭环
+3. Phase F2：运维能力闭环
+4. Phase F3：RAG 可靠性增强
+5. Phase F4：长期记忆治理
+6. Phase F5：安全策略与 Secret Guard
+7. Phase F6：评测与回放系统
+8. Phase F7：Web UI / TUI
+
+每次只实现一个阶段。
+
+当前最优先实现：
+
+```text
+Phase F1：代码能力闭环
+```
+
+原因：
+
+* 当前系统已有工具、安全、审批、workflow、run state。
+* 代码能力是“全能型 Agent”最核心的缺口之一。
+* 完成 F1 后，系统会明显接近 Codex-like Agent。
+
+==================================================
+每阶段完成标准
+=======
+
+每个阶段结束时必须：
+
+1. gofmt
+2. go test ./...
+3. 如改 API，make swagger
+4. 更新 README.md
+5. 更新 task.json
+6. 更新 .env.example（如有新配置）
+7. 确认无敏感信息泄露
+8. 确认未绕过 ToolRouter / Policy / Approval
+9. 给出测试结果摘要
+10. 给出新增能力摘要
+11. 给出剩余限制
+
+==================================================
+现在开始执行
+======
+
+先不要直接大改代码。
+
+先输出：
+
+1. 当前仓库能力基线
+2. 与“全能型 Agent”目标相比的差距
+3. 推荐执行顺序
+4. 本次准备实现的阶段
+5. 计划修改文件列表
+6. 风险点
+
+然后开始实现 Phase F0 和 Phase F1。
+
+如果 Phase F1 工作量过大，先拆成：
+
+* F1-A Code Workspace / Search / Read
+* F1-B Patch Proposal / Apply
+* F1-C Test Runner / Fix Loop
+* F1-D Git Workflow
+
+每个子阶段都要独立测试和更新文档。
+
+```
+
+建议你把这版作为“总路线 Prompt”。真正给 Codex 执行时，第一轮最好只让它做 **F0 + F1-A/F1-B**，也就是先把 **代码搜索、读文件、patch proposal、审批后 apply patch** 做稳；测试修复循环和 Git workflow 可以下一轮继续。
+```

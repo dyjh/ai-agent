@@ -164,6 +164,9 @@ func approvalSummary(proposal core.ToolProposal, inference core.EffectInferenceR
 		if path, ok := proposal.Input["path"].(string); ok {
 			return fmt.Sprintf("准备修改工作区文件 `%s`。", path)
 		}
+		if files, ok := proposal.Input["files"].([]any); ok && len(files) > 0 {
+			return fmt.Sprintf("准备修改 %d 个工作区文件。", len(files))
+		}
 	case "memory.patch":
 		if path, ok := proposal.Input["path"].(string); ok {
 			return fmt.Sprintf("准备修改 Markdown memory `%s`。", path)

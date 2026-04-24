@@ -143,7 +143,7 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 
 func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb.Service, skillsManager *skills.Manager, mcpManager *mcp.Manager) *toolscore.Registry {
 	registry := toolscore.NewRegistry()
-	workspace := code.Workspace{Root: cfg.Owner.DefaultWorkspace}
+	workspace := code.Workspace{Root: cfg.Owner.DefaultWorkspace, SensitivePaths: cfg.Policy.SensitivePaths}
 
 	registry.Register(coreShellSpec(), &shell.Executor{
 		DefaultShell:   cfg.Owner.DefaultShell,
@@ -155,33 +155,89 @@ func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb
 		Provider:       "local",
 		Name:           "code.read_file",
 		Description:    "Read a file from the workspace",
-		InputSchema:    map[string]any{"path": "string"},
+		InputSchema:    map[string]any{"path": "string", "max_bytes": "number"},
 		DefaultEffects: []string{"read", "code.read"},
 	}, &code.ReadExecutor{Workspace: workspace})
+	registry.Register(core.ToolSpec{
+		ID:             "code.list_files",
+		Provider:       "local",
+		Name:           "code.list_files",
+		Description:    "List files within the workspace",
+		InputSchema:    map[string]any{"path": "string", "max_depth": "number", "limit": "number"},
+		DefaultEffects: []string{"read", "code.read"},
+	}, &code.ListFilesExecutor{Workspace: workspace})
 	registry.Register(core.ToolSpec{
 		ID:             "code.search",
 		Provider:       "local",
 		Name:           "code.search",
-		Description:    "Search for text in the workspace",
-		InputSchema:    map[string]any{"path": "string", "query": "string"},
+		Description:    "Search for text in the workspace (legacy alias for code.search_text)",
+		InputSchema:    map[string]any{"path": "string", "query": "string", "limit": "number"},
 		DefaultEffects: []string{"read", "code.read"},
 	}, &code.SearchExecutor{Workspace: workspace})
+	registry.Register(core.ToolSpec{
+		ID:             "code.search_text",
+		Provider:       "local",
+		Name:           "code.search_text",
+		Description:    "Search text in workspace files and return line matches",
+		InputSchema:    map[string]any{"path": "string", "query": "string", "limit": "number"},
+		DefaultEffects: []string{"read", "code.read"},
+	}, &code.SearchExecutor{Workspace: workspace})
+	registry.Register(core.ToolSpec{
+		ID:             "code.search_symbol",
+		Provider:       "local",
+		Name:           "code.search_symbol",
+		Description:    "Search symbol-like token matches in workspace files",
+		InputSchema:    map[string]any{"path": "string", "symbol": "string", "limit": "number"},
+		DefaultEffects: []string{"read", "code.read"},
+	}, &code.SearchSymbolExecutor{Workspace: workspace})
+	registry.Register(core.ToolSpec{
+		ID:             "code.inspect_project",
+		Provider:       "local",
+		Name:           "code.inspect_project",
+		Description:    "Inspect project language, config files, and likely commands",
+		InputSchema:    map[string]any{"path": "string"},
+		DefaultEffects: []string{"read", "code.read"},
+	}, &code.InspectProjectExecutor{Workspace: workspace})
+	registry.Register(core.ToolSpec{
+		ID:             "code.detect_language",
+		Provider:       "local",
+		Name:           "code.detect_language",
+		Description:    "Detect dominant language for a workspace path",
+		InputSchema:    map[string]any{"path": "string"},
+		DefaultEffects: []string{"read", "code.read"},
+	}, &code.DetectLanguageExecutor{Workspace: workspace})
+	registry.Register(core.ToolSpec{
+		ID:             "code.detect_test_command",
+		Provider:       "local",
+		Name:           "code.detect_test_command",
+		Description:    "Detect likely test commands without running them",
+		InputSchema:    map[string]any{"path": "string"},
+		DefaultEffects: []string{"read", "code.read"},
+	}, &code.DetectTestCommandExecutor{Workspace: workspace})
 	registry.Register(core.ToolSpec{
 		ID:             "code.propose_patch",
 		Provider:       "local",
 		Name:           "code.propose_patch",
 		Description:    "Preview a code patch without applying it",
-		InputSchema:    map[string]any{"path": "string", "content": "string"},
+		InputSchema:    map[string]any{"path": "string", "content": "string", "files": "array"},
 		DefaultEffects: []string{"read", "code.plan"},
-	}, &code.ProposePatchExecutor{})
+	}, &code.ProposePatchExecutor{Workspace: workspace})
 	registry.Register(core.ToolSpec{
 		ID:             "code.apply_patch",
 		Provider:       "local",
 		Name:           "code.apply_patch",
 		Description:    "Apply a patch inside the workspace",
-		InputSchema:    map[string]any{"path": "string", "content": "string"},
+		InputSchema:    map[string]any{"path": "string", "content": "string", "files": "array", "expected_sha256": "string"},
 		DefaultEffects: []string{"fs.write", "code.modify"},
 	}, &code.ApplyPatchExecutor{Workspace: workspace})
+	registry.Register(core.ToolSpec{
+		ID:             "code.explain_diff",
+		Provider:       "local",
+		Name:           "code.explain_diff",
+		Description:    "Summarize a patch or diff payload without modifying files",
+		InputSchema:    map[string]any{"diff": "string", "files": "array"},
+		DefaultEffects: []string{"read", "code.plan"},
+	}, &code.ExplainDiffExecutor{})
 	registry.Register(core.ToolSpec{
 		ID:             "memory.search",
 		Provider:       "local",

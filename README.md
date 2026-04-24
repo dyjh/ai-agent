@@ -52,6 +52,43 @@
 
 当前没有让 Eino Tool 直接执行外部动作，所有外部 effect 仍由本系统 ToolRouter 控制。
 
+## Code Workspace / Patch 能力
+
+当前代码能力已接入 ToolRegistry，并继续走统一安全链路：
+
+```text
+ToolProposal -> EffectInference -> PolicyEngine -> ApprovalCenter -> Executor
+```
+
+已注册的 code tools：
+
+- `code.list_files`：列出工作区文件，默认跳过 `.git`、`node_modules`、`vendor` 等大目录，并跳过敏感路径
+- `code.read_file`：读取工作区普通文件，支持 `max_bytes` 限制
+- `code.search` / `code.search_text`：搜索文本并返回文件、行号和匹配行
+- `code.search_symbol`：按符号边界搜索源码标识符
+- `code.inspect_project`：检测语言、配置文件、测试命令和构建命令
+- `code.detect_language`：检测工作区主要语言
+- `code.detect_test_command`：检测可能的测试命令，不执行测试
+- `code.propose_patch`：生成单文件或多文件 full-file replacement 的 diff preview、文件 hash 和 changed files，不写文件
+- `code.apply_patch`：审批后应用单文件或多文件 full-file replacement，支持 `expected_sha256` 基线校验和失败回滚
+- `code.explain_diff`：总结 diff 或 patch payload，不写文件
+
+安全规则：
+
+- 普通 `code.read_file` / `code.search_text` / `code.list_files` 是高置信只读操作，可按策略自动执行
+- 读取 `.env`、private key、credentials、token、cookie、session 等敏感路径会被标记为 `sensitive_read`，必须审批
+- 搜索默认跳过敏感文件；只有显式 `include_sensitive=true` 时才允许进入敏感读取审批
+- `code.propose_patch` 不修改文件；如果目标是敏感路径，也需要审批
+- `code.apply_patch` 一律是 `fs.write + code.modify`，必须审批
+- 审批绑定具体 patch 输入快照；执行时只使用 `approval.input_snapshot`，并继续校验 `snapshot_hash`
+- `code.apply_patch` 的 `expected_sha256` 用于防止审批后目标文件基线漂移
+
+当前边界：
+
+- patch 形态是受控的 full-file replacement，不是完整 `git apply` 兼容解析器
+- 已支持 patch 预览、hash guard、原子写入和失败回滚；更复杂的 conflict resolution、rollback snapshot API、Git workflow 和测试修复循环仍在后续 F1 backlog
+- `code.detect_test_command` 只检测命令，不运行测试；测试执行工具和失败修复循环尚未接入
+
 ## 安装步骤
 
 1. 准备 Go 1.23+，并允许自动下载较新的 Go toolchain
@@ -570,6 +607,19 @@ CLI 对应子命令为：
 - 敏感路径识别
 - 常见进程查询、git 读写、package install、filesystem mutation 分类
 
+## 全能型 Agent 路线图
+
+当前仓库已完成 production-ready MVP 和 post-MVP 平台底座，后续按阶段推进为更完整的本地 Agent：
+
+- F0 治理与当前状态对齐：README、task.json、Swagger/OpenAPI 与代码状态保持一致
+- F1 代码能力闭环：代码搜索/读取、patch proposal/apply、Git workflow、测试执行和失败修复循环
+- F2 运维能力闭环：local / SSH / Docker / Kubernetes host profile、runbook、rollback plan
+- F3 RAG 可靠性增强：知识库 connectors、增量索引、hybrid search、rerank、citations、RAG eval
+- F4 长期记忆治理：记忆分类、候选审批、查看/编辑/删除、敏感信息防写入
+- F5 安全策略与 Secret Guard：统一 secret scanning、策略解释、危险命令更细粒度结构分析
+- F6 评测与回放系统：run replay、golden tasks、安全回归、工具链路回放
+- F7 Web UI / TUI：本地审批中心、run timeline、memory/KB/code/ops 可视化
+
 ## 测试命令
 
 ```bash
@@ -582,6 +632,7 @@ go test ./...
 - effect inference
 - shell parser
 - markdown memory
+- code workspace read/search/project inspection and patch approval behavior
 - qdrant store / vector factory / kb.search tool
 - config validation / KB feature gate / Swagger docs
 - skill manifest / runner / policy
@@ -606,6 +657,7 @@ RUN_POSTGRES_INTEGRATION=1 go test ./...
 - PostgreSQL 可用时 run/step 可持久化；无数据库 fallback 仍只提供进程内内存 run state
 - Skill Runtime 已支持 zip 安装、manifest permissions 校验，以及 Linux namespace/chroot 优先的 stronger runner；但 seccomp、cgroup、host allowlist 和更完整 rootfs 封装仍待后续阶段补齐
 - MCP runtime 已支持 stdio/http、dialect compatibility profile 和 conformance matrix；SSE、流式结果、capability negotiation 和更高保真外部 server 集成矩阵仍待后续扩展
+- Code Workspace 已支持读/搜/项目检测和审批后 patch apply；Git workflow、测试执行、失败解析和自动修复循环仍待 F1 后续子阶段补齐
 - CLI 已走 HTTP API，但仍是轻量控制台，不包含富交互 TUI
 
 ## 任务清单

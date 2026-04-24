@@ -54,6 +54,30 @@ func TestEffectInference(t *testing.T) {
 			wantRisk:   "write",
 		},
 		{
+			name: "code read sensitive path",
+			proposal: core.ToolProposal{
+				Tool: "code.read_file",
+				Input: map[string]any{
+					"path": ".env",
+				},
+			},
+			wantEffect: "sensitive_read",
+			wantRisk:   "sensitive",
+		},
+		{
+			name: "code search include sensitive",
+			proposal: core.ToolProposal{
+				Tool: "code.search_text",
+				Input: map[string]any{
+					"path":              ".",
+					"query":             "TOKEN",
+					"include_sensitive": true,
+				},
+			},
+			wantEffect: "sensitive_read",
+			wantRisk:   "sensitive",
+		},
+		{
 			name: "unknown tool",
 			proposal: core.ToolProposal{
 				Tool: "mystery.tool",

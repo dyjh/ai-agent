@@ -46,13 +46,10 @@ func (e *EffectInferrer) Infer(_ context.Context, proposal core.ToolProposal) (c
 	switch proposal.Tool {
 	case "shell.exec":
 		return e.inferShell(proposal), nil
-	case "code.read_file", "code.search":
-		return core.EffectInferenceResult{
-			Effects:       []string{"read", "code.read"},
-			RiskLevel:     "read",
-			Confidence:    0.95,
-			ReasonSummary: "read-only tool",
-		}, nil
+	case "code.read_file", "code.search", "code.search_text", "code.search_symbol", "code.list_files":
+		return e.inferCodeRead(proposal), nil
+	case "code.inspect_project", "code.detect_language", "code.detect_test_command":
+		return readOnlyCodeInference("read-only project inspection"), nil
 	case "kb.search":
 		return core.EffectInferenceResult{
 			Effects:       []string{"kb.read"},
@@ -68,13 +65,35 @@ func (e *EffectInferrer) Infer(_ context.Context, proposal core.ToolProposal) (c
 			ReasonSummary: "read-only memory search",
 		}, nil
 	case "code.propose_patch":
+		if e.proposalTouchesSensitivePath(proposal) {
+			return core.EffectInferenceResult{
+				Effects:          []string{"sensitive_read", "code.plan"},
+				RiskLevel:        "sensitive",
+				Sensitive:        true,
+				ApprovalRequired: true,
+				Confidence:       0.95,
+				ReasonSummary:    "patch proposal targets a sensitive path",
+			}, nil
+		}
 		return core.EffectInferenceResult{
 			Effects:       []string{"read", "code.plan"},
 			RiskLevel:     "read",
 			Confidence:    0.9,
 			ReasonSummary: "proposal-only patch tool",
 		}, nil
+	case "code.explain_diff":
+		return readOnlyCodeInference("diff explanation is read-only"), nil
 	case "code.apply_patch":
+		if e.proposalTouchesSensitivePath(proposal) {
+			return core.EffectInferenceResult{
+				Effects:          []string{"fs.write", "code.modify", "sensitive_write"},
+				RiskLevel:        "sensitive",
+				Sensitive:        true,
+				ApprovalRequired: true,
+				Confidence:       0.99,
+				ReasonSummary:    "patch application modifies a sensitive path",
+			}, nil
+		}
 		return core.EffectInferenceResult{
 			Effects:          []string{"fs.write", "code.modify"},
 			RiskLevel:        "write",
@@ -103,6 +122,69 @@ func (e *EffectInferrer) Infer(_ context.Context, proposal core.ToolProposal) (c
 			ReasonSummary:    "tool has no known effect profile",
 		}, nil
 	}
+}
+
+func (e *EffectInferrer) inferCodeRead(proposal core.ToolProposal) core.EffectInferenceResult {
+	if e.proposalTouchesSensitivePath(proposal) || inputBool(proposal.Input, "include_sensitive") {
+		return core.EffectInferenceResult{
+			Effects:          []string{"sensitive_read", "code.read"},
+			RiskLevel:        "sensitive",
+			Sensitive:        true,
+			ApprovalRequired: true,
+			Confidence:       0.95,
+			ReasonSummary:    "code read touches sensitive resources",
+		}
+	}
+	return readOnlyCodeInference("read-only code workspace tool")
+}
+
+func readOnlyCodeInference(reason string) core.EffectInferenceResult {
+	return core.EffectInferenceResult{
+		Effects:       []string{"read", "code.read"},
+		RiskLevel:     "read",
+		Confidence:    0.95,
+		ReasonSummary: reason,
+	}
+}
+
+func (e *EffectInferrer) proposalTouchesSensitivePath(proposal core.ToolProposal) bool {
+	for _, path := range proposalPathInputs(proposal.Input) {
+		if security.IsSensitivePath(path, e.cfg.SensitivePaths) {
+			return true
+		}
+	}
+	return false
+}
+
+func proposalPathInputs(input map[string]any) []string {
+	var paths []string
+	if path, ok := input["path"].(string); ok && path != "" {
+		paths = append(paths, path)
+	}
+	if files, ok := input["files"].([]any); ok {
+		for _, item := range files {
+			file, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if path, ok := file["path"].(string); ok && path != "" {
+				paths = append(paths, path)
+			}
+		}
+	}
+	if files, ok := input["files"].([]map[string]any); ok {
+		for _, file := range files {
+			if path, ok := file["path"].(string); ok && path != "" {
+				paths = append(paths, path)
+			}
+		}
+	}
+	return paths
+}
+
+func inputBool(input map[string]any, key string) bool {
+	value, _ := input[key].(bool)
+	return value
 }
 
 func (e *EffectInferrer) inferMCP(proposal core.ToolProposal) (core.EffectInferenceResult, error) {
