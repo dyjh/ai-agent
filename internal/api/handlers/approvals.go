@@ -19,6 +19,12 @@ func NewApprovalsHandler(deps Dependencies) *ApprovalsHandler {
 }
 
 // Pending handles GET /v1/approvals/pending.
+// @Tags Approvals
+// @Summary List pending approvals
+// @Produce application/json
+// @Success 200 {object} ApprovalListResponse
+// @Failure 500 {object} LegacyErrorResponse
+// @Router /v1/approvals/pending [get]
 func (h *ApprovalsHandler) Pending(w http.ResponseWriter, r *http.Request) {
 	if h.Deps.Runtime != nil {
 		if runs, err := h.Deps.Runtime.ListRuns(r.Context(), []agent.RunStatus{agent.RunStatusPausedForApproval}, 100); err == nil {
@@ -46,20 +52,29 @@ func (h *ApprovalsHandler) Pending(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+	writeJSON(w, http.StatusOK, ApprovalListResponse{Items: items})
 }
 
 // Approve handles POST /v1/approvals/{approval_id}/approve.
+// @Tags Approvals
+// @Summary Approve a pending action
+// @Accept application/json
+// @Produce application/json
+// @Param approval_id path string true "Approval ID"
+// @Success 200 {object} ApprovalResolutionResponse
+// @Failure 400 {object} LegacyErrorResponse
+// @Failure 500 {object} LegacyErrorResponse
+// @Router /v1/approvals/{approval_id}/approve [post]
 func (h *ApprovalsHandler) Approve(w http.ResponseWriter, r *http.Request) {
 	approvalID := chi.URLParam(r, "approval_id")
 	existing, _ := h.Deps.Approvals.Get(approvalID)
 	if h.Deps.Runtime != nil && (existing == nil || existing.RunID != "") {
 		response, err := h.Deps.Runtime.ResumeApproval(r.Context(), approvalID, true, nil)
 		if err == nil {
-			writeJSON(w, http.StatusOK, map[string]any{
-				"approval": response.Approval,
-				"result":   response.ToolResult,
-				"run":      response,
+			writeJSON(w, http.StatusOK, ApprovalResolutionResponse{
+				Approval: response.Approval,
+				Result:   response.ToolResult,
+				Run:      response,
 			})
 			return
 		}
@@ -79,23 +94,33 @@ func (h *ApprovalsHandler) Approve(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"approval": approval, "result": result})
+	writeJSON(w, http.StatusOK, ApprovalResolutionResponse{
+		Approval: approval,
+		Result:   result,
+	})
 }
 
 // Reject handles POST /v1/approvals/{approval_id}/reject.
+// @Tags Approvals
+// @Summary Reject a pending action
+// @Accept application/json
+// @Produce application/json
+// @Param approval_id path string true "Approval ID"
+// @Param body body RejectApprovalRequest false "Rejection payload"
+// @Success 200 {object} ApprovalResolutionResponse
+// @Failure 400 {object} LegacyErrorResponse
+// @Router /v1/approvals/{approval_id}/reject [post]
 func (h *ApprovalsHandler) Reject(w http.ResponseWriter, r *http.Request) {
 	approvalID := chi.URLParam(r, "approval_id")
-	var body struct {
-		Reason string `json:"reason"`
-	}
+	var body RejectApprovalRequest
 	_ = decodeJSON(r, &body)
 	existing, _ := h.Deps.Approvals.Get(approvalID)
 	if h.Deps.Runtime != nil && (existing == nil || existing.RunID != "") {
 		response, err := h.Deps.Runtime.ResumeApproval(r.Context(), approvalID, false, nil)
 		if err == nil {
-			writeJSON(w, http.StatusOK, map[string]any{
-				"approval": response.Approval,
-				"run":      response,
+			writeJSON(w, http.StatusOK, ApprovalResolutionResponse{
+				Approval: response.Approval,
+				Run:      response,
 			})
 			return
 		}
@@ -110,5 +135,5 @@ func (h *ApprovalsHandler) Reject(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, item)
+	writeJSON(w, http.StatusOK, ApprovalResolutionResponse{Approval: item})
 }

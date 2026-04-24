@@ -5,7 +5,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	httpSwagger "github.com/swaggo/http-swagger"
 
+	apidocs "local-agent/docs"
 	"local-agent/internal/api/handlers"
 	"local-agent/internal/api/ws"
 )
@@ -25,12 +27,17 @@ func NewRouter(deps Dependencies) http.Handler {
 	knowledge := handlers.NewKnowledgeHandler(deps)
 	skillsHandler := handlers.NewSkillsHandler(deps)
 	mcpHandler := handlers.NewMCPHandler(deps)
-	docsHandler := handlers.NewDocsHandler()
 	wsHandler := ws.NewChatHandler(deps)
 
-	r.Get("/swagger", docsHandler.Redirect)
-	r.Get("/swagger/index.html", docsHandler.Index)
-	r.Get("/swagger/doc.json", docsHandler.DocJSON)
+	apidocs.SwaggerInfo.BasePath = "/"
+	r.Get("/swagger", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/swagger/index.html", http.StatusMovedPermanently)
+	})
+	r.Handle("/swagger/*", httpSwagger.Handler(
+		httpSwagger.URL("/swagger/doc.json"),
+		httpSwagger.DocExpansion("list"),
+		httpSwagger.DomID("swagger-ui"),
+	))
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/health", health.Get)

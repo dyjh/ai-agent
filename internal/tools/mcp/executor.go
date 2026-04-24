@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -51,6 +52,10 @@ func (e *CallToolExecutor) Execute(ctx context.Context, input map[string]any) (*
 	if err != nil {
 		output["status"] = "error"
 		output["error"] = security.RedactString(err.Error())
+		var mcpErr *MCPError
+		if errors.As(err, &mcpErr) {
+			output["error_code"] = string(mcpErr.Code)
+		}
 	}
 	toolResult := &core.ToolResult{
 		Output:     output,
@@ -68,13 +73,18 @@ func failedMCPResult(startedAt time.Time, serverID, toolName string, err error) 
 		startedAt = time.Now().UTC()
 	}
 	finishedAt := time.Now().UTC()
+	output := map[string]any{
+		"server_id": serverID,
+		"tool_name": toolName,
+		"status":    "error",
+		"error":     security.RedactString(err.Error()),
+	}
+	var mcpErr *MCPError
+	if errors.As(err, &mcpErr) {
+		output["error_code"] = string(mcpErr.Code)
+	}
 	return &core.ToolResult{
-		Output: map[string]any{
-			"server_id": serverID,
-			"tool_name": toolName,
-			"status":    "error",
-			"error":     security.RedactString(err.Error()),
-		},
+		Output:     output,
 		Error:      err.Error(),
 		StartedAt:  startedAt,
 		FinishedAt: finishedAt,

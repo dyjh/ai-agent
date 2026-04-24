@@ -1,16 +1,16 @@
 {
   "project": "local-agent",
   "source": "promote.txt",
-  "last_updated": "2026-04-24T14:30:00+08:00",
+  "last_updated": "2026-04-24T17:30:00+08:00",
   "overall_status": "production_ready_mvp",
-  "current_task_id": "skill-package-sandbox-hardening",
-  "current_task_title": "Post-MVP Phase B: Skill ZIP install, sandbox execution, permission isolation",
+  "current_task_id": "mcp-compatibility-conformance-matrix",
+  "current_task_title": "Post-MVP Phase C3: MCP Compatibility Matrix and Conformance Testing",
   "summary": {
-    "headline": "MVP 主链路保持稳定，并已完成 durable workflow、多步 run loop，以及 Skill ZIP 安装与 best-effort 沙箱硬化。",
+    "headline": "MVP 主链路保持稳定，并已完成 durable workflow、Skill sandbox hardening，以及 MCP compatibility/conformance matrix。",
     "progress": {
-      "completed": 13,
+      "completed": 15,
       "pending": 0,
-      "total": 13
+      "total": 15
     },
     "verified": [
       "2026-04-23 已检查仓库结构，HTTP API / WebSocket / CLI / memory / kb / skills / mcp / tests 均已存在。",
@@ -22,12 +22,16 @@
       "2026-04-23 已完成 Eino Workflow facade、RunState 状态机、approval interrupt-resume、HTTP/WS resume 接入和 phase-10 测试。",
       "2026-04-23 已完成 Phase 11：配置校验、USE_KONWAGE_BASE/KONWAGE_BASE_PROVIDER、KB feature gate、Swagger/OpenAPI、approval snapshot hash、硬化测试和文档收口，并确认 go test ./... 通过。",
       "2026-04-24 已完成 Post-MVP Phase A：agent_runs / agent_run_steps 持久化、step-based workflow loop、/v1/runs* API、CLI runs 命令、跨重启 resume 测试，并再次确认 go test ./... 通过。",
-      "2026-04-24 已完成 Post-MVP Phase B：Skill ZIP 安装、安全解包、package metadata、SandboxRunner/LocalRestrictedRunner、permissions preflight enforcement、Skill API/CLI 扩展、OpenAPI 更新和对应测试，并再次确认 go test ./... 通过。"
+      "2026-04-24 已完成 Post-MVP Phase B：Skill ZIP 安装、安全解包、package metadata、SandboxRunner/LocalRestrictedRunner、permissions preflight enforcement、Skill API/CLI 扩展、OpenAPI 更新和对应测试，并再次确认 go test ./... 通过。",
+      "2026-04-24 已完成 Post-MVP Phase C1+C2：SandboxProfile/ExecutionProfile/runner selection 重构、LinuxIsolatedRunner、sandbox fallback -> approval 收紧、Skill validate 审计信息扩展、Swagger/README/task.json 收口，并再次确认 go test ./... 通过。",
+      "2026-04-24 已完成 Post-MVP Phase C3：MCP dialect / compatibility profile、transport decode 兼容层、结构化 MCP error code、conformance matrix 测试、README/task.json 收口，并再次确认 go test ./... 通过。"
     ],
     "unfinished_overview": [
       "当前 step loop 已覆盖本地单用户可恢复多步任务，但仍不是无限自动规划的通用 graph 平台。",
       "无 PostgreSQL 时仍回退到内存仓储，run/step 无法跨进程恢复。",
-      "当前 LocalRestrictedRunner 仍是 best-effort，本地 OS 级 seccomp/namespace/cgroup 隔离和更广 MCP 方言兼容矩阵仍属于 post-MVP backlog。"
+      "当前 LinuxIsolatedRunner 已提供 namespace/chroot 优先的 stronger path，但 seccomp、cgroup、host allowlist、bind mount rootfs 和动态依赖自动封装仍属于 post-MVP backlog。",
+      "MCP runtime 已有 stdio/http compatibility profile 和默认 conformance matrix，但 SSE、流式结果、capability negotiation 和真实外部 server 集成矩阵仍属于后续 backlog。",
+      "更复杂的 graph/branch/parallel workflow 仍属于后续 backlog。"
     ]
   },
   "tasks": [
@@ -225,7 +229,7 @@
         "按精确 env 名称支持 USE_KONWAGE_BASE 和 KONWAGE_BASE_PROVIDER；KB runtime provider 当前只允许 qdrant。",
         "完成 KB feature gate：disabled 时不初始化 KB service、不注册 kb.search、ContextBuilder 不检索 KB，KB API 返回 feature_disabled。",
         "补齐 /v1/health 的 database、qdrant、knowledge_base、workflow、docs 状态输出。",
-        "新增 OpenAPI spec、/swagger/index.html、/swagger/doc.json、cmd/openapi 和 make swagger，并生成 docs/openapi.json。",
+        "新增 swag 生成的 Swagger 文档链路、/swagger/index.html、/swagger/doc.json 和 make swagger，并生成 docs/swagger.json / docs/openapi.json。",
         "新增 Approval snapshot hash，执行 approved snapshot 前校验 hash，并修复 ApprovalCenter 返回记录的深拷贝。",
         "补充 config validation、KB feature gate、Swagger docs、approval snapshot hash 测试，并确认 go test ./... 通过。",
         "同步 README、.env.example 和 task.json。"
@@ -282,6 +286,49 @@
         "Skill ZIP install 与 package metadata",
         "SandboxRunner / LocalRestrictedRunner",
         "Skill permissions enforcement、API/CLI 与测试"
+      ]
+    },
+    {
+      "id": "os-level-skill-sandbox-hardening",
+      "title": "Post-MVP Phase C1+C2: OS-level Skill Sandbox Hardening",
+      "status": "completed",
+      "completed_items": [
+        "扩展 SandboxProfile、ExecutionProfile 和 runner selection，明确 best_effort_local / trusted_local / restricted / linux_isolated 四类 profile 语义。",
+        "新增 LinuxIsolatedRunner，在 Linux 上通过 namespace + optional chroot 提供更强执行路径，并保留 LocalRestrictedRunner 作为 best-effort fallback。",
+        "将 sandbox.profile 接入 Skill validate、policy profile 和 skill.run 执行期约束；restricted fallback 会强制审批，linux_isolated 不支持时拒绝执行。",
+        "让 validate 返回 runner、sandbox_profile、platform_supported、will_fallback、requires_approval、strong_isolation 等结构化审计信息。",
+        "补充 sandbox profile selection、linux isolated runner、validate 和 policy fallback 测试，并再次确认 go test ./... 通过。"
+      ],
+      "remaining_items": [
+        "当前 LinuxIsolatedRunner 仍不是完整容器级沙箱；seccomp、cgroup、host allowlist 和 bind mount rootfs 仍待后续阶段补齐。",
+        "动态依赖较重的 skill runtime 仍可能无法进入 chroot 文件系统收紧路径，需要后续 rootfs 打包或更完整隔离方案。"
+      ],
+      "deliverables": [
+        "LinuxIsolatedRunner 与 sandbox profile selection",
+        "Skill validate 审计信息强化",
+        "sandbox fallback/policy 一致性测试"
+      ]
+    },
+    {
+      "id": "mcp-compatibility-conformance-matrix",
+      "title": "Post-MVP Phase C3: MCP Compatibility Matrix and Conformance Testing",
+      "status": "completed",
+      "completed_items": [
+        "新增 MCP dialect / compatibility profile，支持 strict_jsonrpc、line_delimited_jsonrpc 和 envelope_wrapped，并保持现有 stdio/http transport 向后兼容。",
+        "扩展 MCP server 配置，支持 dialect、compatibility flags、timeout 和 max_payload_bytes，启动/更新配置时校验无效 dialect。",
+        "将 JSON-RPC decode、envelope unwrap、tools/list schema normalization、tools/call result normalization 和 MCP error code 收敛到 transport compatibility layer。",
+        "为 HTTP/stdio transport 增加 profile-aware timeout、payload limit、strict ID matching 和结构化错误映射。",
+        "补充 conformance matrix 测试，覆盖 strict、line-delimited、envelope、missing schema、malformed entry、text-only result、JSON-RPC error、invalid JSON、timeout 和 stdio early exit。",
+        "确认 mcp.call_tool 仍通过 ToolRouter -> EffectInference -> PolicyEngine -> ApprovalCenter -> Executor，policy override 优先级和 approval snapshot 语义未回退。"
+      ],
+      "remaining_items": [
+        "SSE transport、流式 tool result、capability negotiation 和更多 MCP server 方言仍待后续扩展。",
+        "更高保真的真实外部 MCP server 集成矩阵可继续通过 RUN_MCP_INTEGRATION 类环境变量扩展。"
+      ],
+      "deliverables": [
+        "MCP compatibility profile / dialect config",
+        "Transport-level decode compatibility layer",
+        "MCP conformance matrix tests"
       ]
     }
   ],
@@ -340,6 +387,16 @@
       "at": "2026-04-24T14:30:00+08:00",
       "task_id": "skill-package-sandbox-hardening",
       "summary": "完成 Skill ZIP install、安全解包、SandboxRunner/LocalRestrictedRunner、permissions preflight enforcement、Skill API/CLI 扩展、Swagger/OpenAPI 更新和对应测试。"
+    },
+    {
+      "at": "2026-04-24T16:10:00+08:00",
+      "task_id": "os-level-skill-sandbox-hardening",
+      "summary": "完成 SandboxProfile/ExecutionProfile/runner selection 重构、LinuxIsolatedRunner、restricted fallback -> approval 收紧、Skill validate 审计信息扩展、README/OpenAPI/task.json 更新和对应测试。"
+    },
+    {
+      "at": "2026-04-24T17:30:00+08:00",
+      "task_id": "mcp-compatibility-conformance-matrix",
+      "summary": "完成 MCP dialect / compatibility profile、transport decode 兼容层、结构化错误映射、conformance matrix 测试、README/task.json 更新和对应验证。"
     }
   ]
 }

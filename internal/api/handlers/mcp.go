@@ -22,11 +22,24 @@ func NewMCPHandler(deps Dependencies) *MCPHandler {
 }
 
 // ListServers handles GET /v1/mcp/servers.
+// @Tags MCP
+// @Summary List MCP servers
+// @Produce application/json
+// @Success 200 {object} MCPServerListResponse
+// @Router /v1/mcp/servers [get]
 func (h *MCPHandler) ListServers(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"items": h.Deps.MCP.ListServers()})
+	writeJSON(w, http.StatusOK, MCPServerListResponse{Items: h.Deps.MCP.ListServers()})
 }
 
 // CreateServer handles POST /v1/mcp/servers.
+// @Tags MCP
+// @Summary Create MCP server
+// @Accept application/json
+// @Produce application/json
+// @Param body body mcp.ServerInput true "MCP server payload"
+// @Success 201 {object} core.MCPServer
+// @Failure 400 {object} LegacyErrorResponse
+// @Router /v1/mcp/servers [post]
 func (h *MCPHandler) CreateServer(w http.ResponseWriter, r *http.Request) {
 	var body mcp.ServerInput
 	if err := decodeJSON(r, &body); err != nil {
@@ -42,6 +55,13 @@ func (h *MCPHandler) CreateServer(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetServer handles GET /v1/mcp/servers/{id}.
+// @Tags MCP
+// @Summary Get MCP server
+// @Produce application/json
+// @Param id path string true "MCP server ID"
+// @Success 200 {object} MCPServerDetailResponse
+// @Failure 404 {object} LegacyErrorResponse
+// @Router /v1/mcp/servers/{id} [get]
 func (h *MCPHandler) GetServer(w http.ResponseWriter, r *http.Request) {
 	item, err := h.Deps.MCP.GetServer(chi.URLParam(r, "id"))
 	if err != nil {
@@ -49,13 +69,22 @@ func (h *MCPHandler) GetServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	state, _ := h.Deps.MCP.RuntimeState(chi.URLParam(r, "id"))
-	writeJSON(w, http.StatusOK, map[string]any{
-		"server": item,
-		"state":  state,
+	writeJSON(w, http.StatusOK, MCPServerDetailResponse{
+		Server: item,
+		State:  state,
 	})
 }
 
 // UpdateServer handles PATCH /v1/mcp/servers/{id}.
+// @Tags MCP
+// @Summary Update MCP server
+// @Accept application/json
+// @Produce application/json
+// @Param id path string true "MCP server ID"
+// @Param body body mcp.ServerInput true "MCP server payload"
+// @Success 200 {object} core.MCPServer
+// @Failure 400 {object} LegacyErrorResponse
+// @Router /v1/mcp/servers/{id} [patch]
 func (h *MCPHandler) UpdateServer(w http.ResponseWriter, r *http.Request) {
 	var body mcp.ServerInput
 	if err := decodeJSON(r, &body); err != nil {
@@ -71,6 +100,14 @@ func (h *MCPHandler) UpdateServer(w http.ResponseWriter, r *http.Request) {
 }
 
 // RefreshServer handles POST /v1/mcp/servers/{id}/refresh.
+// @Tags MCP
+// @Summary Refresh MCP tools
+// @Accept application/json
+// @Produce application/json
+// @Param id path string true "MCP server ID"
+// @Success 200 {object} MCPRefreshResponse
+// @Failure 400 {object} LegacyErrorResponse
+// @Router /v1/mcp/servers/{id}/refresh [post]
 func (h *MCPHandler) RefreshServer(w http.ResponseWriter, r *http.Request) {
 	tools, err := h.Deps.MCP.RefreshTools(r.Context(), chi.URLParam(r, "id"))
 	if err != nil {
@@ -78,28 +115,50 @@ func (h *MCPHandler) RefreshServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	state, _ := h.Deps.MCP.RuntimeState(chi.URLParam(r, "id"))
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status": "ok",
-		"tools":  tools,
-		"state":  state,
+	writeJSON(w, http.StatusOK, MCPRefreshResponse{
+		Status: "ok",
+		Tools:  tools,
+		State:  state,
 	})
 }
 
 // TestServer handles POST /v1/mcp/servers/{id}/test.
+// @Tags MCP
+// @Summary Test MCP server connectivity
+// @Accept application/json
+// @Produce application/json
+// @Param id path string true "MCP server ID"
+// @Success 200 {object} MCPTestServerResponse
+// @Failure 400 {object} MCPTestServerResponse
+// @Router /v1/mcp/servers/{id}/test [post]
 func (h *MCPHandler) TestServer(w http.ResponseWriter, r *http.Request) {
 	if err := h.Deps.MCP.Health(r.Context(), chi.URLParam(r, "id")); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, MCPTestServerResponse{Status: "error", Error: err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
+	writeJSON(w, http.StatusOK, MCPTestServerResponse{Status: "ok"})
 }
 
 // ListPolicies handles GET /v1/mcp/tools.
+// @Tags MCP
+// @Summary List MCP tool policies
+// @Produce application/json
+// @Success 200 {object} MCPToolPolicyListResponse
+// @Router /v1/mcp/tools [get]
 func (h *MCPHandler) ListPolicies(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"items": h.Deps.MCP.ListToolPolicies()})
+	writeJSON(w, http.StatusOK, MCPToolPolicyListResponse{Items: h.Deps.MCP.ListToolPolicies()})
 }
 
 // UpdatePolicy handles PATCH /v1/mcp/tools/{id}/policy.
+// @Tags MCP
+// @Summary Update MCP tool policy
+// @Accept application/json
+// @Produce application/json
+// @Param id path string true "Tool policy ID"
+// @Param body body mcp.ToolPolicyInput true "Policy payload"
+// @Success 200 {object} core.MCPToolPolicy
+// @Failure 400 {object} LegacyErrorResponse
+// @Router /v1/mcp/tools/{id}/policy [patch]
 func (h *MCPHandler) UpdatePolicy(w http.ResponseWriter, r *http.Request) {
 	var body mcp.ToolPolicyInput
 	if err := decodeJSON(r, &body); err != nil {
@@ -115,11 +174,19 @@ func (h *MCPHandler) UpdatePolicy(w http.ResponseWriter, r *http.Request) {
 }
 
 // CallTool handles POST /v1/mcp/servers/{id}/tools/{tool_name}/call.
+// @Tags MCP
+// @Summary Call MCP tool through approval chain
+// @Accept application/json
+// @Produce application/json
+// @Param id path string true "MCP server ID"
+// @Param tool_name path string true "Tool name"
+// @Param body body MCPCallToolRequest false "Tool call payload"
+// @Success 200 {object} ToolRouteResponse
+// @Success 202 {object} ToolRouteResponse
+// @Failure 400 {object} LegacyErrorResponse
+// @Router /v1/mcp/servers/{id}/tools/{tool_name}/call [post]
 func (h *MCPHandler) CallTool(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Arguments map[string]any `json:"arguments"`
-		Purpose   string         `json:"purpose"`
-	}
+	var body MCPCallToolRequest
 	_ = decodeJSON(r, &body)
 	if body.Arguments == nil {
 		body.Arguments = map[string]any{}
@@ -147,16 +214,16 @@ func (h *MCPHandler) CallTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if outcome.Approval != nil {
-		writeJSON(w, http.StatusAccepted, map[string]any{
-			"approval":  outcome.Approval,
-			"decision":  outcome.Decision,
-			"inference": outcome.Inference,
+		writeJSON(w, http.StatusAccepted, ToolRouteResponse{
+			Approval:  outcome.Approval,
+			Decision:  &outcome.Decision,
+			Inference: &outcome.Inference,
 		})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"decision":  outcome.Decision,
-		"inference": outcome.Inference,
-		"result":    outcome.Result,
+	writeJSON(w, http.StatusOK, ToolRouteResponse{
+		Decision:  &outcome.Decision,
+		Inference: &outcome.Inference,
+		Result:    outcome.Result,
 	})
 }

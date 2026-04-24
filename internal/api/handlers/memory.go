@@ -18,16 +18,29 @@ func NewMemoryHandler(deps Dependencies) *MemoryHandler {
 }
 
 // ListFiles handles GET /v1/memory/files.
+// @Tags Memory
+// @Summary List memory files
+// @Produce application/json
+// @Success 200 {object} MemoryFilePathListResponse
+// @Failure 500 {object} LegacyErrorResponse
+// @Router /v1/memory/files [get]
 func (h *MemoryHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	items, err := h.Deps.Memory.ListFiles()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+	writeJSON(w, http.StatusOK, MemoryFilePathListResponse{Items: items})
 }
 
 // GetFile handles GET /v1/memory/files/{path}.
+// @Tags Memory
+// @Summary Read memory file
+// @Produce application/json
+// @Param path path string true "Memory file path"
+// @Success 200 {object} core.MemoryFile
+// @Failure 404 {object} LegacyErrorResponse
+// @Router /v1/memory/files/{path} [get]
 func (h *MemoryHandler) GetFile(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/v1/memory/files/")
 	item, err := h.Deps.Memory.ReadFile(path)
@@ -39,11 +52,17 @@ func (h *MemoryHandler) GetFile(w http.ResponseWriter, r *http.Request) {
 }
 
 // Search handles POST /v1/memory/search.
+// @Tags Memory
+// @Summary Search markdown memory
+// @Accept application/json
+// @Produce application/json
+// @Param body body SearchRequest true "Search payload"
+// @Success 200 {object} MemoryFileListResponse
+// @Failure 400 {object} LegacyErrorResponse
+// @Failure 500 {object} LegacyErrorResponse
+// @Router /v1/memory/search [post]
 func (h *MemoryHandler) Search(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Query string `json:"query"`
-		Limit int    `json:"limit"`
-	}
+	var body SearchRequest
 	if err := decodeJSON(r, &body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
@@ -53,17 +72,20 @@ func (h *MemoryHandler) Search(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+	writeJSON(w, http.StatusOK, MemoryFileListResponse{Items: items})
 }
 
 // CreatePatch handles POST /v1/memory/patches.
+// @Tags Memory
+// @Summary Create memory patch
+// @Accept application/json
+// @Produce application/json
+// @Param body body CreateMemoryPatchRequest true "Patch payload"
+// @Success 201 {object} core.MemoryPatch
+// @Failure 400 {object} LegacyErrorResponse
+// @Router /v1/memory/patches [post]
 func (h *MemoryHandler) CreatePatch(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Path        string            `json:"path"`
-		Summary     string            `json:"summary"`
-		Body        string            `json:"body"`
-		Frontmatter map[string]string `json:"frontmatter"`
-	}
+	var body CreateMemoryPatchRequest
 	if err := decodeJSON(r, &body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
@@ -82,10 +104,17 @@ func (h *MemoryHandler) CreatePatch(w http.ResponseWriter, r *http.Request) {
 }
 
 // Reindex handles POST /v1/memory/reindex.
+// @Tags Memory
+// @Summary Reindex markdown memory
+// @Accept application/json
+// @Produce application/json
+// @Success 200 {object} StatusResponse
+// @Failure 500 {object} LegacyErrorResponse
+// @Router /v1/memory/reindex [post]
 func (h *MemoryHandler) Reindex(w http.ResponseWriter, r *http.Request) {
 	if err := h.Deps.Memory.Reindex(r.Context()); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
+	writeJSON(w, http.StatusOK, StatusResponse{Status: "ok"})
 }

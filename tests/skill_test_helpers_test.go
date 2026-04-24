@@ -25,7 +25,7 @@ type skillFixtureOptions struct {
 	Script          string
 	InputSchema     map[string]any
 	Permissions     skills.PermissionsConfig
-	SandboxProfile  string
+	SandboxProfile  skills.SandboxProfile
 }
 
 func createSkillFixture(t *testing.T, opts skillFixtureOptions) string {

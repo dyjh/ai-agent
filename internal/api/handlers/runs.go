@@ -23,6 +23,15 @@ func NewRunsHandler(deps Dependencies) *RunsHandler {
 }
 
 // List handles GET /v1/runs.
+// @Tags Runs
+// @Summary List workflow runs
+// @Produce application/json
+// @Param status query string false "Comma-separated run statuses"
+// @Param limit query int false "Max runs to return"
+// @Success 200 {object} RunListResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /v1/runs [get]
 func (h *RunsHandler) List(w http.ResponseWriter, r *http.Request) {
 	if h.Deps.Runtime == nil {
 		writeError(w, http.StatusServiceUnavailable, "workflow_unavailable", "runtime is not configured", nil)
@@ -37,10 +46,18 @@ func (h *RunsHandler) List(w http.ResponseWriter, r *http.Request) {
 	for _, item := range items {
 		sanitized = append(sanitized, sanitizeRunState(item))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": sanitized})
+	writeJSON(w, http.StatusOK, RunListResponse{Items: sanitized})
 }
 
 // Get handles GET /v1/runs/{run_id}.
+// @Tags Runs
+// @Summary Get workflow run
+// @Produce application/json
+// @Param run_id path string true "Run ID"
+// @Success 200 {object} agent.RunState
+// @Failure 404 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /v1/runs/{run_id} [get]
 func (h *RunsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if h.Deps.Runtime == nil {
 		writeError(w, http.StatusServiceUnavailable, "workflow_unavailable", "runtime is not configured", nil)
@@ -55,6 +72,14 @@ func (h *RunsHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 // Steps handles GET /v1/runs/{run_id}/steps.
+// @Tags Runs
+// @Summary List workflow run steps
+// @Produce application/json
+// @Param run_id path string true "Run ID"
+// @Success 200 {object} RunStepListResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /v1/runs/{run_id}/steps [get]
 func (h *RunsHandler) Steps(w http.ResponseWriter, r *http.Request) {
 	if h.Deps.Runtime == nil {
 		writeError(w, http.StatusServiceUnavailable, "workflow_unavailable", "runtime is not configured", nil)
@@ -69,19 +94,27 @@ func (h *RunsHandler) Steps(w http.ResponseWriter, r *http.Request) {
 	for _, item := range items {
 		sanitized = append(sanitized, sanitizeRunStep(item))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": sanitized})
+	writeJSON(w, http.StatusOK, RunStepListResponse{Items: sanitized})
 }
 
 // Resume handles POST /v1/runs/{run_id}/resume.
+// @Tags Runs
+// @Summary Resume paused workflow run
+// @Accept application/json
+// @Produce application/json
+// @Param run_id path string true "Run ID"
+// @Param body body ResumeRunRequest true "Resume payload"
+// @Success 200 {object} agent.RunResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /v1/runs/{run_id}/resume [post]
 func (h *RunsHandler) Resume(w http.ResponseWriter, r *http.Request) {
 	if h.Deps.Runtime == nil {
 		writeError(w, http.StatusServiceUnavailable, "workflow_unavailable", "runtime is not configured", nil)
 		return
 	}
-	var body struct {
-		ApprovalID string `json:"approval_id"`
-		Approved   bool   `json:"approved"`
-	}
+	var body ResumeRunRequest
 	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error(), nil)
 		return
@@ -108,6 +141,15 @@ func (h *RunsHandler) Resume(w http.ResponseWriter, r *http.Request) {
 }
 
 // Cancel handles POST /v1/runs/{run_id}/cancel.
+// @Tags Runs
+// @Summary Cancel workflow run
+// @Accept application/json
+// @Produce application/json
+// @Param run_id path string true "Run ID"
+// @Success 200 {object} agent.RunState
+// @Failure 400 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /v1/runs/{run_id}/cancel [post]
 func (h *RunsHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	if h.Deps.Runtime == nil {
 		writeError(w, http.StatusServiceUnavailable, "workflow_unavailable", "runtime is not configured", nil)

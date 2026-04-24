@@ -9,14 +9,16 @@ import (
 	"local-agent/internal/app"
 	"local-agent/internal/config"
 	"local-agent/internal/core"
+	"local-agent/internal/tools/skills"
 )
 
 func TestReadOnlySkillAutoExecutes(t *testing.T) {
 	bootstrap := newSkillBootstrap(t)
 	root := createSkillFixture(t, skillFixtureOptions{
-		ID:      "read_skill",
-		Effects: []string{"process.read", "system.metrics.read"},
-		Script:  "#!/bin/sh\nprintf '{\"ok\":true}'\n",
+		ID:             "read_skill",
+		Effects:        []string{"process.read", "system.metrics.read"},
+		SandboxProfile: skills.SandboxProfileBestEffortLocal,
+		Script:         "#!/bin/sh\nprintf '{\"ok\":true}'\n",
 	})
 	if _, err := bootstrap.Skills.Upload(root, "", ""); err != nil {
 		t.Fatalf("Upload() error = %v", err)
@@ -97,6 +99,33 @@ func TestWriteSkillRequiresApprovalAndHonorsSnapshot(t *testing.T) {
 	}
 	if result.Output["status"] != "ok" {
 		t.Fatalf("status = %v, want ok", result.Output["status"])
+	}
+}
+
+func TestRestrictedReadOnlySkillFallbackRequiresApproval(t *testing.T) {
+	bootstrap := newSkillBootstrap(t)
+	bootstrap.Skills.SetSandboxes(&skills.LocalRestrictedRunner{})
+
+	root := createSkillFixture(t, skillFixtureOptions{
+		ID:      "restricted_fallback_skill",
+		Effects: []string{"process.read"},
+	})
+	if _, err := bootstrap.Skills.Upload(root, "", ""); err != nil {
+		t.Fatalf("Upload() error = %v", err)
+	}
+
+	outcome, err := bootstrap.Router.Propose(context.Background(), "run_skill_fallback", "conv_skill_fallback", core.ToolProposal{
+		ID:   "tool_skill_fallback",
+		Tool: "skill.run",
+		Input: map[string]any{
+			"skill_id": "restricted_fallback_skill",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Propose() error = %v", err)
+	}
+	if outcome.Approval == nil || !outcome.Decision.RequiresApproval {
+		t.Fatalf("restricted fallback should require approval")
 	}
 }
 

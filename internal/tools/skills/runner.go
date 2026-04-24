@@ -17,6 +17,7 @@ import (
 type Runner struct {
 	Manager        *Manager
 	Sandbox        SandboxRunner
+	Sandboxes      []SandboxRunner
 	MaxOutputChars int
 }
 
@@ -52,16 +53,12 @@ func (r *Runner) Execute(ctx context.Context, input map[string]any) (*core.ToolR
 }
 
 func (r *Runner) run(ctx context.Context, entry RegisteredSkill, args map[string]any) (*core.ToolResult, error) {
-	prepared, err := prepareExecution(entry, args, int64(r.MaxOutputChars))
+	prepared, err := prepareExecution(entry, args, int64(r.MaxOutputChars), r.availableSandboxes())
 	if err != nil {
 		return failedResult(entry.Registration.ID, time.Time{}, 0, err.Error()), err
 	}
 
-	sandbox := r.Sandbox
-	if sandbox == nil {
-		sandbox = &LocalRestrictedRunner{}
-	}
-	result, runErr := sandbox.Run(ctx, prepared.Request)
+	result, runErr := prepared.Runner.Run(ctx, prepared.Request)
 	if result == nil {
 		return failedResult(entry.Registration.ID, time.Time{}, 0, fmt.Sprintf("skill execution failed: %v", runErr)), runErr
 	}
@@ -100,6 +97,7 @@ func (r *Runner) run(ctx context.Context, entry RegisteredSkill, args map[string
 			"exit_code":         result.ExitCode,
 			"duration_ms":       result.FinishedAt.Sub(result.StartedAt).Milliseconds(),
 			"warnings":          append([]string(nil), result.Warnings...),
+			"metadata":          cloneMetadata(result.Metadata),
 			"execution_profile": prepared.Profile,
 		},
 		StartedAt:  result.StartedAt,
@@ -109,6 +107,30 @@ func (r *Runner) run(ctx context.Context, entry RegisteredSkill, args map[string
 		toolResult.Error = runErr.Error()
 	}
 	return toolResult, runErr
+}
+
+func (r *Runner) availableSandboxes() []SandboxRunner {
+	if len(r.Sandboxes) > 0 {
+		return cloneSandboxRunners(r.Sandboxes)
+	}
+	if r.Sandbox != nil {
+		return []SandboxRunner{r.Sandbox}
+	}
+	if r.Manager != nil {
+		return r.Manager.AvailableSandboxes()
+	}
+	return defaultSandboxRunners()
+}
+
+func cloneMetadata(input map[string]any) map[string]any {
+	if len(input) == 0 {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(input))
+	for key, value := range input {
+		out[key] = value
+	}
+	return out
 }
 
 func parseOutput(mode, stdout string) (map[string]any, error) {

@@ -47,6 +47,7 @@ type Manager struct {
 	root         string
 	packagesRoot string
 	tempRoot     string
+	sandboxes    []SandboxRunner
 	mu           sync.RWMutex
 	skills       map[string]RegisteredSkill
 }
@@ -61,6 +62,7 @@ func NewManager(root string) *Manager {
 		root:         absRoot,
 		packagesRoot: filepath.Join(absRoot, "packages"),
 		tempRoot:     filepath.Join(absRoot, ".tmp"),
+		sandboxes:    defaultSandboxRunners(),
 		skills:       map[string]RegisteredSkill{},
 	}
 	_ = os.MkdirAll(manager.root, 0o755)
@@ -200,7 +202,7 @@ func (m *Manager) Validate(id string, args map[string]any, defaultMaxOutput int6
 	if err != nil {
 		return ValidationResult{}, err
 	}
-	return validateExecution(item, args, defaultMaxOutput)
+	return validateExecution(item, args, defaultMaxOutput, m.AvailableSandboxes())
 }
 
 // Remove unregisters a skill and deletes managed zip packages when applicable.
@@ -252,12 +254,35 @@ func (m *Manager) PolicyProfile(id string) (core.SkillPolicyProfile, error) {
 	if err != nil {
 		return core.SkillPolicyProfile{}, err
 	}
+	profile, _, err := buildExecutionProfile(item, 0, m.AvailableSandboxes())
+	if err != nil {
+		return core.SkillPolicyProfile{}, err
+	}
 	return core.SkillPolicyProfile{
-		ID:              item.Registration.ID,
-		Effects:         append([]string(nil), item.Manifest.EffectiveEffects()...),
-		ApprovalDefault: item.Manifest.Approval.Default,
-		Enabled:         item.Registration.Enabled,
+		ID:               item.Registration.ID,
+		Effects:          append([]string(nil), item.Manifest.EffectiveEffects()...),
+		ApprovalDefault:  item.Manifest.Approval.Default,
+		Enabled:          item.Registration.Enabled,
+		SandboxProfile:   profile.SandboxProfile,
+		Runner:           profile.Runner,
+		WillFallback:     profile.WillFallback,
+		RequiresApproval: profile.RequiresApproval,
+		Warnings:         append([]string(nil), profile.Warnings...),
 	}, nil
+}
+
+// SetSandboxes replaces the execution runners used for validation and policy inspection.
+func (m *Manager) SetSandboxes(runners ...SandboxRunner) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sandboxes = cloneSandboxRunners(runners)
+}
+
+// AvailableSandboxes returns the configured execution runners.
+func (m *Manager) AvailableSandboxes() []SandboxRunner {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return cloneSandboxRunners(m.sandboxes)
 }
 
 func (m *Manager) loadManagedPackages() {
@@ -331,7 +356,7 @@ func (m *Manager) loadEntry(root string, info core.SkillPackageInfo, name, descr
 		SourceType:      info.SourceType,
 		Checksum:        info.Checksum,
 		InstalledAt:     info.InstalledAt,
-		SandboxProfile:  manifest.Sandbox.Profile,
+		SandboxProfile:  string(manifest.Sandbox.Profile),
 		Enabled:         true,
 		CreatedAt:       time.Now().UTC(),
 	}
@@ -341,7 +366,7 @@ func (m *Manager) loadEntry(root string, info core.SkillPackageInfo, name, descr
 		Root:         root,
 		Package:      info,
 	}
-	if _, err := prepareExecution(entry, map[string]any{}, 0); err != nil {
+	if _, err := prepareExecution(entry, map[string]any{}, 0, m.AvailableSandboxes()); err != nil {
 		return RegisteredSkill{}, err
 	}
 	return entry, nil

@@ -17,6 +17,11 @@ func NewHealthHandler(deps Dependencies) *HealthHandler {
 }
 
 // Get serves the health payload.
+// @Tags Health
+// @Summary Get service health
+// @Produce application/json
+// @Success 200 {object} HealthResponse
+// @Router /v1/health [get]
 func (h *HealthHandler) Get(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 

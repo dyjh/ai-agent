@@ -196,6 +196,12 @@ func (m *Manager) UpdateServer(id string, input ServerInput) (core.MCPServer, er
 	if input.Transport != "" {
 		merged.Transport = input.Transport
 	}
+	if input.Dialect != "" {
+		merged.Dialect = input.Dialect
+	}
+	if !compatibilityInputEmpty(input.Compatibility) {
+		merged.Compatibility = input.Compatibility
+	}
 	if input.Command != "" {
 		merged.Command = input.Command
 	}
@@ -419,6 +425,8 @@ func (m *Manager) transportFor(ctx context.Context, serverID string) (MCPTranspo
 	cfg := TransportConfig{
 		ServerID:       server.ID,
 		Transport:      server.Transport,
+		Dialect:        server.Dialect,
+		Compatibility:  server.Compatibility,
 		Command:        server.Command,
 		Args:           append([]string(nil), server.Args...),
 		Cwd:            server.Cwd,
@@ -507,11 +515,17 @@ func normalizeServer(input ServerInput, defaultTimeout int, allowGeneratedID boo
 	if timeout <= 0 {
 		timeout = defaultTimeout
 	}
+	compatibility, err := normalizeCompatibility(input, timeout)
+	if err != nil {
+		return core.MCPServer{}, fmt.Errorf("mcp server %s compatibility: %w", id, err)
+	}
 	now := time.Now().UTC()
 	return core.MCPServer{
 		ID:             id,
 		Name:           name,
 		Transport:      transport,
+		Dialect:        compatibility.Dialect,
+		Compatibility:  compatibility,
 		Command:        command,
 		Args:           expandStrings(input.Args),
 		Cwd:            strings.TrimSpace(os.ExpandEnv(input.Cwd)),
@@ -523,6 +537,98 @@ func normalizeServer(input ServerInput, defaultTimeout int, allowGeneratedID boo
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}, nil
+}
+
+func normalizeCompatibility(input ServerInput, timeout int) (core.MCPCompatibilityProfile, error) {
+	profile := defaultCompatibilityProfile(timeout)
+	dialect := strings.ToLower(strings.TrimSpace(os.ExpandEnv(input.Dialect)))
+	if dialect == "" {
+		dialect = strings.ToLower(strings.TrimSpace(os.ExpandEnv(input.Compatibility.Dialect)))
+	}
+	if dialect != "" {
+		profile.Dialect = dialect
+	}
+	switch profile.Dialect {
+	case DialectStrictJSONRPC, DialectLineDelimitedJSONRPC, DialectEnvelopeWrapped:
+	default:
+		return core.MCPCompatibilityProfile{}, fmt.Errorf("unsupported dialect: %s", profile.Dialect)
+	}
+
+	if input.Compatibility.AcceptMissingSchema != nil {
+		profile.AcceptMissingSchema = *input.Compatibility.AcceptMissingSchema
+	}
+	if input.Compatibility.AcceptExtraMetadata != nil {
+		profile.AcceptExtraMetadata = *input.Compatibility.AcceptExtraMetadata
+	}
+	if input.Compatibility.AcceptTextOnlyResult != nil {
+		profile.AcceptTextOnlyResult = *input.Compatibility.AcceptTextOnlyResult
+	}
+	if input.Compatibility.AcceptStructuredResult != nil {
+		profile.AcceptStructuredResult = *input.Compatibility.AcceptStructuredResult
+	}
+	if input.Compatibility.NormalizeErrorShape != nil {
+		profile.NormalizeErrorShape = *input.Compatibility.NormalizeErrorShape
+	}
+	if input.Compatibility.StrictIDMatching != nil {
+		profile.StrictIDMatching = *input.Compatibility.StrictIDMatching
+	}
+	if input.Compatibility.MaxPayloadBytes > 0 {
+		profile.MaxPayloadBytes = input.Compatibility.MaxPayloadBytes
+	}
+	if input.Compatibility.TimeoutSeconds > 0 {
+		profile.TimeoutSeconds = input.Compatibility.TimeoutSeconds
+	}
+	if profile.MaxPayloadBytes <= 0 {
+		return core.MCPCompatibilityProfile{}, fmt.Errorf("max_payload_bytes must be positive")
+	}
+	if profile.TimeoutSeconds <= 0 {
+		return core.MCPCompatibilityProfile{}, fmt.Errorf("timeout_seconds must be positive")
+	}
+	return profile, nil
+}
+
+func defaultCompatibilityProfile(timeout int) core.MCPCompatibilityProfile {
+	if timeout <= 0 {
+		timeout = 30
+	}
+	return core.MCPCompatibilityProfile{
+		Dialect:                DialectStrictJSONRPC,
+		AcceptStructuredResult: true,
+		NormalizeErrorShape:    true,
+		StrictIDMatching:       true,
+		MaxPayloadBytes:        DefaultMaxPayloadBytes,
+		TimeoutSeconds:         timeout,
+	}
+}
+
+func compatibilityInputEmpty(input CompatibilityInput) bool {
+	return input.Dialect == "" &&
+		input.AcceptMissingSchema == nil &&
+		input.AcceptExtraMetadata == nil &&
+		input.AcceptTextOnlyResult == nil &&
+		input.AcceptStructuredResult == nil &&
+		input.NormalizeErrorShape == nil &&
+		input.StrictIDMatching == nil &&
+		input.MaxPayloadBytes == 0 &&
+		input.TimeoutSeconds == 0
+}
+
+func compatibilityToInput(profile core.MCPCompatibilityProfile) CompatibilityInput {
+	return CompatibilityInput{
+		Dialect:                profile.Dialect,
+		AcceptMissingSchema:    boolPtr(profile.AcceptMissingSchema),
+		AcceptExtraMetadata:    boolPtr(profile.AcceptExtraMetadata),
+		AcceptTextOnlyResult:   boolPtr(profile.AcceptTextOnlyResult),
+		AcceptStructuredResult: boolPtr(profile.AcceptStructuredResult),
+		NormalizeErrorShape:    boolPtr(profile.NormalizeErrorShape),
+		StrictIDMatching:       boolPtr(profile.StrictIDMatching),
+		MaxPayloadBytes:        profile.MaxPayloadBytes,
+		TimeoutSeconds:         profile.TimeoutSeconds,
+	}
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }
 
 func normalizePolicy(id string, input ToolPolicyInput) (core.MCPToolPolicy, error) {
@@ -650,6 +756,8 @@ func serverToInput(server core.MCPServer) ServerInput {
 		ID:             server.ID,
 		Name:           server.Name,
 		Transport:      server.Transport,
+		Dialect:        server.Dialect,
+		Compatibility:  compatibilityToInput(server.Compatibility),
 		Command:        server.Command,
 		Args:           append([]string(nil), server.Args...),
 		Cwd:            server.Cwd,

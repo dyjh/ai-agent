@@ -10,16 +10,16 @@ import (
 	"strings"
 	"time"
 
+	"local-agent/internal/core"
 	"local-agent/internal/security"
 )
-
-const maxHTTPResponseBytes = 2 << 20
 
 // HTTPTransport calls an MCP endpoint using JSON-RPC over HTTP.
 type HTTPTransport struct {
 	url     string
 	headers map[string]string
 	client  *http.Client
+	profile core.MCPCompatibilityProfile
 }
 
 // NewHTTPTransport creates an HTTP MCP transport.
@@ -28,12 +28,23 @@ func NewHTTPTransport(cfg TransportConfig) *HTTPTransport {
 	if timeout <= 0 {
 		timeout = 30
 	}
+	profile := cfg.Compatibility
+	if profile.Dialect == "" {
+		profile = defaultCompatibilityProfile(timeout)
+	}
+	if profile.TimeoutSeconds <= 0 {
+		profile.TimeoutSeconds = timeout
+	}
+	if profile.MaxPayloadBytes <= 0 {
+		profile.MaxPayloadBytes = DefaultMaxPayloadBytes
+	}
 	return &HTTPTransport{
 		url:     strings.TrimSpace(cfg.URL),
 		headers: copyStringMap(cfg.Headers),
 		client: &http.Client{
-			Timeout: time.Duration(timeout) * time.Second,
+			Timeout: time.Duration(profile.TimeoutSeconds) * time.Second,
 		},
+		profile: profile,
 	}
 }
 
@@ -58,7 +69,7 @@ func (t *HTTPTransport) Health(ctx context.Context) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		data, _ := readLimited(resp.Body)
+		data, _ := readLimited(resp.Body, t.profile.MaxPayloadBytes)
 		return fmt.Errorf("mcp http health status %d: %s", resp.StatusCode, truncateForError(data))
 	}
 	return nil
@@ -70,7 +81,7 @@ func (t *HTTPTransport) ListTools(ctx context.Context) ([]MCPToolSchema, error) 
 	if err != nil {
 		return nil, err
 	}
-	return parseToolsResult(payload)
+	return parseToolsResult(payload, t.profile)
 }
 
 // CallTool invokes a tool via the MCP tools/call JSON-RPC method.
@@ -82,7 +93,7 @@ func (t *HTTPTransport) CallTool(ctx context.Context, name string, input map[str
 	if err != nil {
 		return nil, err
 	}
-	return parseToolResult(payload)
+	return parseToolResult(payload, t.profile)
 }
 
 // Close is a no-op for the HTTP transport.
@@ -95,6 +106,8 @@ func (t *HTTPTransport) postRPC(ctx context.Context, payload rpcRequest) ([]byte
 	if err != nil {
 		return nil, err
 	}
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(t.profile.TimeoutSeconds)*time.Second)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.url, bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
@@ -105,22 +118,21 @@ func (t *HTTPTransport) postRPC(ctx context.Context, payload rpcRequest) ([]byte
 
 	resp, err := t.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("mcp http request failed: %w", err)
+		if ctx.Err() != nil {
+			return nil, newMCPError(MCPErrorTimeout, "mcp http request timed out", ctx.Err())
+		}
+		return nil, newMCPError(MCPErrorTransportFailure, "mcp http request failed", err)
 	}
 	defer resp.Body.Close()
 
-	body, err := readLimited(resp.Body)
+	body, err := readLimited(resp.Body, t.profile.MaxPayloadBytes)
 	if err != nil {
-		return nil, err
+		return nil, newMCPError(MCPErrorInvalidResponse, "read mcp http response", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("mcp http status %d: %s", resp.StatusCode, truncateForError(body))
+		return nil, newMCPError(MCPErrorTransportFailure, fmt.Sprintf("mcp http status %d: %s", resp.StatusCode, truncateForError(body)), nil)
 	}
-
-	if looksLikeRPC(body) {
-		return decodeRPCResponse(body)
-	}
-	return body, nil
+	return decodeRPCResponse(body, payload.ID, t.profile)
 }
 
 func (t *HTTPTransport) applyHeaders(req *http.Request) {
@@ -132,27 +144,19 @@ func (t *HTTPTransport) applyHeaders(req *http.Request) {
 	}
 }
 
-func readLimited(reader io.Reader) ([]byte, error) {
-	limited := io.LimitReader(reader, maxHTTPResponseBytes+1)
+func readLimited(reader io.Reader, maxBytes int64) ([]byte, error) {
+	if maxBytes <= 0 {
+		maxBytes = DefaultMaxPayloadBytes
+	}
+	limited := io.LimitReader(reader, maxBytes+1)
 	data, err := io.ReadAll(limited)
 	if err != nil {
 		return nil, err
 	}
-	if len(data) > maxHTTPResponseBytes {
-		return nil, fmt.Errorf("mcp http response exceeds %d bytes", maxHTTPResponseBytes)
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("mcp response exceeds %d bytes", maxBytes)
 	}
 	return data, nil
-}
-
-func looksLikeRPC(data []byte) bool {
-	var probe map[string]any
-	if err := json.Unmarshal(data, &probe); err != nil {
-		return false
-	}
-	_, hasResult := probe["result"]
-	_, hasError := probe["error"]
-	_, hasJSONRPC := probe["jsonrpc"]
-	return hasResult || hasError || hasJSONRPC
 }
 
 func truncateForError(data []byte) string {

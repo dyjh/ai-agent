@@ -13,6 +13,7 @@ import (
 	"local-agent/internal/api"
 	"local-agent/internal/app"
 	"local-agent/internal/config"
+	"local-agent/internal/tools/skills"
 )
 
 func TestAPISmoke(t *testing.T) {
@@ -103,9 +104,10 @@ func TestAPISmoke(t *testing.T) {
 	}
 
 	skillRoot := createSkillFixture(t, skillFixtureOptions{
-		ID:      "api_skill",
-		Effects: []string{"process.read"},
-		Script:  "#!/bin/sh\nprintf '{\"ok\":true}'\n",
+		ID:             "api_skill",
+		Effects:        []string{"process.read"},
+		SandboxProfile: skills.SandboxProfileBestEffortLocal,
+		Script:         "#!/bin/sh\nprintf '{\"ok\":true}'\n",
 	})
 
 	var skill map[string]any

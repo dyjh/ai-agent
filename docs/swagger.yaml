@@ -1,0 +1,2866 @@
+basePath: /
+definitions:
+  internal_api_handlers.ApprovalListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_core.ApprovalRecord'
+        type: array
+    type: object
+  internal_api_handlers.ApprovalResolutionResponse:
+    properties:
+      approval:
+        $ref: '#/definitions/local-agent_internal_core.ApprovalRecord'
+      result:
+        $ref: '#/definitions/local-agent_internal_core.ToolResult'
+      run:
+        $ref: '#/definitions/local-agent_internal_agent.RunResponse'
+    type: object
+  internal_api_handlers.ConversationListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_core.Conversation'
+        type: array
+    type: object
+  internal_api_handlers.CreateConversationRequest:
+    properties:
+      project_key:
+        type: string
+      title:
+        type: string
+    type: object
+  internal_api_handlers.CreateKnowledgeBaseRequest:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+    type: object
+  internal_api_handlers.CreateMemoryPatchRequest:
+    properties:
+      body:
+        type: string
+      frontmatter:
+        additionalProperties:
+          type: string
+        type: object
+      path:
+        type: string
+      summary:
+        type: string
+    type: object
+  internal_api_handlers.ErrorResponse:
+    properties:
+      code:
+        type: string
+      details: {}
+      message:
+        type: string
+    type: object
+  internal_api_handlers.HealthResponse:
+    properties:
+      database:
+        additionalProperties: {}
+        type: object
+      docs:
+        additionalProperties: {}
+        type: object
+      knowledge_base:
+        additionalProperties: {}
+        type: object
+      qdrant:
+        additionalProperties: {}
+        type: object
+      server:
+        additionalProperties: {}
+        type: object
+      service:
+        type: string
+      status:
+        type: string
+      timestamp:
+        type: string
+      vector:
+        additionalProperties: {}
+        type: object
+      version:
+        type: string
+      workflow:
+        additionalProperties: {}
+        type: object
+    type: object
+  internal_api_handlers.KBChunkListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_core.KBChunk'
+        type: array
+    type: object
+  internal_api_handlers.KnowledgeBaseDocumentUploadRequest:
+    properties:
+      content:
+        type: string
+      filename:
+        type: string
+    type: object
+  internal_api_handlers.KnowledgeBaseHealthResponse:
+    properties:
+      collections:
+        additionalProperties:
+          type: string
+        type: object
+      enabled:
+        type: boolean
+      error:
+        type: string
+      fallback_reason:
+        type: string
+      provider:
+        type: string
+      qdrant:
+        type: string
+      status:
+        type: string
+      vector_backend:
+        type: string
+    type: object
+  internal_api_handlers.KnowledgeBaseItem:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  internal_api_handlers.KnowledgeBaseListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_core.KnowledgeBase'
+        type: array
+    type: object
+  internal_api_handlers.LegacyErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  internal_api_handlers.MCPCallToolRequest:
+    properties:
+      arguments:
+        additionalProperties: {}
+        type: object
+      purpose:
+        type: string
+    type: object
+  internal_api_handlers.MCPRefreshResponse:
+    properties:
+      state:
+        $ref: '#/definitions/local-agent_internal_tools_mcp.RuntimeState'
+      status:
+        type: string
+      tools:
+        items:
+          $ref: '#/definitions/local-agent_internal_tools_mcp.MCPToolSchema'
+        type: array
+    type: object
+  internal_api_handlers.MCPServerDetailResponse:
+    properties:
+      server:
+        $ref: '#/definitions/local-agent_internal_core.MCPServer'
+      state:
+        $ref: '#/definitions/local-agent_internal_tools_mcp.RuntimeState'
+    type: object
+  internal_api_handlers.MCPServerListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_core.MCPServer'
+        type: array
+    type: object
+  internal_api_handlers.MCPTestServerResponse:
+    properties:
+      error:
+        type: string
+      status:
+        type: string
+    type: object
+  internal_api_handlers.MCPToolPolicyListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_core.MCPToolPolicy'
+        type: array
+    type: object
+  internal_api_handlers.MemoryFileListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_core.MemoryFile'
+        type: array
+    type: object
+  internal_api_handlers.MemoryFilePathListResponse:
+    properties:
+      items:
+        items:
+          type: string
+        type: array
+    type: object
+  internal_api_handlers.MessageListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_core.Message'
+        type: array
+    type: object
+  internal_api_handlers.PostMessageRequest:
+    properties:
+      content:
+        type: string
+    type: object
+  internal_api_handlers.RejectApprovalRequest:
+    properties:
+      reason:
+        type: string
+    type: object
+  internal_api_handlers.ResumeRunRequest:
+    properties:
+      approval_id:
+        type: string
+      approved:
+        type: boolean
+    type: object
+  internal_api_handlers.RunListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_agent.RunState'
+        type: array
+    type: object
+  internal_api_handlers.RunStepListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_agent.RunStep'
+        type: array
+    type: object
+  internal_api_handlers.SearchRequest:
+    properties:
+      limit:
+        type: integer
+      query:
+        type: string
+    type: object
+  internal_api_handlers.SkillDetailResponse:
+    properties:
+      manifest:
+        $ref: '#/definitions/local-agent_internal_tools_skills.Manifest'
+      package:
+        $ref: '#/definitions/local-agent_internal_core.SkillPackageInfo'
+      skill:
+        $ref: '#/definitions/local-agent_internal_core.SkillRegistration'
+    type: object
+  internal_api_handlers.SkillListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_core.SkillRegistration'
+        type: array
+    type: object
+  internal_api_handlers.SkillManifestResponse:
+    properties:
+      manifest:
+        $ref: '#/definitions/local-agent_internal_tools_skills.Manifest'
+      skill:
+        $ref: '#/definitions/local-agent_internal_core.SkillRegistration'
+    type: object
+  internal_api_handlers.SkillRunRequestBody:
+    properties:
+      args:
+        additionalProperties: {}
+        type: object
+    type: object
+  internal_api_handlers.StatusResponse:
+    properties:
+      status:
+        type: string
+    type: object
+  internal_api_handlers.ToolRouteResponse:
+    properties:
+      approval:
+        $ref: '#/definitions/local-agent_internal_core.ApprovalRecord'
+      decision:
+        $ref: '#/definitions/local-agent_internal_core.PolicyDecision'
+      inference:
+        $ref: '#/definitions/local-agent_internal_core.EffectInferenceResult'
+      result:
+        $ref: '#/definitions/local-agent_internal_core.ToolResult'
+    type: object
+  local-agent_internal_agent.AgentContext:
+    properties:
+      messages:
+        items:
+          $ref: '#/definitions/schema.Message'
+        type: array
+    type: object
+  local-agent_internal_agent.Plan:
+    properties:
+      decision:
+        $ref: '#/definitions/local-agent_internal_agent.PlanDecision'
+      message:
+        type: string
+      preamble:
+        type: string
+      reason:
+        type: string
+      tool_proposal:
+        $ref: '#/definitions/local-agent_internal_core.ToolProposal'
+    type: object
+  local-agent_internal_agent.PlanDecision:
+    enum:
+    - answer
+    - tool
+    - continue
+    - stop
+    type: string
+    x-enum-varnames:
+    - PlanDecisionAnswer
+    - PlanDecisionTool
+    - PlanDecisionContinue
+    - PlanDecisionStop
+  local-agent_internal_agent.RunResponse:
+    properties:
+      approval:
+        $ref: '#/definitions/local-agent_internal_core.ApprovalRecord'
+      assistant_message:
+        $ref: '#/definitions/local-agent_internal_core.Message'
+      run_id:
+        type: string
+      state:
+        $ref: '#/definitions/local-agent_internal_agent.RunState'
+      tool_result:
+        $ref: '#/definitions/local-agent_internal_core.ToolResult'
+    type: object
+  local-agent_internal_agent.RunState:
+    properties:
+      approval_id:
+        type: string
+      context:
+        $ref: '#/definitions/local-agent_internal_agent.AgentContext'
+      conversation_id:
+        type: string
+      created_at:
+        type: string
+      current_step:
+        type: string
+      current_step_index:
+        type: integer
+      error:
+        type: string
+      inference:
+        $ref: '#/definitions/local-agent_internal_core.EffectInferenceResult'
+      max_steps:
+        type: integer
+      plan:
+        $ref: '#/definitions/local-agent_internal_agent.Plan'
+      policy:
+        $ref: '#/definitions/local-agent_internal_core.PolicyDecision'
+      proposal:
+        $ref: '#/definitions/local-agent_internal_core.ToolProposal'
+      run_id:
+        type: string
+      status:
+        $ref: '#/definitions/local-agent_internal_agent.RunStatus'
+      step_count:
+        type: integer
+      tool_result:
+        $ref: '#/definitions/local-agent_internal_core.ToolResult'
+      updated_at:
+        type: string
+      user_message:
+        type: string
+    type: object
+  local-agent_internal_agent.RunStatus:
+    enum:
+    - received_user_message
+    - context_built
+    - planned
+    - tool_proposed
+    - effect_inferred
+    - policy_decided
+    - approval_requested
+    - paused_for_approval
+    - approval_approved
+    - approval_rejected
+    - tool_executing
+    - tool_completed
+    - tool_failed
+    - assistant_summarizing
+    - completed
+    - failed
+    - cancelled
+    type: string
+    x-enum-varnames:
+    - RunStatusReceived
+    - RunStatusContextBuilt
+    - RunStatusPlanned
+    - RunStatusToolProposed
+    - RunStatusEffectInferred
+    - RunStatusPolicyDecided
+    - RunStatusApprovalRequested
+    - RunStatusPausedForApproval
+    - RunStatusApprovalApproved
+    - RunStatusApprovalRejected
+    - RunStatusToolExecuting
+    - RunStatusToolCompleted
+    - RunStatusToolFailed
+    - RunStatusAssistantSummarize
+    - RunStatusCompleted
+    - RunStatusFailed
+    - RunStatusCancelled
+  local-agent_internal_agent.RunStep:
+    properties:
+      approval:
+        $ref: '#/definitions/local-agent_internal_core.ApprovalRecord'
+      created_at:
+        type: string
+      error:
+        type: string
+      index:
+        type: integer
+      inference:
+        $ref: '#/definitions/local-agent_internal_core.EffectInferenceResult'
+      policy:
+        $ref: '#/definitions/local-agent_internal_core.PolicyDecision'
+      proposal:
+        $ref: '#/definitions/local-agent_internal_core.ToolProposal'
+      run_id:
+        type: string
+      status:
+        $ref: '#/definitions/local-agent_internal_agent.RunStepStatus'
+      step_id:
+        type: string
+      summary:
+        type: string
+      tool_result:
+        $ref: '#/definitions/local-agent_internal_core.ToolResult'
+      type:
+        $ref: '#/definitions/local-agent_internal_agent.RunStepType'
+      updated_at:
+        type: string
+    type: object
+  local-agent_internal_agent.RunStepStatus:
+    enum:
+    - pending
+    - completed
+    - paused
+    - failed
+    - cancelled
+    type: string
+    x-enum-varnames:
+    - RunStepStatusPending
+    - RunStepStatusCompleted
+    - RunStepStatusPaused
+    - RunStepStatusFailed
+    - RunStepStatusCancelled
+  local-agent_internal_agent.RunStepType:
+    enum:
+    - build_context
+    - plan
+    - continue
+    - propose_tool
+    - infer_effect
+    - decide_policy
+    - request_approval
+    - execute_tool
+    - summarize
+    - finalize
+    - cancel
+    type: string
+    x-enum-varnames:
+    - RunStepTypeBuildContext
+    - RunStepTypePlan
+    - RunStepTypeContinue
+    - RunStepTypeProposeTool
+    - RunStepTypeInferEffect
+    - RunStepTypeDecidePolicy
+    - RunStepTypeRequestApproval
+    - RunStepTypeExecuteTool
+    - RunStepTypeSummarize
+    - RunStepTypeFinalize
+    - RunStepTypeCancel
+  local-agent_internal_core.ApprovalRecord:
+    properties:
+      conversation_id:
+        type: string
+      created_at:
+        type: string
+      decision:
+        $ref: '#/definitions/local-agent_internal_core.PolicyDecision'
+      id:
+        type: string
+      inference:
+        $ref: '#/definitions/local-agent_internal_core.EffectInferenceResult'
+      input_snapshot:
+        additionalProperties: {}
+        type: object
+      proposal:
+        $ref: '#/definitions/local-agent_internal_core.ToolProposal'
+      reason:
+        type: string
+      resolved_at:
+        type: string
+      run_id:
+        type: string
+      snapshot_hash:
+        type: string
+      status:
+        $ref: '#/definitions/local-agent_internal_core.ApprovalStatus'
+      summary:
+        type: string
+    type: object
+  local-agent_internal_core.ApprovalStatus:
+    enum:
+    - pending
+    - approved
+    - rejected
+    type: string
+    x-enum-varnames:
+    - ApprovalPending
+    - ApprovalApproved
+    - ApprovalRejected
+  local-agent_internal_core.Conversation:
+    properties:
+      archived:
+        type: boolean
+      created_at:
+        type: string
+      id:
+        type: string
+      project_key:
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  local-agent_internal_core.EffectInferenceResult:
+    properties:
+      approval_required:
+        type: boolean
+      confidence:
+        type: number
+      effects:
+        items:
+          type: string
+        type: array
+      reason_summary:
+        type: string
+      risk_level:
+        type: string
+      sensitive:
+        type: boolean
+    type: object
+  local-agent_internal_core.KBChunk:
+    properties:
+      content:
+        type: string
+      document:
+        type: string
+      id:
+        type: string
+      kb_id:
+        type: string
+      metadata:
+        additionalProperties:
+          type: string
+        type: object
+      score:
+        type: number
+    type: object
+  local-agent_internal_core.KnowledgeBase:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  local-agent_internal_core.MCPCompatibilityProfile:
+    properties:
+      accept_extra_metadata:
+        type: boolean
+      accept_missing_schema:
+        type: boolean
+      accept_structured_result:
+        type: boolean
+      accept_text_only_result:
+        type: boolean
+      dialect:
+        type: string
+      max_payload_bytes:
+        type: integer
+      normalize_error_shape:
+        type: boolean
+      strict_id_matching:
+        type: boolean
+      timeout_seconds:
+        type: integer
+    type: object
+  local-agent_internal_core.MCPServer:
+    properties:
+      args:
+        items:
+          type: string
+        type: array
+      command:
+        type: string
+      compatibility:
+        $ref: '#/definitions/local-agent_internal_core.MCPCompatibilityProfile'
+      created_at:
+        type: string
+      cwd:
+        type: string
+      dialect:
+        type: string
+      enabled:
+        type: boolean
+      environment:
+        additionalProperties:
+          type: string
+        type: object
+      headers:
+        additionalProperties:
+          type: string
+        type: object
+      id:
+        type: string
+      name:
+        type: string
+      timeout_seconds:
+        type: integer
+      transport:
+        type: string
+      updated_at:
+        type: string
+      url:
+        type: string
+    type: object
+  local-agent_internal_core.MCPToolPolicy:
+    properties:
+      approval:
+        type: string
+      effects:
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      reason:
+        type: string
+      requires_approval:
+        type: boolean
+      risk_level:
+        type: string
+      tool_name:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  local-agent_internal_core.MemoryFile:
+    properties:
+      body:
+        type: string
+      frontmatter:
+        additionalProperties:
+          type: string
+        type: object
+      path:
+        type: string
+    type: object
+  local-agent_internal_core.MemoryPatch:
+    properties:
+      body:
+        type: string
+      created_at:
+        type: string
+      frontmatter:
+        additionalProperties:
+          type: string
+        type: object
+      id:
+        type: string
+      path:
+        type: string
+      sensitive:
+        type: boolean
+      summary:
+        type: string
+    type: object
+  local-agent_internal_core.Message:
+    properties:
+      content:
+        type: string
+      content_json:
+        additionalProperties: {}
+        type: object
+      conversation_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      role:
+        type: string
+    type: object
+  local-agent_internal_core.PolicyDecision:
+    properties:
+      allowed:
+        type: boolean
+      approval_payload:
+        additionalProperties: {}
+        type: object
+      reason:
+        type: string
+      requires_approval:
+        type: boolean
+      risk_level:
+        type: string
+    type: object
+  local-agent_internal_core.SkillPackageInfo:
+    properties:
+      checksum:
+        type: string
+      installed_at:
+        type: string
+      package_path:
+        type: string
+      skill_id:
+        type: string
+      source_type:
+        type: string
+      version:
+        type: string
+    type: object
+  local-agent_internal_core.SkillRegistration:
+    properties:
+      approval_default:
+        type: string
+      archive_path:
+        type: string
+      checksum:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      effects:
+        items:
+          type: string
+        type: array
+      enabled:
+        type: boolean
+      id:
+        type: string
+      installed_at:
+        type: string
+      name:
+        type: string
+      runtime_type:
+        type: string
+      sandbox_profile:
+        type: string
+      source_type:
+        type: string
+      version:
+        type: string
+    type: object
+  local-agent_internal_core.ToolProposal:
+    properties:
+      created_at:
+        type: string
+      expected_effects:
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      input:
+        additionalProperties: {}
+        type: object
+      purpose:
+        type: string
+      tool:
+        type: string
+    type: object
+  local-agent_internal_core.ToolResult:
+    properties:
+      error:
+        type: string
+      finished_at:
+        type: string
+      output:
+        additionalProperties: {}
+        type: object
+      started_at:
+        type: string
+      tool_call_id:
+        type: string
+    type: object
+  local-agent_internal_tools_mcp.CompatibilityInput:
+    properties:
+      accept_extra_metadata:
+        type: boolean
+      accept_missing_schema:
+        type: boolean
+      accept_structured_result:
+        type: boolean
+      accept_text_only_result:
+        type: boolean
+      dialect:
+        type: string
+      max_payload_bytes:
+        type: integer
+      normalize_error_shape:
+        type: boolean
+      strict_id_matching:
+        type: boolean
+      timeout_seconds:
+        type: integer
+    type: object
+  local-agent_internal_tools_mcp.MCPToolSchema:
+    properties:
+      description:
+        type: string
+      input_schema:
+        additionalProperties: {}
+        type: object
+      metadata:
+        additionalProperties: {}
+        type: object
+      name:
+        type: string
+    type: object
+  local-agent_internal_tools_mcp.RuntimeState:
+    properties:
+      last_refresh_at:
+        type: string
+      server_id:
+        type: string
+      tool_count:
+        type: integer
+      tools:
+        items:
+          $ref: '#/definitions/local-agent_internal_tools_mcp.MCPToolSchema'
+        type: array
+    type: object
+  local-agent_internal_tools_mcp.ServerInput:
+    properties:
+      args:
+        items:
+          type: string
+        type: array
+      command:
+        type: string
+      compatibility:
+        $ref: '#/definitions/local-agent_internal_tools_mcp.CompatibilityInput'
+      cwd:
+        type: string
+      dialect:
+        type: string
+      enabled:
+        type: boolean
+      environment:
+        additionalProperties:
+          type: string
+        type: object
+      headers:
+        additionalProperties:
+          type: string
+        type: object
+      id:
+        type: string
+      name:
+        type: string
+      timeout_seconds:
+        type: integer
+      transport:
+        type: string
+      url:
+        type: string
+    type: object
+  local-agent_internal_tools_mcp.ToolPolicyInput:
+    properties:
+      approval:
+        type: string
+      effects:
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      reason:
+        type: string
+      requires_approval:
+        type: boolean
+      risk_level:
+        type: string
+      tool_name:
+        type: string
+    type: object
+  local-agent_internal_tools_skills.ApprovalConfig:
+    properties:
+      default:
+        type: string
+    type: object
+  local-agent_internal_tools_skills.EnvPermissions:
+    properties:
+      allow:
+        items:
+          type: string
+        type: array
+    type: object
+  local-agent_internal_tools_skills.ExecutionProfile:
+    properties:
+      allowed_env:
+        items:
+          type: string
+        type: array
+      allowed_hosts:
+        items:
+          type: string
+        type: array
+      allowed_read_paths:
+        items:
+          type: string
+        type: array
+      allowed_write_paths:
+        items:
+          type: string
+        type: array
+      filesystem_enforced:
+        type: boolean
+      max_output_bytes:
+        type: integer
+      max_processes:
+        type: integer
+      memory_limit_mb:
+        type: integer
+      network_enabled:
+        type: boolean
+      network_enforced:
+        type: boolean
+      platform:
+        type: string
+      platform_supported:
+        type: boolean
+      requested_sandbox_profile:
+        type: string
+      requires_approval:
+        type: boolean
+      runner:
+        type: string
+      sandbox_profile:
+        type: string
+      strong_isolation:
+        type: boolean
+      timeout_seconds:
+        type: integer
+      warnings:
+        items:
+          type: string
+        type: array
+      will_fallback:
+        type: boolean
+    type: object
+  local-agent_internal_tools_skills.FeaturePermission:
+    properties:
+      enabled:
+        type: boolean
+    type: object
+  local-agent_internal_tools_skills.FilesystemPermissions:
+    properties:
+      read:
+        items:
+          type: string
+        type: array
+      write:
+        items:
+          type: string
+        type: array
+    type: object
+  local-agent_internal_tools_skills.Manifest:
+    properties:
+      approval:
+        $ref: '#/definitions/local-agent_internal_tools_skills.ApprovalConfig'
+      description:
+        type: string
+      effects:
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      input_schema:
+        additionalProperties: {}
+        type: object
+      name:
+        type: string
+      output_schema:
+        additionalProperties: {}
+        type: object
+      permissions:
+        $ref: '#/definitions/local-agent_internal_tools_skills.PermissionsConfig'
+      runtime:
+        $ref: '#/definitions/local-agent_internal_tools_skills.Runtime'
+      sandbox:
+        $ref: '#/definitions/local-agent_internal_tools_skills.SandboxConfig'
+      version:
+        type: string
+    type: object
+  local-agent_internal_tools_skills.NetworkPermissions:
+    properties:
+      allow_hosts:
+        items:
+          type: string
+        type: array
+      enabled:
+        type: boolean
+    type: object
+  local-agent_internal_tools_skills.PermissionsConfig:
+    properties:
+      env:
+        $ref: '#/definitions/local-agent_internal_tools_skills.EnvPermissions'
+      filesystem:
+        $ref: '#/definitions/local-agent_internal_tools_skills.FilesystemPermissions'
+      network:
+        $ref: '#/definitions/local-agent_internal_tools_skills.NetworkPermissions'
+      process:
+        $ref: '#/definitions/local-agent_internal_tools_skills.ProcessPermissions'
+      shell:
+        allOf:
+        - $ref: '#/definitions/local-agent_internal_tools_skills.FeaturePermission'
+        description: legacy compatibility
+      tools:
+        $ref: '#/definitions/local-agent_internal_tools_skills.ToolPermissions'
+    type: object
+  local-agent_internal_tools_skills.ProcessPermissions:
+    properties:
+      max_output_bytes:
+        type: integer
+      max_runtime_seconds:
+        type: integer
+    type: object
+  local-agent_internal_tools_skills.RemovalResult:
+    properties:
+      package:
+        $ref: '#/definitions/local-agent_internal_core.SkillPackageInfo'
+      package_deleted:
+        type: boolean
+      removed:
+        type: boolean
+      skill_id:
+        type: string
+      version:
+        type: string
+    type: object
+  local-agent_internal_tools_skills.Runtime:
+    properties:
+      args:
+        items:
+          type: string
+        type: array
+      command:
+        type: string
+      cwd:
+        type: string
+      entrypoint:
+        type: string
+      input_mode:
+        type: string
+      output_mode:
+        type: string
+      timeout_seconds:
+        type: integer
+      type:
+        type: string
+    type: object
+  local-agent_internal_tools_skills.SandboxConfig:
+    properties:
+      profile:
+        $ref: '#/definitions/local-agent_internal_tools_skills.SandboxProfile'
+    type: object
+  local-agent_internal_tools_skills.SandboxProfile:
+    enum:
+    - restricted
+    - trusted_local
+    - best_effort_local
+    - best_effort_local
+    - linux_isolated
+    type: string
+    x-enum-varnames:
+    - SandboxProfileRestricted
+    - SandboxProfileTrustedLocal
+    - SandboxProfileBestEffortLocal
+    - SandboxProfileBestEffort
+    - SandboxProfileLinuxIsolated
+  local-agent_internal_tools_skills.SkillValidateResponse:
+    properties:
+      package:
+        $ref: '#/definitions/local-agent_internal_core.SkillPackageInfo'
+      skill:
+        $ref: '#/definitions/local-agent_internal_core.SkillRegistration'
+      status:
+        type: string
+      validation:
+        $ref: '#/definitions/local-agent_internal_tools_skills.ValidationResult'
+    type: object
+  local-agent_internal_tools_skills.ToolPermissions:
+    properties:
+      allow_mcp:
+        type: boolean
+      allow_shell:
+        type: boolean
+    type: object
+  local-agent_internal_tools_skills.UploadInput:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+      path:
+        type: string
+    type: object
+  local-agent_internal_tools_skills.UploadZipResponse:
+    properties:
+      package:
+        $ref: '#/definitions/local-agent_internal_core.SkillPackageInfo'
+      skill:
+        $ref: '#/definitions/local-agent_internal_core.SkillRegistration'
+    type: object
+  local-agent_internal_tools_skills.ValidationResult:
+    properties:
+      execution_profile:
+        $ref: '#/definitions/local-agent_internal_tools_skills.ExecutionProfile'
+      platform_supported:
+        type: boolean
+      requested_sandbox_profile:
+        type: string
+      requires_approval:
+        type: boolean
+      runner:
+        type: string
+      sandbox_profile:
+        type: string
+      skill_id:
+        type: string
+      status:
+        type: string
+      strong_isolation:
+        type: boolean
+      valid:
+        type: boolean
+      version:
+        type: string
+      warnings:
+        items:
+          type: string
+        type: array
+      will_fallback:
+        type: boolean
+    type: object
+  schema.ChatMessageAudioURL:
+    properties:
+      extra:
+        additionalProperties: {}
+        description: Extra is used to store extra information for the audio url.
+        type: object
+      mime_type:
+        description: MIMEType is the mime type of the audio, eg. "audio/wav" or "audio/ogg".
+        type: string
+      uri:
+        type: string
+      url:
+        description: |-
+          URL can either be a traditional URL or a special URL conforming to RFC-2397 (https://www.rfc-editor.org/rfc/rfc2397).
+          double check with model implementations for detailed instructions on how to use this.
+        type: string
+    type: object
+  schema.ChatMessageFileURL:
+    properties:
+      extra:
+        additionalProperties: {}
+        description: Extra is used to store extra information for the file url.
+        type: object
+      mime_type:
+        description: MIMEType is the mime type of the file, eg. "application/pdf",
+          "text/plain".
+        type: string
+      name:
+        description: Name is the name of the file.
+        type: string
+      uri:
+        type: string
+      url:
+        type: string
+    type: object
+  schema.ChatMessageImageURL:
+    properties:
+      detail:
+        allOf:
+        - $ref: '#/definitions/schema.ImageURLDetail'
+        description: Detail is the quality of the image url.
+      extra:
+        additionalProperties: {}
+        description: Extra is used to store extra information for the image url.
+        type: object
+      mime_type:
+        description: MIMEType is the mime type of the image, eg. "image/png".
+        type: string
+      uri:
+        type: string
+      url:
+        description: |-
+          URL can either be a traditional URL or a special URL conforming to RFC-2397 (https://www.rfc-editor.org/rfc/rfc2397).
+          double check with model implementations for detailed instructions on how to use this.
+        type: string
+    type: object
+  schema.ChatMessagePart:
+    properties:
+      audio_url:
+        allOf:
+        - $ref: '#/definitions/schema.ChatMessageAudioURL'
+        description: AudioURL is the audio url of the part, it's used when Type is
+          "audio_url".
+      file_url:
+        allOf:
+        - $ref: '#/definitions/schema.ChatMessageFileURL'
+        description: FileURL is the file url of the part, it's used when Type is "file_url".
+      image_url:
+        allOf:
+        - $ref: '#/definitions/schema.ChatMessageImageURL'
+        description: ImageURL is the image url of the part, it's used when Type is
+          "image_url".
+      text:
+        description: Text is the text of the part, it's used when Type is "text".
+        type: string
+      type:
+        allOf:
+        - $ref: '#/definitions/schema.ChatMessagePartType'
+        description: Type is the type of the part, eg. "text", "image_url", "audio_url",
+          "video_url", "file_url".
+      video_url:
+        allOf:
+        - $ref: '#/definitions/schema.ChatMessageVideoURL'
+        description: VideoURL is the video url of the part, it's used when Type is
+          "video_url".
+    type: object
+  schema.ChatMessagePartType:
+    enum:
+    - text
+    - image_url
+    - audio_url
+    - video_url
+    - file_url
+    - reasoning
+    type: string
+    x-enum-varnames:
+    - ChatMessagePartTypeText
+    - ChatMessagePartTypeImageURL
+    - ChatMessagePartTypeAudioURL
+    - ChatMessagePartTypeVideoURL
+    - ChatMessagePartTypeFileURL
+    - ChatMessagePartTypeReasoning
+  schema.ChatMessageVideoURL:
+    properties:
+      extra:
+        additionalProperties: {}
+        description: Extra is used to store extra information for the video url.
+        type: object
+      mime_type:
+        description: MIMEType is the mime type of the video, eg. "video/mp4".
+        type: string
+      uri:
+        type: string
+      url:
+        description: |-
+          URL can either be a traditional URL or a special URL conforming to RFC-2397 (https://www.rfc-editor.org/rfc/rfc2397).
+          double check with model implementations for detailed instructions on how to use this.
+        type: string
+    type: object
+  schema.CompletionTokensDetails:
+    properties:
+      reasoning_tokens:
+        description: |-
+          ReasoningTokens tokens generated by the model for reasoning.
+          This is currently supported by OpenAI, Gemini, ARK and Qwen  chat models.
+          For other models, this field will be 0.
+        type: integer
+    type: object
+  schema.FunctionCall:
+    properties:
+      arguments:
+        description: Arguments is the arguments to call the function with, in JSON
+          format.
+        type: string
+      name:
+        description: Name is the name of the function to call, it can be used to identify
+          the specific function.
+        type: string
+    type: object
+  schema.ImageURLDetail:
+    enum:
+    - high
+    - low
+    - auto
+    type: string
+    x-enum-varnames:
+    - ImageURLDetailHigh
+    - ImageURLDetailLow
+    - ImageURLDetailAuto
+  schema.LogProb:
+    properties:
+      bytes:
+        description: |-
+          Bytes is a list of integers representing the UTF-8 bytes representation of the token.
+          Useful in instances where characters are represented by multiple tokens and
+          their byte representations must be combined to generate the correct text
+          representation. Can be `null` if there is no bytes representation for the token.
+        items:
+          type: integer
+        type: array
+      logprob:
+        description: |-
+          LogProb is the log probability of this token, if it is within the top 20 most likely tokens.
+          Otherwise, the value `-9999.0` is used to signify that the token is very unlikely.
+        type: number
+      token:
+        description: |-
+          Token represents the text of the token, which is a contiguous sequence of characters
+          (e.g., a word, part of a word, or punctuation) as understood by the tokenization process used by the language model.
+        type: string
+      top_logprobs:
+        description: |-
+          TopLogProbs is a list of the most likely tokens and their log probability, at this token position.
+          In rare cases, there may be fewer than the number of requested top_logprobs returned.
+        items:
+          $ref: '#/definitions/schema.TopLogProb'
+        type: array
+    type: object
+  schema.LogProbs:
+    properties:
+      content:
+        description: Content is a list of message content tokens with log probability
+          information.
+        items:
+          $ref: '#/definitions/schema.LogProb'
+        type: array
+    type: object
+  schema.Message:
+    properties:
+      assistant_output_multi_content:
+        description: AssistantGenMultiContent is for receiving multimodal output from
+          the model.
+        items:
+          $ref: '#/definitions/schema.MessageOutputPart'
+        type: array
+      content:
+        description: Content is for user text input and model text output.
+        type: string
+      extra:
+        additionalProperties: {}
+        description: customized information for model implementation
+        type: object
+      multi_content:
+        description: |-
+          if MultiContent is not empty, use this instead of Content
+          if MultiContent is empty, use Content
+          Deprecated: Use UserInputMultiContent for user multimodal inputs and AssistantGenMultiContent for model multimodal outputs.
+        items:
+          $ref: '#/definitions/schema.ChatMessagePart'
+        type: array
+      name:
+        type: string
+      reasoning_content:
+        description: ReasoningContent is the thinking process of the model, which
+          will be included when the model returns reasoning content.
+        type: string
+      response_meta:
+        $ref: '#/definitions/schema.ResponseMeta'
+      role:
+        $ref: '#/definitions/schema.RoleType'
+      tool_call_id:
+        description: only for ToolMessage
+        type: string
+      tool_calls:
+        description: only for AssistantMessage
+        items:
+          $ref: '#/definitions/schema.ToolCall'
+        type: array
+      tool_name:
+        description: only for ToolMessage
+        type: string
+      user_input_multi_content:
+        description: UserInputMultiContent passes multimodal content provided by the
+          user to the model.
+        items:
+          $ref: '#/definitions/schema.MessageInputPart'
+        type: array
+    type: object
+  schema.MessageInputAudio:
+    properties:
+      base64data:
+        description: Base64Data represents the binary data in Base64 encoded string
+          format.
+        type: string
+      extra:
+        additionalProperties: {}
+        description: 'Deprecated: Use MessageOutputPart.Extra or MessageInputPart.Extra
+          to set additional metadata instead.'
+        type: object
+      mime_type:
+        description: MIMEType is the mime type , eg."image/png",""audio/wav" etc.
+        type: string
+      url:
+        description: |-
+          URL is primarily used for HTTP or HTTPS access links.
+          For data in the format 'data:[<mediatype>][;base64],<data>' (the 'data' URL Schema of RFC-2397 (https://www.rfc-editor.org/rfc/rfc2397)),
+          it is recommended to use Base64Data and MIMEType fields separately instead.
+        type: string
+    type: object
+  schema.MessageInputFile:
+    properties:
+      base64data:
+        description: Base64Data represents the binary data in Base64 encoded string
+          format.
+        type: string
+      extra:
+        additionalProperties: {}
+        description: 'Deprecated: Use MessageOutputPart.Extra or MessageInputPart.Extra
+          to set additional metadata instead.'
+        type: object
+      mime_type:
+        description: MIMEType is the mime type , eg."image/png",""audio/wav" etc.
+        type: string
+      name:
+        description: |-
+          Name represents the filename.
+          Optional.
+        type: string
+      url:
+        description: |-
+          URL is primarily used for HTTP or HTTPS access links.
+          For data in the format 'data:[<mediatype>][;base64],<data>' (the 'data' URL Schema of RFC-2397 (https://www.rfc-editor.org/rfc/rfc2397)),
+          it is recommended to use Base64Data and MIMEType fields separately instead.
+        type: string
+    type: object
+  schema.MessageInputImage:
+    properties:
+      base64data:
+        description: Base64Data represents the binary data in Base64 encoded string
+          format.
+        type: string
+      detail:
+        allOf:
+        - $ref: '#/definitions/schema.ImageURLDetail'
+        description: Detail is the quality of the image url.
+      extra:
+        additionalProperties: {}
+        description: 'Deprecated: Use MessageOutputPart.Extra or MessageInputPart.Extra
+          to set additional metadata instead.'
+        type: object
+      mime_type:
+        description: MIMEType is the mime type , eg."image/png",""audio/wav" etc.
+        type: string
+      url:
+        description: |-
+          URL is primarily used for HTTP or HTTPS access links.
+          For data in the format 'data:[<mediatype>][;base64],<data>' (the 'data' URL Schema of RFC-2397 (https://www.rfc-editor.org/rfc/rfc2397)),
+          it is recommended to use Base64Data and MIMEType fields separately instead.
+        type: string
+    type: object
+  schema.MessageInputPart:
+    properties:
+      audio:
+        allOf:
+        - $ref: '#/definitions/schema.MessageInputAudio'
+        description: Audio  is the audio input of the part, it's used when Type is
+          "audio_url".
+      extra:
+        additionalProperties: {}
+        description: Extra is used to store extra information.
+        type: object
+      file:
+        allOf:
+        - $ref: '#/definitions/schema.MessageInputFile'
+        description: File is the file input of the part, it's used when Type is "file_url".
+      image:
+        allOf:
+        - $ref: '#/definitions/schema.MessageInputImage'
+        description: Image is the image input of the part, it's used when Type is
+          "image_url".
+      text:
+        type: string
+      type:
+        $ref: '#/definitions/schema.ChatMessagePartType'
+      video:
+        allOf:
+        - $ref: '#/definitions/schema.MessageInputVideo'
+        description: Video is the video input of the part, it's used when Type is
+          "video_url".
+    type: object
+  schema.MessageInputVideo:
+    properties:
+      base64data:
+        description: Base64Data represents the binary data in Base64 encoded string
+          format.
+        type: string
+      extra:
+        additionalProperties: {}
+        description: 'Deprecated: Use MessageOutputPart.Extra or MessageInputPart.Extra
+          to set additional metadata instead.'
+        type: object
+      mime_type:
+        description: MIMEType is the mime type , eg."image/png",""audio/wav" etc.
+        type: string
+      url:
+        description: |-
+          URL is primarily used for HTTP or HTTPS access links.
+          For data in the format 'data:[<mediatype>][;base64],<data>' (the 'data' URL Schema of RFC-2397 (https://www.rfc-editor.org/rfc/rfc2397)),
+          it is recommended to use Base64Data and MIMEType fields separately instead.
+        type: string
+    type: object
+  schema.MessageOutputAudio:
+    properties:
+      base64data:
+        description: Base64Data represents the binary data in Base64 encoded string
+          format.
+        type: string
+      extra:
+        additionalProperties: {}
+        description: 'Deprecated: Use MessageOutputPart.Extra or MessageInputPart.Extra
+          to set additional metadata instead.'
+        type: object
+      mime_type:
+        description: MIMEType is the mime type , eg."image/png",""audio/wav" etc.
+        type: string
+      url:
+        description: |-
+          URL is primarily used for HTTP or HTTPS access links.
+          For data in the format 'data:[<mediatype>][;base64],<data>' (the 'data' URL Schema of RFC-2397 (https://www.rfc-editor.org/rfc/rfc2397)),
+          it is recommended to use Base64Data and MIMEType fields separately instead.
+        type: string
+    type: object
+  schema.MessageOutputImage:
+    properties:
+      base64data:
+        description: Base64Data represents the binary data in Base64 encoded string
+          format.
+        type: string
+      extra:
+        additionalProperties: {}
+        description: 'Deprecated: Use MessageOutputPart.Extra or MessageInputPart.Extra
+          to set additional metadata instead.'
+        type: object
+      mime_type:
+        description: MIMEType is the mime type , eg."image/png",""audio/wav" etc.
+        type: string
+      url:
+        description: |-
+          URL is primarily used for HTTP or HTTPS access links.
+          For data in the format 'data:[<mediatype>][;base64],<data>' (the 'data' URL Schema of RFC-2397 (https://www.rfc-editor.org/rfc/rfc2397)),
+          it is recommended to use Base64Data and MIMEType fields separately instead.
+        type: string
+    type: object
+  schema.MessageOutputPart:
+    properties:
+      audio:
+        allOf:
+        - $ref: '#/definitions/schema.MessageOutputAudio'
+        description: Audio is the audio output of the part, used when Type is ChatMessagePartTypeAudioURL.
+      extra:
+        additionalProperties: {}
+        description: Extra is used to store extra information.
+        type: object
+      image:
+        allOf:
+        - $ref: '#/definitions/schema.MessageOutputImage'
+        description: Image is the image output of the part, used when Type is ChatMessagePartTypeImageURL.
+      reasoning:
+        allOf:
+        - $ref: '#/definitions/schema.MessageOutputReasoning'
+        description: |-
+          Reasoning contains the reasoning content generated by the model.
+          Used when Type is ChatMessagePartTypeReasoning.
+      text:
+        description: Text is the text of the part, it's used when Type is "text".
+        type: string
+      type:
+        allOf:
+        - $ref: '#/definitions/schema.ChatMessagePartType'
+        description: Type is the type of the part, e.g. "text", "image_url", "audio_url",
+          "video_url".
+      video:
+        allOf:
+        - $ref: '#/definitions/schema.MessageOutputVideo'
+        description: Video is the video output of the part, used when Type is ChatMessagePartTypeVideoURL.
+    type: object
+  schema.MessageOutputReasoning:
+    properties:
+      signature:
+        description: |-
+          Signature contains encrypted reasoning tokens.
+          Required by some models when passing reasoning context back in subsequent requests.
+        type: string
+      text:
+        description: Text is either the thought summary or the raw reasoning text
+          itself.
+        type: string
+    type: object
+  schema.MessageOutputVideo:
+    properties:
+      base64data:
+        description: Base64Data represents the binary data in Base64 encoded string
+          format.
+        type: string
+      extra:
+        additionalProperties: {}
+        description: 'Deprecated: Use MessageOutputPart.Extra or MessageInputPart.Extra
+          to set additional metadata instead.'
+        type: object
+      mime_type:
+        description: MIMEType is the mime type , eg."image/png",""audio/wav" etc.
+        type: string
+      url:
+        description: |-
+          URL is primarily used for HTTP or HTTPS access links.
+          For data in the format 'data:[<mediatype>][;base64],<data>' (the 'data' URL Schema of RFC-2397 (https://www.rfc-editor.org/rfc/rfc2397)),
+          it is recommended to use Base64Data and MIMEType fields separately instead.
+        type: string
+    type: object
+  schema.PromptTokenDetails:
+    properties:
+      cached_tokens:
+        description: Cached tokens present in the prompt.
+        type: integer
+    type: object
+  schema.ResponseMeta:
+    properties:
+      finish_reason:
+        description: |-
+          FinishReason is the reason why the chat response is finished.
+          It's usually "stop", "length", "tool_calls", "content_filter", "null". This is defined by chat model implementation.
+        type: string
+      logprobs:
+        allOf:
+        - $ref: '#/definitions/schema.LogProbs'
+        description: LogProbs is Log probability information.
+      usage:
+        allOf:
+        - $ref: '#/definitions/schema.TokenUsage'
+        description: Usage is the token usage of the chat response, whether usage
+          exists depends on whether the chat model implementation returns.
+    type: object
+  schema.RoleType:
+    enum:
+    - assistant
+    - user
+    - system
+    - tool
+    type: string
+    x-enum-varnames:
+    - Assistant
+    - User
+    - System
+    - Tool
+  schema.TokenUsage:
+    properties:
+      completion_token_details:
+        allOf:
+        - $ref: '#/definitions/schema.CompletionTokensDetails'
+        description: CompletionTokensDetails is breakdown of completion tokens.
+      completion_tokens:
+        description: CompletionTokens is the number of completion tokens.
+        type: integer
+      prompt_token_details:
+        allOf:
+        - $ref: '#/definitions/schema.PromptTokenDetails'
+        description: PromptTokenDetails is a breakdown of the prompt tokens.
+      prompt_tokens:
+        description: PromptTokens is the number of prompt tokens, including all the
+          input tokens of this request.
+        type: integer
+      total_tokens:
+        description: TotalTokens is the total number of tokens.
+        type: integer
+    type: object
+  schema.ToolCall:
+    properties:
+      extra:
+        additionalProperties: {}
+        description: Extra is used to store extra information for the tool call.
+        type: object
+      function:
+        allOf:
+        - $ref: '#/definitions/schema.FunctionCall'
+        description: Function is the function call to be made.
+      id:
+        description: ID is the id of the tool call, it can be used to identify the
+          specific tool call.
+        type: string
+      index:
+        description: |-
+          Index is used when there are multiple tool calls in a message.
+          In stream mode, it's used to identify the chunk of the tool call for merging.
+        type: integer
+      type:
+        description: Type is the type of the tool call, default is "function".
+        type: string
+    type: object
+  schema.TopLogProb:
+    properties:
+      bytes:
+        description: |-
+          Bytes is a list of integers representing the UTF-8 bytes representation of the token.
+          Useful in instances where characters are represented by multiple tokens and
+          their byte representations must be combined to generate the correct text
+          representation. Can be `null` if there is no bytes representation for the token.
+        items:
+          type: integer
+        type: array
+      logprob:
+        description: |-
+          LogProb is the log probability of this token, if it is within the top 20 most likely tokens.
+          Otherwise, the value `-9999.0` is used to signify that the token is very unlikely.
+        type: number
+      token:
+        description: |-
+          Token represents the text of the token, which is a contiguous sequence of characters
+          (e.g., a word, part of a word, or punctuation) as understood by the tokenization process used by the language model.
+        type: string
+    type: object
+info:
+  contact: {}
+  description: |-
+    Single-user local Codex-like Agent API built with Go and CloudWeGo Eino.
+    External effects always flow through ToolRouter, EffectInference, PolicyEngine, ApprovalCenter, and Executor.
+  title: Local Agent API
+  version: dev
+paths:
+  /v1/approvals/{approval_id}/approve:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Approval ID
+        in: path
+        name: approval_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ApprovalResolutionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Approve a pending action
+      tags:
+      - Approvals
+  /v1/approvals/{approval_id}/reject:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Approval ID
+        in: path
+        name: approval_id
+        required: true
+        type: string
+      - description: Rejection payload
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/internal_api_handlers.RejectApprovalRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ApprovalResolutionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Reject a pending action
+      tags:
+      - Approvals
+  /v1/approvals/pending:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ApprovalListResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: List pending approvals
+      tags:
+      - Approvals
+  /v1/conversations:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ConversationListResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: List conversations
+      tags:
+      - Conversations
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Conversation payload
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/internal_api_handlers.CreateConversationRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/local-agent_internal_core.Conversation'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Create conversation
+      tags:
+      - Conversations
+  /v1/conversations/{conversation_id}:
+    get:
+      parameters:
+      - description: Conversation ID
+        in: path
+        name: conversation_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_core.Conversation'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Get conversation
+      tags:
+      - Conversations
+  /v1/conversations/{conversation_id}/messages:
+    get:
+      parameters:
+      - description: Conversation ID
+        in: path
+        name: conversation_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.MessageListResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: List conversation messages
+      tags:
+      - Conversations
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Conversation ID
+        in: path
+        name: conversation_id
+        required: true
+        type: string
+      - description: User message
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api_handlers.PostMessageRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_agent.RunResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Post user message
+      tags:
+      - Conversations
+  /v1/health:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.HealthResponse'
+      summary: Get service health
+      tags:
+      - Health
+  /v1/kbs:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.KnowledgeBaseListResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: List knowledge bases
+      tags:
+      - Knowledge
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Knowledge base payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api_handlers.CreateKnowledgeBaseRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_api_handlers.KnowledgeBaseItem'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Create knowledge base
+      tags:
+      - Knowledge
+  /v1/kbs/{kb_id}/documents/upload:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Knowledge base ID
+        in: path
+        name: kb_id
+        required: true
+        type: string
+      - description: Document payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api_handlers.KnowledgeBaseDocumentUploadRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_api_handlers.KBChunkListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Upload KB document
+      tags:
+      - Knowledge
+  /v1/kbs/{kb_id}/search:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Knowledge base ID
+        in: path
+        name: kb_id
+        required: true
+        type: string
+      - description: Search payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api_handlers.SearchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.KBChunkListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Search knowledge base
+      tags:
+      - Knowledge
+  /v1/kbs/health:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.KnowledgeBaseHealthResponse'
+      summary: Get knowledge base health
+      tags:
+      - Knowledge
+  /v1/mcp/servers:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.MCPServerListResponse'
+      summary: List MCP servers
+      tags:
+      - MCP
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: MCP server payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/local-agent_internal_tools_mcp.ServerInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/local-agent_internal_core.MCPServer'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Create MCP server
+      tags:
+      - MCP
+  /v1/mcp/servers/{id}:
+    get:
+      parameters:
+      - description: MCP server ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.MCPServerDetailResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Get MCP server
+      tags:
+      - MCP
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: MCP server ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: MCP server payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/local-agent_internal_tools_mcp.ServerInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_core.MCPServer'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Update MCP server
+      tags:
+      - MCP
+  /v1/mcp/servers/{id}/refresh:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: MCP server ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.MCPRefreshResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Refresh MCP tools
+      tags:
+      - MCP
+  /v1/mcp/servers/{id}/test:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: MCP server ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.MCPTestServerResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.MCPTestServerResponse'
+      summary: Test MCP server connectivity
+      tags:
+      - MCP
+  /v1/mcp/servers/{id}/tools/{tool_name}/call:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: MCP server ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Tool name
+        in: path
+        name: tool_name
+        required: true
+        type: string
+      - description: Tool call payload
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/internal_api_handlers.MCPCallToolRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ToolRouteResponse'
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ToolRouteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Call MCP tool through approval chain
+      tags:
+      - MCP
+  /v1/mcp/tools:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.MCPToolPolicyListResponse'
+      summary: List MCP tool policies
+      tags:
+      - MCP
+  /v1/mcp/tools/{id}/policy:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Tool policy ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Policy payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/local-agent_internal_tools_mcp.ToolPolicyInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_core.MCPToolPolicy'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Update MCP tool policy
+      tags:
+      - MCP
+  /v1/memory/files:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.MemoryFilePathListResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: List memory files
+      tags:
+      - Memory
+  /v1/memory/files/{path}:
+    get:
+      parameters:
+      - description: Memory file path
+        in: path
+        name: path
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_core.MemoryFile'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Read memory file
+      tags:
+      - Memory
+  /v1/memory/patches:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Patch payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api_handlers.CreateMemoryPatchRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/local-agent_internal_core.MemoryPatch'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Create memory patch
+      tags:
+      - Memory
+  /v1/memory/reindex:
+    post:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.StatusResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Reindex markdown memory
+      tags:
+      - Memory
+  /v1/memory/search:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Search payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api_handlers.SearchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.MemoryFileListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Search markdown memory
+      tags:
+      - Memory
+  /v1/runs:
+    get:
+      parameters:
+      - description: Comma-separated run statuses
+        in: query
+        name: status
+        type: string
+      - description: Max runs to return
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.RunListResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: List workflow runs
+      tags:
+      - Runs
+  /v1/runs/{run_id}:
+    get:
+      parameters:
+      - description: Run ID
+        in: path
+        name: run_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_agent.RunState'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Get workflow run
+      tags:
+      - Runs
+  /v1/runs/{run_id}/cancel:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Run ID
+        in: path
+        name: run_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_agent.RunState'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Cancel workflow run
+      tags:
+      - Runs
+  /v1/runs/{run_id}/resume:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Run ID
+        in: path
+        name: run_id
+        required: true
+        type: string
+      - description: Resume payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api_handlers.ResumeRunRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_agent.RunResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Resume paused workflow run
+      tags:
+      - Runs
+  /v1/runs/{run_id}/steps:
+    get:
+      parameters:
+      - description: Run ID
+        in: path
+        name: run_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.RunStepListResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: List workflow run steps
+      tags:
+      - Runs
+  /v1/skills:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.SkillListResponse'
+      summary: List skills
+      tags:
+      - Skills
+  /v1/skills/{id}:
+    delete:
+      parameters:
+      - description: Skill ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_skills.RemovalResult'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Remove a registered skill
+      tags:
+      - Skills
+    get:
+      parameters:
+      - description: Skill ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.SkillDetailResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Get skill detail
+      tags:
+      - Skills
+  /v1/skills/{id}/disable:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Skill ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_core.SkillRegistration'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Disable skill
+      tags:
+      - Skills
+  /v1/skills/{id}/enable:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Skill ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_core.SkillRegistration'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Enable skill
+      tags:
+      - Skills
+  /v1/skills/{id}/manifest:
+    get:
+      parameters:
+      - description: Skill ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.SkillManifestResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Get skill manifest
+      tags:
+      - Skills
+  /v1/skills/{id}/package:
+    get:
+      parameters:
+      - description: Skill ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_core.SkillPackageInfo'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Get skill package metadata
+      tags:
+      - Skills
+  /v1/skills/{id}/run:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Skill ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Skill run request
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/internal_api_handlers.SkillRunRequestBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ToolRouteResponse'
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ToolRouteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Run skill through ToolRouter
+      tags:
+      - Skills
+  /v1/skills/{id}/test:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Skill ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Validation request
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/internal_api_handlers.SkillRunRequestBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_skills.SkillValidateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Validate a registered skill request
+      tags:
+      - Skills
+  /v1/skills/{id}/validate:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Skill ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Validation request
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/internal_api_handlers.SkillRunRequestBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_skills.SkillValidateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Validate a registered skill
+      tags:
+      - Skills
+  /v1/skills/upload:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Local skill upload request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/local-agent_internal_tools_skills.UploadInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/local-agent_internal_core.SkillRegistration'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Upload local skill path
+      tags:
+      - Skills
+  /v1/skills/upload-zip:
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Skill zip archive
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Overwrite the same installed version
+        in: formData
+        name: force
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_skills.UploadZipResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Upload skill zip package
+      tags:
+      - Skills
+schemes:
+- http
+swagger: "2.0"

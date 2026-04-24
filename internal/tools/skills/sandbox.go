@@ -8,6 +8,7 @@ import (
 	"io"
 	"os/exec"
 	"sort"
+	"syscall"
 	"time"
 )
 
@@ -15,6 +16,14 @@ import (
 type ExecutionProfile struct {
 	RequestedSandboxProfile string   `json:"requested_sandbox_profile,omitempty"`
 	SandboxProfile          string   `json:"sandbox_profile"`
+	Runner                  string   `json:"runner"`
+	Platform                string   `json:"platform,omitempty"`
+	PlatformSupported       bool     `json:"platform_supported"`
+	WillFallback            bool     `json:"will_fallback"`
+	RequiresApproval        bool     `json:"requires_approval"`
+	StrongIsolation         bool     `json:"strong_isolation"`
+	FilesystemEnforced      bool     `json:"filesystem_enforced"`
+	NetworkEnforced         bool     `json:"network_enforced"`
 	AllowedReadPaths        []string `json:"allowed_read_paths,omitempty"`
 	AllowedWritePaths       []string `json:"allowed_write_paths,omitempty"`
 	NetworkEnabled          bool     `json:"network_enabled"`
@@ -22,6 +31,9 @@ type ExecutionProfile struct {
 	AllowedEnv              []string `json:"allowed_env,omitempty"`
 	TimeoutSeconds          int      `json:"timeout_seconds"`
 	MaxOutputBytes          int64    `json:"max_output_bytes"`
+	MaxProcesses            int      `json:"max_processes,omitempty"`
+	MemoryLimitMB           int      `json:"memory_limit_mb,omitempty"`
+	RootFS                  string   `json:"-"`
 	Warnings                []string `json:"warnings,omitempty"`
 }
 
@@ -37,21 +49,39 @@ type SandboxRequest struct {
 
 // SandboxResult is the normalized execution result returned by a sandbox runner.
 type SandboxResult struct {
-	Stdout     []byte    `json:"stdout,omitempty"`
-	Stderr     []byte    `json:"stderr,omitempty"`
-	ExitCode   int       `json:"exit_code"`
-	StartedAt  time.Time `json:"started_at"`
-	FinishedAt time.Time `json:"finished_at"`
-	Warnings   []string  `json:"warnings,omitempty"`
+	Stdout     []byte         `json:"stdout,omitempty"`
+	Stderr     []byte         `json:"stderr,omitempty"`
+	ExitCode   int            `json:"exit_code"`
+	StartedAt  time.Time      `json:"started_at"`
+	FinishedAt time.Time      `json:"finished_at"`
+	Warnings   []string       `json:"warnings,omitempty"`
+	Metadata   map[string]any `json:"metadata,omitempty"`
 }
 
 // SandboxRunner executes a prepared local skill command.
 type SandboxRunner interface {
 	Run(ctx context.Context, req SandboxRequest) (*SandboxResult, error)
+	Name() string
+	Supports(profile SandboxProfile) bool
 }
 
 // LocalRestrictedRunner is a best-effort local runner with explicit validation and IO limits.
 type LocalRestrictedRunner struct{}
+
+// Name returns the stable runner identifier.
+func (r *LocalRestrictedRunner) Name() string {
+	return "local_restricted"
+}
+
+// Supports reports the profiles that may execute through the best-effort local runner.
+func (r *LocalRestrictedRunner) Supports(profile SandboxProfile) bool {
+	switch profile {
+	case SandboxProfileBestEffortLocal, SandboxProfileTrustedLocal:
+		return true
+	default:
+		return false
+	}
+}
 
 // Run executes the request with timeout, bounded output capture, and explicit environment control.
 func (r *LocalRestrictedRunner) Run(ctx context.Context, req SandboxRequest) (*SandboxResult, error) {
@@ -77,6 +107,10 @@ func (r *LocalRestrictedRunner) Run(ctx context.Context, req SandboxRequest) (*S
 	cmd.Dir = req.CWD
 	cmd.Env = envMapToSlice(req.Env)
 	cmd.Stdin = bytes.NewReader(req.Stdin)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid:   true,
+		Pdeathsig: syscall.SIGKILL,
+	}
 
 	stdout := &limitedBuffer{limit: maxOutput}
 	stderr := &limitedBuffer{limit: maxOutput}
@@ -84,7 +118,7 @@ func (r *LocalRestrictedRunner) Run(ctx context.Context, req SandboxRequest) (*S
 	cmd.Stderr = stderr
 
 	startedAt := time.Now().UTC()
-	runErr := cmd.Run()
+	runErr := startAndWait(runCtx, cmd)
 	finishedAt := time.Now().UTC()
 	result := &SandboxResult{
 		Stdout:     stdout.Bytes(),
@@ -93,6 +127,10 @@ func (r *LocalRestrictedRunner) Run(ctx context.Context, req SandboxRequest) (*S
 		StartedAt:  startedAt,
 		FinishedAt: finishedAt,
 		Warnings:   append([]string(nil), req.Profile.Warnings...),
+		Metadata: map[string]any{
+			"runner":           r.Name(),
+			"strong_isolation": false,
+		},
 	}
 	if stdout.Truncated() {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("stdout truncated at %d bytes", maxOutput))
@@ -105,6 +143,36 @@ func (r *LocalRestrictedRunner) Run(ctx context.Context, req SandboxRequest) (*S
 		return result, fmt.Errorf("skill timed out after %ds", timeout)
 	}
 	return result, runErr
+}
+
+func startAndWait(ctx context.Context, cmd *exec.Cmd) error {
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	return waitStartedProcess(ctx, cmd)
+}
+
+func waitStartedProcess(ctx context.Context, cmd *exec.Cmd) error {
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			killProcessGroup(cmd)
+		case <-done:
+		}
+	}()
+
+	err := cmd.Wait()
+	close(done)
+	return err
+}
+
+func killProcessGroup(cmd *exec.Cmd) {
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	_ = cmd.Process.Kill()
 }
 
 type limitedBuffer struct {

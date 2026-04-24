@@ -248,27 +248,47 @@ type SkillPackageInfo struct {
 
 // SkillPolicyProfile describes the effect/approval model for a registered skill.
 type SkillPolicyProfile struct {
-	ID              string   `json:"id"`
-	Effects         []string `json:"effects"`
-	ApprovalDefault string   `json:"approval_default,omitempty"`
-	Enabled         bool     `json:"enabled"`
+	ID               string   `json:"id"`
+	Effects          []string `json:"effects"`
+	ApprovalDefault  string   `json:"approval_default,omitempty"`
+	Enabled          bool     `json:"enabled"`
+	SandboxProfile   string   `json:"sandbox_profile,omitempty"`
+	Runner           string   `json:"runner,omitempty"`
+	WillFallback     bool     `json:"will_fallback"`
+	RequiresApproval bool     `json:"requires_approval"`
+	Warnings         []string `json:"warnings,omitempty"`
 }
 
 // MCPServer stores an MCP server config.
 type MCPServer struct {
-	ID             string            `json:"id" yaml:"id"`
-	Name           string            `json:"name" yaml:"name"`
-	Transport      string            `json:"transport" yaml:"transport"`
-	Command        string            `json:"command,omitempty" yaml:"command,omitempty"`
-	Args           []string          `json:"args,omitempty" yaml:"args,omitempty"`
-	Cwd            string            `json:"cwd,omitempty" yaml:"cwd,omitempty"`
-	URL            string            `json:"url,omitempty" yaml:"url,omitempty"`
-	Headers        map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
-	Enabled        bool              `json:"enabled" yaml:"enabled"`
-	Environment    map[string]string `json:"environment,omitempty" yaml:"env,omitempty"`
-	TimeoutSeconds int               `json:"timeout_seconds,omitempty" yaml:"timeout_seconds,omitempty"`
-	CreatedAt      time.Time         `json:"created_at" yaml:"created_at"`
-	UpdatedAt      time.Time         `json:"updated_at" yaml:"updated_at"`
+	ID             string                  `json:"id" yaml:"id"`
+	Name           string                  `json:"name" yaml:"name"`
+	Transport      string                  `json:"transport" yaml:"transport"`
+	Dialect        string                  `json:"dialect,omitempty" yaml:"dialect,omitempty"`
+	Compatibility  MCPCompatibilityProfile `json:"compatibility" yaml:"compatibility"`
+	Command        string                  `json:"command,omitempty" yaml:"command,omitempty"`
+	Args           []string                `json:"args,omitempty" yaml:"args,omitempty"`
+	Cwd            string                  `json:"cwd,omitempty" yaml:"cwd,omitempty"`
+	URL            string                  `json:"url,omitempty" yaml:"url,omitempty"`
+	Headers        map[string]string       `json:"headers,omitempty" yaml:"headers,omitempty"`
+	Enabled        bool                    `json:"enabled" yaml:"enabled"`
+	Environment    map[string]string       `json:"environment,omitempty" yaml:"env,omitempty"`
+	TimeoutSeconds int                     `json:"timeout_seconds,omitempty" yaml:"timeout_seconds,omitempty"`
+	CreatedAt      time.Time               `json:"created_at" yaml:"created_at"`
+	UpdatedAt      time.Time               `json:"updated_at" yaml:"updated_at"`
+}
+
+// MCPCompatibilityProfile captures transport-level MCP dialect and tolerance settings.
+type MCPCompatibilityProfile struct {
+	Dialect                string `json:"dialect" yaml:"dialect"`
+	AcceptMissingSchema    bool   `json:"accept_missing_schema" yaml:"accept_missing_schema"`
+	AcceptExtraMetadata    bool   `json:"accept_extra_metadata" yaml:"accept_extra_metadata"`
+	AcceptTextOnlyResult   bool   `json:"accept_text_only_result" yaml:"accept_text_only_result"`
+	AcceptStructuredResult bool   `json:"accept_structured_result" yaml:"accept_structured_result"`
+	NormalizeErrorShape    bool   `json:"normalize_error_shape" yaml:"normalize_error_shape"`
+	StrictIDMatching       bool   `json:"strict_id_matching" yaml:"strict_id_matching"`
+	MaxPayloadBytes        int64  `json:"max_payload_bytes" yaml:"max_payload_bytes"`
+	TimeoutSeconds         int    `json:"timeout_seconds" yaml:"timeout_seconds"`
 }
 
 // MCPToolPolicy stores local policy overrides for MCP tools.

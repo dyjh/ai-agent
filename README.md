@@ -144,16 +144,16 @@ go run ./cmd/agent runs cancel run_xxx
 
 ## Swagger / OpenAPI
 
-生成 OpenAPI 文档：
+生成 Swagger 文档：
 
 ```bash
 make swagger
 ```
 
-生成文件位于 [docs/openapi.json](/www/wwwroot/ai-agent/docs/openapi.json)。服务启动后可访问：
+生成文件位于 [docs/swagger.json](/www/wwwroot/ai-agent/docs/swagger.json)，并同步镜像到 [docs/openapi.json](/www/wwwroot/ai-agent/docs/openapi.json) 以兼容现有脚本。服务启动后可访问：
 
 - Swagger UI: `http://127.0.0.1:8765/swagger/index.html`
-- OpenAPI JSON: `http://127.0.0.1:8765/swagger/doc.json`
+- Swagger JSON: `http://127.0.0.1:8765/swagger/doc.json`
 
 ## WebSocket 示例
 
@@ -364,7 +364,7 @@ permissions:
     max_output_bytes: 1048576
 
 sandbox:
-  profile: restricted
+  profile: restricted # best_effort_local | trusted_local | restricted | linux_isolated
 ```
 
 当前执行期权限隔离行为：
@@ -372,14 +372,29 @@ sandbox:
 - `permissions` 会在运行前参与 `runtime.command`、`cwd`、env allowlist 和显式路径参数校验
 - `effects` 决定 Policy / Approval；`permissions` 决定执行前允许范围，两者不一致会校验失败
 - `GET /v1/skills/{id}/package` 返回安装元数据，不返回 zip 内容
-- `POST /v1/skills/{id}/validate` 会做 manifest / permissions / runtime 路径 / 输入的预校验，但不会真正执行 skill
+- `POST /v1/skills/{id}/validate` 会做 manifest / permissions / runtime 路径 / 输入的预校验，并返回 `runner`、`sandbox_profile`、`platform_supported`、`will_fallback`、`requires_approval` 等审计信息；validate 不会真正执行 skill
+
+当前 Skill sandbox profile：
+
+- `best_effort_local`：使用 `LocalRestrictedRunner`，提供 timeout、max output、受控 env、`cwd`/command 路径校验和显式路径参数预检查
+- `trusted_local`：仍走本地 runner 和 preflight 校验，但明确表示这是宿主机信任执行，不提供 OS 级隔离
+- `restricted`：优先尝试 `LinuxIsolatedRunner`；若当前平台或运行时条件不满足，则显式 fallback 到 `best_effort_local`，并强制审批
+- `linux_isolated`：仅在 Linux 上可用；当前要求 rootfs-compatible 的 `runtime.command`，不满足时直接拒绝，不静默降级
+
+当前 Linux stronger runner 能力：
+
+- 通过 user/mount/pid/ipc/uts namespace 提供更强执行边界
+- 当 `permissions.network.enabled=false` 时，会额外使用独立 network namespace 关闭外网访问
+- 当 `runtime.command` 可在 skill root 内独立运行时，会对 skill root 做 `chroot`，把文件系统范围收紧到 skill 包目录
+- 会继续应用 timeout、max output bytes、env allowlist，并在结果中返回 runner metadata
+- `permissions.network.allow_hosts` 目前仍无法做内核级 host allowlist enforcement；若声明该能力，会产生 warning，`restricted` 路径会强制审批，`linux_isolated` 路径会拒绝
 
 当前沙箱能力的真实边界：
 
-- `LocalRestrictedRunner` 是 best-effort 本地执行器，不是容器级或 namespace 级强隔离
-- 已实现：timeout、max output bytes、受控 env、`cwd`/command 路径校验、显式路径参数预检查
-- 未实现 OS 级硬阻断：文件系统 syscall 级限制、真实网络封禁、seccomp、namespace/cgroup 隔离
-- 当 manifest 声明 `network.enabled=false` 时，当前只提供 best-effort 预校验和 warning，不宣称已做内核级网络阻断
+- `LocalRestrictedRunner` 仍是 best-effort 本地执行器，不是容器级或 syscall 级强隔离
+- `LinuxIsolatedRunner` 比 best-effort 更强，但当前仍不是完整容器沙箱；尚未实现 seccomp、cgroup、bind mount rootfs、host allowlist 和动态依赖自动封装
+- shell script 或依赖宿主解释器/动态加载器的 skill，可能无法使用 `chroot` 文件系统收紧；此时系统会显式 warning，并要求审批或拒绝
+- 当前不会把 best-effort enforcement 包装成“已完成强隔离”；不同 profile 的实际边界以上述规则为准
 
 ## MCP 配置说明
 
@@ -399,6 +414,43 @@ MCP server 配置从 `config/mcp.servers.yaml` 加载，tool policy override 从
 
 - `stdio`：启动本地 MCP 子进程，通过 stdin/stdout 做 line-delimited JSON-RPC 调用
 - `http`：向配置的 MCP URL 发送 JSON-RPC HTTP 请求，并支持 headers、timeout 和 health check
+
+MCP transport 层现在支持显式 dialect / compatibility profile。默认是保守的 `strict_jsonrpc`，也可按 server 配置选择：
+
+- `strict_jsonrpc`：标准 JSON-RPC 2.0 `tools/list` / `tools/call`
+- `line_delimited_jsonrpc`：接受 line-delimited JSON-RPC 响应，主要用于 stdio 或兼容型 HTTP server
+- `envelope_wrapped`：接受 `data` / `payload` / `response` 外层包裹的结果
+
+示例：
+
+```yaml
+servers:
+  - id: filesystem
+    name: filesystem
+    enabled: true
+    transport: stdio
+    command: node
+    args:
+      - ./mcp/filesystem/index.js
+    cwd: ./mcp/filesystem
+    dialect: line_delimited_jsonrpc
+    compatibility:
+      accept_missing_schema: true
+      accept_extra_metadata: true
+      accept_text_only_result: true
+      strict_id_matching: false
+
+  - id: local-http-tools
+    name: local-http-tools
+    enabled: true
+    transport: http
+    url: http://localhost:3001/mcp
+    headers:
+      Authorization: ${MCP_LOCAL_TOKEN}
+    dialect: strict_jsonrpc
+```
+
+兼容层目前集中在 `internal/tools/mcp` 的 transport / decode helper 内，handler、ToolRouter、policy 和 approval 不感知具体方言。conformance 测试覆盖了 strict、line-delimited、envelope、text-only result、malformed payload、JSON-RPC error、timeout 和 stdio 进程异常。错误会收敛为 `invalid_response`、`timeout`、`transport_failure`、`protocol_violation`、`server_error` 等结构化 MCP error code，并继续做敏感内容脱敏。
 
 `mcp.call_tool` 已接入统一安全链路：
 
@@ -429,7 +481,7 @@ tools:
 - 全只读且高置信 MCP tool 可自动执行
 - `POST /v1/mcp/servers/{id}/tools/{tool_name}/call` 必须走 ToolRouter，不能绕过审批链路
 
-已知限制：当前 stdio/http transport 已有可测试 MVP 实现，但 MCP 协议细节仍按 JSON-RPC `tools/list` / `tools/call` 的最小封装处理；后续如接入更多 MCP server 方言，应只扩展 transport 层，不应把协议分支散落到 handler 或 router。
+已知限制：当前兼容矩阵覆盖常见 JSON-RPC 结果形态和错误场景，但不是“完全兼容所有 MCP server”。SSE、流式 tool result、更复杂的 capability negotiation、外部真实 server 集成矩阵仍属于后续扩展；新增方言应继续只扩展 transport / compatibility layer，不应把协议分支散落到 handler 或 router。
 
 ## 审批机制说明
 
@@ -552,8 +604,8 @@ RUN_POSTGRES_INTEGRATION=1 go test ./...
 - Runtime KB provider 当前只支持 `qdrant`；`memory` 向量索引用于本地 memory index、测试和开发辅助
 - 当前 step loop 已覆盖本地单用户场景下的可恢复多步任务，但仍不是无限自动规划的通用 graph 平台
 - PostgreSQL 可用时 run/step 可持久化；无数据库 fallback 仍只提供进程内内存 run state
-- Skill Runtime 已支持 zip 安装、manifest permissions 校验和 best-effort 本地沙箱；更强的 OS 级隔离仍待后续阶段补齐
-- MCP runtime 已支持 stdio/http 与 `mcp.call_tool`，但更完整的 MCP 协议兼容矩阵仍待后续集成测试扩展
+- Skill Runtime 已支持 zip 安装、manifest permissions 校验，以及 Linux namespace/chroot 优先的 stronger runner；但 seccomp、cgroup、host allowlist 和更完整 rootfs 封装仍待后续阶段补齐
+- MCP runtime 已支持 stdio/http、dialect compatibility profile 和 conformance matrix；SSE、流式结果、capability negotiation 和更高保真外部 server 集成矩阵仍待后续扩展
 - CLI 已走 HTTP API，但仍是轻量控制台，不包含富交互 TUI
 
 ## 任务清单

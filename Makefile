@@ -19,7 +19,8 @@ vet:
 	go vet ./...
 
 swagger:
-	go run ./cmd/openapi -out docs/openapi.json
+	$$(go env GOPATH)/bin/swag init --parseDependency --parseInternal -g cmd/agent-server/main.go -o docs
+	cp docs/swagger.json docs/openapi.json
 
 docs: swagger
 

@@ -10,8 +10,9 @@ import (
 
 func TestSkillRunnerExecutesExecutableSkill(t *testing.T) {
 	root := createSkillFixture(t, skillFixtureOptions{
-		ID:      "echo_skill",
-		Effects: []string{"process.read", "system.metrics.read"},
+		ID:             "echo_skill",
+		Effects:        []string{"process.read", "system.metrics.read"},
+		SandboxProfile: skills.SandboxProfileBestEffortLocal,
 		Script: "#!/bin/sh\n" +
 			"input=$(cat)\n" +
 			"printf '{\"received\":%s,\"api_key\":\"super-secret\"}' \"$input\"\n",
@@ -59,8 +60,9 @@ func TestSkillRunnerExecutesExecutableSkill(t *testing.T) {
 
 func TestSkillRunnerRejectsDisabledSkill(t *testing.T) {
 	root := createSkillFixture(t, skillFixtureOptions{
-		ID:      "disabled_skill",
-		Effects: []string{"process.read"},
+		ID:             "disabled_skill",
+		Effects:        []string{"process.read"},
+		SandboxProfile: skills.SandboxProfileBestEffortLocal,
 	})
 
 	manager := skills.NewManager(t.TempDir())
@@ -90,6 +92,7 @@ func TestSkillRunnerEnforcesTimeout(t *testing.T) {
 	root := createSkillFixture(t, skillFixtureOptions{
 		ID:             "slow_skill",
 		Effects:        []string{"process.read"},
+		SandboxProfile: skills.SandboxProfileBestEffortLocal,
 		TimeoutSeconds: 1,
 		Script:         "#!/bin/sh\nsleep 2\nprintf '{\"ok\":true}'\n",
 	})

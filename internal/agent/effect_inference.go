@@ -236,6 +236,20 @@ func (e *EffectInferrer) inferSkill(proposal core.ToolProposal) core.EffectInfer
 			result.ReasonSummary = "skill manifest requires approval by default"
 		}
 	}
+	if profile.RequiresApproval {
+		result.ApprovalRequired = true
+		result.Confidence = minConfidence(result.Confidence, 0.6)
+		if profile.WillFallback {
+			result.ReasonSummary = "skill sandbox falls back to best-effort enforcement and requires approval"
+		} else if result.ReasonSummary == "skill manifest declares read-only effects" {
+			result.ReasonSummary = "skill sandbox requires approval due to enforcement limits"
+		}
+	} else if profile.WillFallback {
+		result.Confidence = minConfidence(result.Confidence, 0.7)
+		if result.ReasonSummary == "skill manifest declares read-only effects" {
+			result.ReasonSummary = "skill sandbox falls back to best-effort enforcement"
+		}
+	}
 
 	return result
 }

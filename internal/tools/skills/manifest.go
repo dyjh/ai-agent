@@ -22,16 +22,23 @@ const (
 	OutputModeJSONStdout = "json_stdout"
 	OutputModeText       = "text"
 
-	ApprovalDefaultAuto    = "auto"
-	ApprovalDefaultRequire = "require"
-
-	SandboxProfileRestricted     = "restricted"
-	SandboxProfileTrustedLocal   = "trusted_local"
-	SandboxProfileBestEffort     = "best_effort_local"
+	ApprovalDefaultAuto          = "auto"
+	ApprovalDefaultRequire       = "require"
 	defaultProcessMaxOutputBytes = int64(1 << 20)
 )
 
 var hostPattern = regexp.MustCompile(`^(\*\.)?([a-zA-Z0-9-]+\.)*[a-zA-Z0-9-]+(:[0-9]{1,5})?$`)
+
+// SandboxProfile declares the requested execution isolation contract.
+type SandboxProfile string
+
+const (
+	SandboxProfileRestricted      SandboxProfile = "restricted"
+	SandboxProfileTrustedLocal    SandboxProfile = "trusted_local"
+	SandboxProfileBestEffortLocal SandboxProfile = "best_effort_local"
+	SandboxProfileBestEffort                     = SandboxProfileBestEffortLocal
+	SandboxProfileLinuxIsolated   SandboxProfile = "linux_isolated"
+)
 
 // Manifest is the local skill descriptor used for validation and execution.
 type Manifest struct {
@@ -111,7 +118,7 @@ type ProcessPermissions struct {
 
 // SandboxConfig records the requested execution isolation profile.
 type SandboxConfig struct {
-	Profile string `json:"profile,omitempty" yaml:"profile,omitempty"`
+	Profile SandboxProfile `json:"profile,omitempty" yaml:"profile,omitempty"`
 }
 
 // LoadManifest loads and validates a skill manifest from the given skill root.
@@ -210,7 +217,7 @@ func (m *Manifest) Normalize() error {
 		m.Permissions.Process.MaxOutputBytes = defaultProcessMaxOutputBytes
 	}
 
-	m.Sandbox.Profile = strings.ToLower(strings.TrimSpace(m.Sandbox.Profile))
+	m.Sandbox.Profile = SandboxProfile(strings.ToLower(strings.TrimSpace(string(m.Sandbox.Profile))))
 	if m.Sandbox.Profile == "" {
 		m.Sandbox.Profile = SandboxProfileRestricted
 	}
@@ -261,7 +268,7 @@ func ValidateManifest(m Manifest) error {
 		return fmt.Errorf("unsupported skill approval.default: %s", m.Approval.Default)
 	}
 	switch m.Sandbox.Profile {
-	case SandboxProfileRestricted, SandboxProfileTrustedLocal, SandboxProfileBestEffort:
+	case SandboxProfileRestricted, SandboxProfileTrustedLocal, SandboxProfileBestEffortLocal, SandboxProfileLinuxIsolated:
 	default:
 		return fmt.Errorf("unsupported skill sandbox.profile: %s", m.Sandbox.Profile)
 	}

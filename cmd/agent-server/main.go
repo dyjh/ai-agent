@@ -14,6 +14,12 @@ import (
 	appLog "local-agent/internal/log"
 )
 
+// @title Local Agent API
+// @version dev
+// @description Single-user local Codex-like Agent API built with Go and CloudWeGo Eino.
+// @description External effects always flow through ToolRouter, EffectInference, PolicyEngine, ApprovalCenter, and Executor.
+// @BasePath /
+// @schemes http
 func main() {
 	configPath := flag.String("config", "config/agent.yaml", "path to agent config")
 	checkConfig := flag.Bool("check-config", false, "validate config and create runtime directories")

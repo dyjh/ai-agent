@@ -55,7 +55,7 @@ func (h *SkillsHandler) Upload(w http.ResponseWriter, r *http.Request) {
 // @Produce application/json
 // @Param file formData file true "Skill zip archive"
 // @Param force formData boolean false "Overwrite the same installed version"
-// @Success 201 {object} map[string]any
+// @Success 201 {object} skills.UploadZipResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /v1/skills/upload-zip [post]
@@ -95,15 +95,20 @@ func (h *SkillsHandler) UploadZip(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "validation_failed", err.Error(), map[string]any{"filename": header.Filename})
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{
-		"skill":   item.Registration,
-		"package": item.Package,
+	writeJSON(w, http.StatusCreated, skills.UploadZipResponse{
+		Skill:   item.Registration,
+		Package: item.Package,
 	})
 }
 
 // List handles GET /v1/skills.
+// @Tags Skills
+// @Summary List skills
+// @Produce application/json
+// @Success 200 {object} SkillListResponse
+// @Router /v1/skills [get]
 func (h *SkillsHandler) List(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"items": h.Deps.Skills.List()})
+	writeJSON(w, http.StatusOK, SkillListResponse{Items: h.Deps.Skills.List()})
 }
 
 // Get returns the registered skill and manifest.
@@ -111,7 +116,7 @@ func (h *SkillsHandler) List(w http.ResponseWriter, r *http.Request) {
 // @Summary Get skill detail
 // @Produce application/json
 // @Param id path string true "Skill ID"
-// @Success 200 {object} map[string]any
+// @Success 200 {object} SkillDetailResponse
 // @Failure 404 {object} ErrorResponse
 // @Router /v1/skills/{id} [get]
 func (h *SkillsHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -120,10 +125,10 @@ func (h *SkillsHandler) Get(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", err.Error(), nil)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"skill":    item.Registration,
-		"manifest": item.Manifest,
-		"package":  item.Package,
+	writeJSON(w, http.StatusOK, SkillDetailResponse{
+		Skill:    item.Registration,
+		Manifest: item.Manifest,
+		Package:  item.Package,
 	})
 }
 
@@ -132,7 +137,7 @@ func (h *SkillsHandler) Get(w http.ResponseWriter, r *http.Request) {
 // @Summary Get skill manifest
 // @Produce application/json
 // @Param id path string true "Skill ID"
-// @Success 200 {object} map[string]any
+// @Success 200 {object} SkillManifestResponse
 // @Failure 404 {object} ErrorResponse
 // @Router /v1/skills/{id}/manifest [get]
 func (h *SkillsHandler) Manifest(w http.ResponseWriter, r *http.Request) {
@@ -141,9 +146,9 @@ func (h *SkillsHandler) Manifest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", err.Error(), nil)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"skill":    item.Registration,
-		"manifest": item.Manifest,
+	writeJSON(w, http.StatusOK, SkillManifestResponse{
+		Skill:    item.Registration,
+		Manifest: item.Manifest,
 	})
 }
 
@@ -165,6 +170,14 @@ func (h *SkillsHandler) Package(w http.ResponseWriter, r *http.Request) {
 }
 
 // Enable handles POST /v1/skills/{id}/enable.
+// @Tags Skills
+// @Summary Enable skill
+// @Accept application/json
+// @Produce application/json
+// @Param id path string true "Skill ID"
+// @Success 200 {object} core.SkillRegistration
+// @Failure 400 {object} ErrorResponse
+// @Router /v1/skills/{id}/enable [post]
 func (h *SkillsHandler) Enable(w http.ResponseWriter, r *http.Request) {
 	item, err := h.Deps.Skills.SetEnabled(chi.URLParam(r, "id"), true)
 	if err != nil {
@@ -175,11 +188,29 @@ func (h *SkillsHandler) Enable(w http.ResponseWriter, r *http.Request) {
 }
 
 // Test validates a skill request without executing it.
+// @Tags Skills
+// @Summary Validate a registered skill request
+// @Accept application/json
+// @Produce application/json
+// @Param id path string true "Skill ID"
+// @Param body body SkillRunRequestBody false "Validation request"
+// @Success 200 {object} skills.SkillValidateResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /v1/skills/{id}/test [post]
 func (h *SkillsHandler) Test(w http.ResponseWriter, r *http.Request) {
 	h.Validate(w, r)
 }
 
 // Disable handles POST /v1/skills/{id}/disable.
+// @Tags Skills
+// @Summary Disable skill
+// @Accept application/json
+// @Produce application/json
+// @Param id path string true "Skill ID"
+// @Success 200 {object} core.SkillRegistration
+// @Failure 400 {object} ErrorResponse
+// @Router /v1/skills/{id}/disable [post]
 func (h *SkillsHandler) Disable(w http.ResponseWriter, r *http.Request) {
 	item, err := h.Deps.Skills.SetEnabled(chi.URLParam(r, "id"), false)
 	if err != nil {
@@ -195,15 +226,13 @@ func (h *SkillsHandler) Disable(w http.ResponseWriter, r *http.Request) {
 // @Accept application/json
 // @Produce application/json
 // @Param id path string true "Skill ID"
-// @Param body body skills.SkillRunInput false "Validation request"
-// @Success 200 {object} map[string]any
+// @Param body body SkillRunRequestBody false "Validation request"
+// @Success 200 {object} skills.SkillValidateResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Router /v1/skills/{id}/validate [post]
 func (h *SkillsHandler) Validate(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Args map[string]any `json:"args"`
-	}
+	var body SkillRunRequestBody
 	_ = decodeJSON(r, &body)
 	if body.Args == nil {
 		body.Args = map[string]any{}
@@ -219,11 +248,11 @@ func (h *SkillsHandler) Validate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "validation_failed", err.Error(), nil)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status":     "ok",
-		"skill":      item.Registration,
-		"package":    item.Package,
-		"validation": validation,
+	writeJSON(w, http.StatusOK, skills.SkillValidateResponse{
+		Status:     validation.Status,
+		Skill:      item.Registration,
+		Package:    item.Package,
+		Validation: validation,
 	})
 }
 
@@ -251,15 +280,13 @@ func (h *SkillsHandler) Remove(w http.ResponseWriter, r *http.Request) {
 // @Accept application/json
 // @Produce application/json
 // @Param id path string true "Skill ID"
-// @Param body body skills.SkillRunInput false "Skill run request"
-// @Success 200 {object} map[string]any
-// @Success 202 {object} map[string]any
+// @Param body body SkillRunRequestBody false "Skill run request"
+// @Success 200 {object} ToolRouteResponse
+// @Success 202 {object} ToolRouteResponse
 // @Failure 400 {object} ErrorResponse
 // @Router /v1/skills/{id}/run [post]
 func (h *SkillsHandler) Run(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Args map[string]any `json:"args"`
-	}
+	var body SkillRunRequestBody
 	_ = decodeJSON(r, &body)
 	if body.Args == nil {
 		body.Args = map[string]any{}
@@ -279,16 +306,16 @@ func (h *SkillsHandler) Run(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if outcome.Approval != nil {
-		writeJSON(w, http.StatusAccepted, map[string]any{
-			"approval":  outcome.Approval,
-			"decision":  outcome.Decision,
-			"inference": outcome.Inference,
+		writeJSON(w, http.StatusAccepted, ToolRouteResponse{
+			Approval:  outcome.Approval,
+			Decision:  &outcome.Decision,
+			Inference: &outcome.Inference,
 		})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"decision":  outcome.Decision,
-		"inference": outcome.Inference,
-		"result":    outcome.Result,
+	writeJSON(w, http.StatusOK, ToolRouteResponse{
+		Decision:  &outcome.Decision,
+		Inference: &outcome.Inference,
+		Result:    outcome.Result,
 	})
 }

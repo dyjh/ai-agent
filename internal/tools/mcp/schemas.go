@@ -3,6 +3,8 @@ package mcp
 import (
 	"context"
 	"time"
+
+	"local-agent/internal/core"
 )
 
 const (
@@ -13,22 +15,45 @@ const (
 
 	ApprovalAuto    = "auto"
 	ApprovalRequire = "require"
+
+	DialectStrictJSONRPC              = "strict_jsonrpc"
+	DialectLineDelimitedJSONRPC       = "line_delimited_jsonrpc"
+	DialectEnvelopeWrapped            = "envelope_wrapped"
+	DefaultMaxPayloadBytes      int64 = 2 << 20
 )
 
 // ServerInput stores an MCP server create/update payload.
 type ServerInput struct {
-	ID             string            `json:"id,omitempty" yaml:"id,omitempty"`
-	Name           string            `json:"name" yaml:"name"`
-	Transport      string            `json:"transport" yaml:"transport"`
-	Command        string            `json:"command,omitempty" yaml:"command,omitempty"`
-	Args           []string          `json:"args,omitempty" yaml:"args,omitempty"`
-	Cwd            string            `json:"cwd,omitempty" yaml:"cwd,omitempty"`
-	URL            string            `json:"url,omitempty" yaml:"url,omitempty"`
-	Headers        map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
-	Enabled        *bool             `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	Env            map[string]string `json:"environment,omitempty" yaml:"env,omitempty"`
-	TimeoutSeconds int               `json:"timeout_seconds,omitempty" yaml:"timeout_seconds,omitempty"`
+	ID             string             `json:"id,omitempty" yaml:"id,omitempty"`
+	Name           string             `json:"name" yaml:"name"`
+	Transport      string             `json:"transport" yaml:"transport"`
+	Dialect        string             `json:"dialect,omitempty" yaml:"dialect,omitempty"`
+	Compatibility  CompatibilityInput `json:"compatibility,omitempty" yaml:"compatibility,omitempty"`
+	Command        string             `json:"command,omitempty" yaml:"command,omitempty"`
+	Args           []string           `json:"args,omitempty" yaml:"args,omitempty"`
+	Cwd            string             `json:"cwd,omitempty" yaml:"cwd,omitempty"`
+	URL            string             `json:"url,omitempty" yaml:"url,omitempty"`
+	Headers        map[string]string  `json:"headers,omitempty" yaml:"headers,omitempty"`
+	Enabled        *bool              `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	Env            map[string]string  `json:"environment,omitempty" yaml:"env,omitempty"`
+	TimeoutSeconds int                `json:"timeout_seconds,omitempty" yaml:"timeout_seconds,omitempty"`
 }
+
+// CompatibilityInput stores optional compatibility overrides from API or YAML config.
+type CompatibilityInput struct {
+	Dialect                string `json:"dialect,omitempty" yaml:"dialect,omitempty"`
+	AcceptMissingSchema    *bool  `json:"accept_missing_schema,omitempty" yaml:"accept_missing_schema,omitempty"`
+	AcceptExtraMetadata    *bool  `json:"accept_extra_metadata,omitempty" yaml:"accept_extra_metadata,omitempty"`
+	AcceptTextOnlyResult   *bool  `json:"accept_text_only_result,omitempty" yaml:"accept_text_only_result,omitempty"`
+	AcceptStructuredResult *bool  `json:"accept_structured_result,omitempty" yaml:"accept_structured_result,omitempty"`
+	NormalizeErrorShape    *bool  `json:"normalize_error_shape,omitempty" yaml:"normalize_error_shape,omitempty"`
+	StrictIDMatching       *bool  `json:"strict_id_matching,omitempty" yaml:"strict_id_matching,omitempty"`
+	MaxPayloadBytes        int64  `json:"max_payload_bytes,omitempty" yaml:"max_payload_bytes,omitempty"`
+	TimeoutSeconds         int    `json:"timeout_seconds,omitempty" yaml:"timeout_seconds,omitempty"`
+}
+
+// MCPCompatibilityProfile is the normalized runtime profile used by transports.
+type MCPCompatibilityProfile = core.MCPCompatibilityProfile
 
 // ToolPolicyInput stores a local MCP tool policy override payload.
 type ToolPolicyInput struct {
@@ -86,6 +111,8 @@ type MCPClient interface {
 type TransportConfig struct {
 	ServerID       string
 	Transport      string
+	Dialect        string
+	Compatibility  core.MCPCompatibilityProfile
 	Command        string
 	Args           []string
 	Cwd            string

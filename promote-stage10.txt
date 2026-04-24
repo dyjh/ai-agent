@@ -1,0 +1,558 @@
+基于当前主分支代码，**MCP runtime 已经不是占位实现**：README 已写明当前支持 `stdio` / `http` 两种 transport，`mcp.call_tool` 已接入 `ToolProposal -> EffectInference -> PolicyEngine -> ApprovalCenter -> MCP Executor` 这条安全链路，本地 policy override 优先于 server 返回的 schema/metadata，unknown tool 默认 `unknown.effect` 并要求审批。`task.json` 也把“更广的 MCP 协议兼容矩阵”明确列为当前剩余 backlog 之一。现有 HTTP 路由已经暴露了 `POST /v1/mcp/servers/{id}/refresh`、`POST /v1/mcp/servers/{id}/test`、`POST /v1/mcp/servers/{id}/tools/{tool_name}/call`、`GET /v1/mcp/tools`、`PATCH /v1/mcp/tools/{id}/policy` 等管理与调用接口。([GitHub][1])
+
+下面这版提示词，目标不是“再把 MCP 从零做一遍”，而是做 **Post‑MVP Phase C3：MCP 兼容矩阵 + conformance 测试**，把当前“可用的 MCP runtime”提升成“更稳、更广、更可验证的兼容层”。([GitHub][1])
+
+````text
+你是一个资深 Go 后端工程师、系统集成工程师、协议兼容性工程师、测试工程师和 API 文档工程师。请在当前仓库 dyjh/ai-agent 中继续开发，不要推倒重写，只在现有 production-ready MVP + post-MVP durable workflow + Skill Phase B 的基础上，实现新的 backlog 主题：
+
+Post-MVP Phase C3 — MCP Compatibility Matrix and Conformance Testing
+
+开始前必须先做：
+
+1. 阅读 README.md
+2. 阅读 task.json
+3. 阅读 AGENTS.md
+4. 实际检查代码，而不是只信文档，重点检查：
+   - internal/tools/mcp/manager.go
+   - internal/tools/mcp/client.go
+   - internal/tools/mcp/schemas.go
+   - internal/agent/effect_inference.go
+   - internal/agent/policy.go
+   - internal/tools/router.go
+   - internal/api/handlers/mcp.go
+   - internal/api/router.go
+   - docs/openapi.json
+   - cmd/openapi/
+   - Makefile
+   - tests/ 下与 mcp / transport / policy / approval / api 相关测试
+5. 全局搜索：
+   - MCPTransport
+   - ListTools
+   - CallTool
+   - refresh
+   - policy override
+   - json-rpc
+   - tools/list
+   - tools/call
+   - swagger
+   - @Tags
+   - @Router
+   - TODO
+   - placeholder
+6. 先输出：
+   - 当前 MCP compatibility / conformance 相关问题列表
+   - 你准备修改的文件列表
+   - 你的实现顺序
+7. 然后再开始逐步修改代码
+
+==================================================
+当前背景（必须承认，不要回退）
+==================================================
+
+当前仓库已经具备：
+
+- MCP runtime 支持 stdio 和 http 两种 transport
+- mcp.call_tool 已接入 ToolProposal -> EffectInference -> PolicyEngine -> ApprovalCenter -> Executor
+- 本地 policy override 优先于 server 返回的 schema / metadata
+- unknown MCP tool 默认 unknown.effect，并要求审批
+- 已有 MCP 管理与调用 API
+- Swagger/OpenAPI 已经存在，/swagger/index.html 和 /swagger/doc.json 可访问
+
+本阶段不要回退这些能力，不要把 mcp.call_tool 改回 placeholder。
+
+==================================================
+本阶段总目标
+==================================================
+
+完成以下 7 件事：
+
+1. 建立 MCP transport / dialect compatibility matrix
+2. 将当前“最小 JSON-RPC tools/list / tools/call 封装”提升为更可配置、可兼容的 transport layer
+3. 增加 MCP conformance test harness
+4. 覆盖 stdio / http / schema variation / error mapping / timeout / malformed payload 等兼容场景
+5. 保持 mcp.call_tool 仍走 ToolRouter -> EffectInference -> PolicyEngine -> ApprovalCenter -> Executor
+6. 如果本次修改了 API / DTO / route，必须同步补 swag 注释并重新生成 Swagger/OpenAPI 文档
+7. 补齐测试、README、Swagger、task.json，把这一阶段纳入新的 post-MVP backlog 记录
+
+==================================================
+必须遵守的架构约束
+==================================================
+
+1. 不要引入租户、多用户、RBAC、云端 SaaS 逻辑
+2. 本项目仍然是单用户本地部署
+3. 不要让 LLM / Eino Tool 直接调用 MCP server
+4. 不要让 handler 绕过 ToolRouter 去直接调用实际有副作用的 MCP tool
+5. 模型仍然不能直接操作外部世界
+6. MCP tool 调用仍必须经过：
+   ToolProposal -> EffectInference -> PolicyEngine -> ApprovalCenter(需要时) -> MCP Executor
+7. approval 后只能执行 approval.input_snapshot
+8. 不要因为做协议兼容就放宽 policy override 优先级
+9. 不要把 server 返回 schema 当成完全可信真理
+10. 不要泄露 Authorization header、token、cookie、secret、.env 正文到日志、messages、JSONL、agent_events、Swagger 示例
+11. 不要破坏现有 Swagger、KB feature gate、Skill runtime、durable workflow、run APIs
+
+==================================================
+本阶段要解决的真实问题
+==================================================
+
+当前 README 已明确：
+
+- stdio/http transport 已有可测试 MVP 实现
+- 当前协议仍主要按 JSON-RPC tools/list / tools/call 的最小封装处理
+- 更完整的 MCP 协议兼容矩阵仍待后续扩展
+
+本阶段重点不是再堆 MCP 管理 API，而是：
+
+- 让 transport 层可以适配更多 server 方言
+- 让协议差异集中在 transport / compatibility layer，而不是散落到 handler / router
+- 建立系统性的 conformance test matrix
+- 确保 policy / approval / executor 语义在不同方言下都不回退
+
+==================================================
+任务 1：定义 MCP Compatibility Matrix
+==================================================
+
+请先明确并实现一个可扩展的 MCP compatibility matrix。
+
+建议维度包括：
+
+1. Transport:
+   - stdio
+   - http
+
+2. RPC framing:
+   - strict JSON-RPC 2.0
+   - line-delimited JSON-RPC
+   - envelope wrapper variant（如 data/result 包裹）
+   - id optional/echo mismatch variant（如你认为有必要）
+
+3. Tool discovery behavior:
+   - tools/list strict schema
+   - tools/list missing schema fields
+   - tools/list extra metadata fields
+   - tools/list malformed partial entry
+
+4. Tool call behavior:
+   - tools/call strict result
+   - tools/call text content only
+   - tools/call structured payload
+   - tools/call mixed payload
+   - tools/call malformed result
+   - tools/call error object mapping
+
+5. Runtime behavior:
+   - timeout
+   - connection drop
+   - non-JSON response
+   - partial response
+   - disabled server
+   - unknown tool
+
+请把这套 matrix 体现在代码结构和测试命名里，不要只写在 README。
+
+==================================================
+任务 2：增强 MCP transport 抽象
+==================================================
+
+请检查现有 MCPTransport / client / manager 设计，并升级为更清晰的兼容层。
+
+建议保留或增强：
+
+```go
+type MCPTransport interface {
+    Start(ctx context.Context) error
+    ListTools(ctx context.Context) ([]MCPToolSchema, error)
+    CallTool(ctx context.Context, name string, input map[string]any) (*MCPToolResult, error)
+    Close(ctx context.Context) error
+}
+````
+
+同时增加兼容层抽象，例如：
+
+```go
+type MCPDialect string
+
+const (
+    MCPDialectStrictJSONRPC   MCPDialect = "strict_jsonrpc"
+    MCPDialectLineDelimited   MCPDialect = "line_delimited_jsonrpc"
+    MCPDialectEnvelopeWrapped MCPDialect = "envelope_wrapped"
+)
+
+type MCPCompatibilityProfile struct {
+    Dialect                 MCPDialect
+    AcceptMissingSchema     bool
+    AcceptExtraMetadata     bool
+    AcceptTextOnlyResult    bool
+    AcceptStructuredResult  bool
+    NormalizeErrorShape     bool
+    StrictIDMatching        bool
+    MaxPayloadBytes         int64
+    TimeoutSeconds          int
+}
+```
+
+要求：
+
+1. compatibility profile 必须集中在 transport 层或 transport adapter 层
+2. 不要把方言分支散落到 handler / router / policy
+3. manager 负责根据 server config 选择 transport 和 compatibility profile
+4. 默认 profile 要保守
+5. 若 server config 未声明 dialect，使用默认 strict profile，并可在 README 中说明
+
+==================================================
+任务 3：扩展 MCP server 配置，支持 dialect/profile
+========================================
+
+请增强 `config/mcp.servers.yaml` 对兼容配置的表达能力。
+
+示例：
+
+```yaml
+servers:
+  - id: filesystem
+    name: filesystem
+    enabled: true
+    transport: stdio
+    command: node
+    args:
+      - ./mcp/filesystem/index.js
+    cwd: ./mcp/filesystem
+    dialect: line_delimited_jsonrpc
+    compatibility:
+      accept_missing_schema: true
+      accept_extra_metadata: true
+      accept_text_only_result: true
+      strict_id_matching: false
+
+  - id: local-http-tools
+    name: local-http-tools
+    enabled: true
+    transport: http
+    url: http://localhost:3001/mcp
+    headers:
+      Authorization: ${MCP_LOCAL_TOKEN}
+    dialect: strict_jsonrpc
+```
+
+要求：
+
+1. 向后兼容现有配置
+2. env expansion 继续支持
+3. disabled server 不可调用
+4. 无效 dialect / compatibility 配置应在启动或 validate 时报错
+5. 不要打印 secret headers
+6. README 和 Swagger 示例需要同步更新配置说明（如果相关 API 暴露配置）
+
+==================================================
+任务 4：增强 stdio / http transport 的协议适配
+====================================
+
+请分别增强：
+
+* StdioTransport
+* HTTPTransport
+
+重点：
+
+1. strict JSON-RPC 正常工作
+2. line-delimited JSON 变体可配置支持
+3. envelope wrapped 返回可解析
+4. 非法或部分 malformed payload 能清晰映射错误
+5. timeout / context cancel / close 行为一致
+6. response size 有上限
+7. 不把完整原始异常响应直接写进日志（避免 secret 泄露）
+
+要求：
+
+* transport 层负责“协议适配”
+* manager / executor 层负责“业务调用”
+* policy / approval 逻辑不应感知 transport 方言细节
+
+==================================================
+任务 5：建立 MCP Conformance Test Harness
+====================================
+
+这是本阶段核心。
+
+请建立一个可扩展的 conformance test harness，用来验证 transport / client / manager 对不同 MCP 方言和错误场景的兼容性。
+
+建议结构：
+
+```go
+type MCPConformanceCase struct {
+    Name             string
+    Transport        string
+    Dialect          string
+    ServerFixture    string
+    ExpectedTools    []string
+    ExpectedCallMode string
+    ExpectedError    string
+}
+```
+
+至少需要支持 fixture / mock server / fake process 的测试方式。
+
+建议建立两类测试 fixture：
+
+1. stdio fixture
+
+   * fake child process
+   * 输出 strict / loose / malformed / timeout / partial response
+
+2. http fixture
+
+   * httptest.Server
+   * 返回 strict / envelope / malformed / error object / timeout
+
+要求：
+
+* conformance tests 不依赖真实外部 MCP server
+* 默认 `go test ./...` 可跑通
+* 如需更真实集成测试，可加 env-gated 扩展
+* 测试输出要明确显示 matrix case 名称
+
+==================================================
+任务 6：覆盖关键 conformance 场景
+========================
+
+请至少补齐这些测试。
+
+A. Discovery / tools/list
+
+1. strict json-rpc list tools
+2. line-delimited list tools
+3. missing schema fields but accepted
+4. extra metadata fields but accepted
+5. malformed single tool entry
+6. disabled server
+7. timeout
+8. invalid JSON
+
+B. Call / tools/call
+
+1. strict structured result
+2. text-only result
+3. mixed content result
+4. malformed result object
+5. JSON-RPC error mapping
+6. network timeout
+7. process exit early
+8. partial response
+9. unknown tool
+
+C. Policy consistency
+
+1. local override > server schema
+2. unknown tool -> unknown.effect -> approval
+3. fs.read auto execute
+4. fs.write require approval
+5. network.post require approval
+6. malformed schema 不得绕过 approval
+
+D. Approval snapshot consistency
+
+1. call tool before approval should not execute write side-effect
+2. approval 后只执行 snapshot
+3. proposal change 后不能复用旧 approval
+
+==================================================
+任务 7：增强错误映射与可观测性
+================
+
+请将不同 transport / dialect 下的异常收敛成一致的错误模型。
+
+建议定义：
+
+```go
+type MCPErrorCode string
+
+const (
+    MCPErrorInvalidResponse   MCPErrorCode = "invalid_response"
+    MCPErrorTimeout           MCPErrorCode = "timeout"
+    MCPErrorTransportFailure  MCPErrorCode = "transport_failure"
+    MCPErrorProtocolViolation MCPErrorCode = "protocol_violation"
+    MCPErrorServerError       MCPErrorCode = "server_error"
+    MCPErrorUnknownTool       MCPErrorCode = "unknown_tool"
+)
+```
+
+要求：
+
+1. transport 错误映射统一
+2. policy / approval / executor 上层不需要理解各种底层格式细节
+3. JSONL / agent_events / WebSocket 中的错误事件结构化
+4. 日志和事件继续脱敏
+
+==================================================
+任务 8：如有 API 变化，补 runbook / admin 能力
+===================================
+
+如果你认为 MCP 兼容矩阵需要对外暴露更多管理能力，可以谨慎新增：
+
+* `GET /v1/mcp/servers/{id}/compatibility`
+* `POST /v1/mcp/servers/{id}/validate`
+* `GET /v1/mcp/servers/{id}/tools`
+* `POST /v1/mcp/servers/{id}/conformance-check`
+
+但请注意：
+
+1. 这些接口不是必须
+2. 如果不新增 API，也可以只做内部测试与配置增强
+3. 如果新增 API，必须：
+
+   * 补 swag 注释
+   * 更新 Swagger/OpenAPI
+   * 不要绕过 ToolRouter 执行有副作用 tool
+   * 管理类 validate/check 优先做无副作用检查
+
+==================================================
+任务 9：Swagger / swag 注释同步要求
+==========================
+
+如果本次修改涉及以下任何内容：
+
+* 新增 HTTP API
+* 修改 MCP API 的 request / response DTO
+* 修改错误响应格式
+* 修改路由
+
+则必须同步完成以下事情：
+
+1. 为相关 handler 增加或更新 swag 注释
+2. 注释风格参考：
+
+```go
+// GetCabinetCanUseGateway 获取机柜可用网关
+// @Tags 机柜管理
+// @Summary 获取机柜可用网关
+// @accept application/json
+// @Produce application/json
+// @Param data query physicalServerReq.GetCabinetCanUseGateway true "查询参数"
+// @Success 200 {object} response.Response{data=[]physicalServerRes.CabinetCanUseGatewayItem,msg=string} "获取成功"
+// @Router /cabinet/getCabinetCanUseGateway [get]
+```
+
+3. 在本项目中使用对应的：
+
+   * @Tags
+   * @Summary
+   * @Accept
+   * @Produce
+   * @Param
+   * @Success
+   * @Failure
+   * @Router
+
+4. 为错误响应补清楚：
+
+   * invalid_request
+   * validation_failed
+   * unsupported_dialect
+   * protocol_violation
+   * transport_failure
+   * internal_error
+
+5. 重新生成 swagger / openapi：
+
+   * 优先使用现有 `make swagger`
+   * 不要手工改 docs 产物代替生成
+
+6. 确保：
+
+   * `/swagger/index.html`
+   * `/swagger/doc.json`
+     仍可访问
+
+==================================================
+任务 10：README / task.json / post-MVP backlog 收口
+==============================================
+
+README 需要补充：
+
+1. 当前 MCP transport 支持的 dialect / compatibility profile
+2. conformance matrix 的覆盖范围
+3. 当前哪些 server 方言已验证
+4. 当前哪些仍是 best-effort / experimental
+5. 如果新增了管理接口或 validate/check 流程，写明使用方式
+6. 不要夸大成“已完全兼容所有 MCP server”
+
+task.json 需要更新：
+
+* overall_status 保持 production_ready_mvp
+* current_task_id 切到新的 backlog 项，例如：
+
+  * mcp-compatibility-conformance-matrix
+* 新增一个 backlog/change_log 记录本次工作
+* unfinished_overview 更新为新的剩余项，例如：
+
+  * 更强 OS 级 skill 沙箱（如果仍未完成）
+  * 更复杂 graph / branch / parallel workflow
+  * 更高保真外部依赖集成矩阵
+
+==================================================
+建议实现顺序
+======
+
+请严格按这个顺序推进：
+
+1. 检查现有 MCP transport / manager / tests
+2. 设计 compatibility profile / dialect 抽象
+3. 扩展 server config
+4. 升级 stdio/http transport 的协议适配
+5. 建 MCP conformance harness
+6. 补 conformance matrix 测试
+7. 收敛错误模型和事件
+8. 如有 API 变化，更新 swag 注释并重新生成 swagger
+9. gofmt
+10. go test ./...
+11. 更新 README / task.json
+
+==================================================
+验收标准
+====
+
+完成后必须满足：
+
+1. stdio/http transport 保持现有能力不回退
+2. 新增 compatibility profile / dialect 配置
+3. 协议分支集中在 transport / compatibility layer，而不是散落在 handler
+4. 建立可重复的 MCP conformance test harness
+5. 覆盖 discovery / call / malformed / timeout / error mapping / override consistency 场景
+6. mcp.call_tool 仍走 ToolRouter / Policy / Approval
+7. 如有 API 变更，Swagger/OpenAPI 已更新
+8. `/swagger/index.html` 和 `/swagger/doc.json` 仍可访问
+9. `go test ./...` 通过
+10. README / task.json 与实现一致
+11. 没有新增绕过 ToolRouter / Policy / Approval 的路径
+
+==================================================
+特别注意
+====
+
+* 不要把 MCP compatibility 做成 handler 层 if-else 大杂烩
+* 不要让方言兼容破坏 policy override 优先级
+* 不要为了兼容宽松 server 就放松 unknown.effect 审批策略
+* 不要泄露 headers / token / raw malformed payload
+* 不要回退现有 Swagger、KB feature gate、Skill runtime、durable workflow
+* 不要引入租户、多用户、RBAC
+
+现在开始执行。
+
+先输出：
+
+1. 当前 MCP compatibility / conformance 相关问题列表
+2. 计划修改的文件列表
+3. 实现顺序
+
+然后再开始逐步修改，最后给出：
+
+* 测试结果
+* compatibility profile / dialect 设计摘要
+* conformance matrix 覆盖摘要
+* 如果有 API 变更，Swagger 注释与文档更新摘要
+* README 更新摘要
+* task.json 更新摘要
+
+```
+
+[1]: https://github.com/dyjh/ai-agent/blob/main/README.md "ai-agent/README.md at main · dyjh/ai-agent · GitHub"

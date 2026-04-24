@@ -17,6 +17,7 @@ import (
 	"local-agent/internal/api"
 	"local-agent/internal/app"
 	"local-agent/internal/config"
+	"local-agent/internal/tools/skills"
 )
 
 func TestSkillAPIUploadZipValidateRunAndRemove(t *testing.T) {
@@ -50,9 +51,10 @@ func TestSkillAPIUploadZipValidateRunAndRemove(t *testing.T) {
 
 	skillID := "zip_api_skill_" + strings.ReplaceAll(filepath.Base(t.TempDir()), "-", "_")
 	root := createSkillFixture(t, skillFixtureOptions{
-		ID:      skillID,
-		Effects: []string{"process.read"},
-		Script:  "#!/bin/sh\nprintf '{\"ok\":true}'\n",
+		ID:             skillID,
+		Effects:        []string{"process.read"},
+		SandboxProfile: skills.SandboxProfileBestEffortLocal,
+		Script:         "#!/bin/sh\nprintf '{\"ok\":true}'\n",
 	})
 	zipPath := createSkillZipFromDir(t, root)
 
@@ -75,8 +77,8 @@ func TestSkillAPIUploadZipValidateRunAndRemove(t *testing.T) {
 
 	var validateResp map[string]any
 	mustRequestJSON(t, http.MethodPost, server.URL+"/v1/skills/"+skillID+"/validate", map[string]any{"args": map[string]any{}}, &validateResp)
-	if validateResp["status"] != "ok" {
-		t.Fatalf("validate status = %v, want ok", validateResp["status"])
+	if validateResp["status"] != "ok" && validateResp["status"] != "warning" {
+		t.Fatalf("validate status = %v, want ok or warning", validateResp["status"])
 	}
 	validation := validateResp["validation"].(map[string]any)
 	if _, ok := validation["execution_profile"].(map[string]any); !ok {

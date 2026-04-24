@@ -12,6 +12,9 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
+
+	"local-agent/internal/core"
 )
 
 // StdioTransport starts a local MCP server process and exchanges line-delimited JSON-RPC.
@@ -20,6 +23,7 @@ type StdioTransport struct {
 	args    []string
 	cwd     string
 	env     map[string]string
+	profile core.MCPCompatibilityProfile
 
 	stateMu sync.RWMutex
 	rpcMu   sync.Mutex
@@ -30,11 +34,26 @@ type StdioTransport struct {
 
 // NewStdioTransport creates a stdio MCP transport.
 func NewStdioTransport(cfg TransportConfig) *StdioTransport {
+	timeout := cfg.TimeoutSeconds
+	if timeout <= 0 {
+		timeout = 30
+	}
+	profile := cfg.Compatibility
+	if profile.Dialect == "" {
+		profile = defaultCompatibilityProfile(timeout)
+	}
+	if profile.TimeoutSeconds <= 0 {
+		profile.TimeoutSeconds = timeout
+	}
+	if profile.MaxPayloadBytes <= 0 {
+		profile.MaxPayloadBytes = DefaultMaxPayloadBytes
+	}
 	return &StdioTransport{
 		command: strings.TrimSpace(cfg.Command),
 		args:    append([]string(nil), cfg.Args...),
 		cwd:     strings.TrimSpace(cfg.Cwd),
 		env:     copyStringMap(cfg.Env),
+		profile: profile,
 	}
 }
 
@@ -85,7 +104,7 @@ func (t *StdioTransport) ListTools(ctx context.Context) ([]MCPToolSchema, error)
 	if err != nil {
 		return nil, err
 	}
-	return parseToolsResult(payload)
+	return parseToolsResult(payload, t.profile)
 }
 
 // CallTool invokes a tool via the MCP tools/call JSON-RPC method.
@@ -97,7 +116,7 @@ func (t *StdioTransport) CallTool(ctx context.Context, name string, input map[st
 	if err != nil {
 		return nil, err
 	}
-	return parseToolResult(payload)
+	return parseToolResult(payload, t.profile)
 }
 
 // Close terminates the child process and closes pipes.
@@ -120,6 +139,8 @@ func (t *StdioTransport) Close(_ context.Context) error {
 func (t *StdioTransport) request(ctx context.Context, request rpcRequest) ([]byte, error) {
 	t.rpcMu.Lock()
 	defer t.rpcMu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(t.profile.TimeoutSeconds)*time.Second)
+	defer cancel()
 
 	t.stateMu.RLock()
 	stdin := t.stdin
@@ -153,12 +174,15 @@ func (t *StdioTransport) request(ctx context.Context, request rpcRequest) ([]byt
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
 		}
-		return nil, ctx.Err()
+		return nil, newMCPError(MCPErrorTimeout, "mcp stdio request timed out", ctx.Err())
 	case out := <-done:
 		if out.err != nil {
-			return nil, fmt.Errorf("read mcp stdio response: %w", out.err)
+			return nil, newMCPError(MCPErrorTransportFailure, "read mcp stdio response", out.err)
 		}
-		return decodeRPCResponse(out.line)
+		if int64(len(out.line)) > t.profile.MaxPayloadBytes {
+			return nil, newMCPError(MCPErrorInvalidResponse, fmt.Sprintf("mcp stdio response exceeds %d bytes", t.profile.MaxPayloadBytes), nil)
+		}
+		return decodeRPCResponse(out.line, request.ID, t.profile)
 	}
 }
 

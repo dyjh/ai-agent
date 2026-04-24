@@ -30,7 +30,7 @@ func TestMCPHTTPTransportListAndCall(t *testing.T) {
 				"id":      body["id"],
 				"result": map[string]any{
 					"tools": []map[string]any{
-						{"name": "echo", "metadata": map[string]any{"effects": []string{"fs.read"}, "approval": "auto"}},
+						{"name": "echo", "inputSchema": map[string]any{"type": "object"}, "metadata": map[string]any{"effects": []string{"fs.read"}, "approval": "auto"}},
 					},
 				},
 			})
@@ -77,15 +77,16 @@ func TestMCPStdioTransportListAndCall(t *testing.T) {
 	script := filepath.Join(root, "mock-mcp.sh")
 	body := `#!/bin/sh
 while IFS= read -r line; do
+  id=$(printf '%s' "$line" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
   case "$line" in
     *tools/list*)
-      printf '%s\n' '{"jsonrpc":"2.0","id":"1","result":{"tools":[{"name":"echo","metadata":{"effects":["fs.read"],"approval":"auto"}}]}}'
+      printf '%s\n' '{"jsonrpc":"2.0","id":"'"$id"'","result":{"tools":[{"name":"echo","inputSchema":{"type":"object"},"metadata":{"effects":["fs.read"],"approval":"auto"}}]}}'
       ;;
     *tools/call*)
-      printf '%s\n' '{"jsonrpc":"2.0","id":"2","result":{"structured":{"ok":true},"content":"done"}}'
+      printf '%s\n' '{"jsonrpc":"2.0","id":"'"$id"'","result":{"structured":{"ok":true},"content":"done"}}'
       ;;
     *)
-      printf '%s\n' '{"jsonrpc":"2.0","id":"0","error":{"code":-32601,"message":"unknown method"}}'
+      printf '%s\n' '{"jsonrpc":"2.0","id":"'"$id"'","error":{"code":-32601,"message":"unknown method"}}'
       ;;
   esac
 done

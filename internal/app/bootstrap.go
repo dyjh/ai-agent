@@ -233,7 +233,6 @@ func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb
 		DefaultEffects: []string{"unknown.effect"},
 	}, &skills.Runner{
 		Manager:        skillsManager,
-		Sandbox:        &skills.LocalRestrictedRunner{},
 		MaxOutputChars: cfg.Shell.MaxOutputChars,
 	})
 	registry.Register(core.ToolSpec{

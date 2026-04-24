@@ -31,6 +31,12 @@ servers:
     enabled: true
     transport: http
     url: http://localhost:3001/mcp
+    dialect: line_delimited_jsonrpc
+    compatibility:
+      accept_extra_metadata: true
+      accept_text_only_result: true
+      strict_id_matching: false
+      max_payload_bytes: 4096
     headers:
       Authorization: ${MCP_LOCAL_TOKEN}
   - id: disabled
@@ -62,6 +68,18 @@ tools:
 	}
 	if httpServer.Headers["Authorization"] != "[REDACTED]" {
 		t.Fatalf("authorization header was not redacted: %v", httpServer.Headers)
+	}
+	if httpServer.Dialect != mcp.DialectLineDelimitedJSONRPC {
+		t.Fatalf("dialect = %s, want %s", httpServer.Dialect, mcp.DialectLineDelimitedJSONRPC)
+	}
+	if !httpServer.Compatibility.AcceptExtraMetadata || !httpServer.Compatibility.AcceptTextOnlyResult {
+		t.Fatalf("compatibility flags not parsed: %+v", httpServer.Compatibility)
+	}
+	if httpServer.Compatibility.StrictIDMatching {
+		t.Fatalf("strict_id_matching should be configurable: %+v", httpServer.Compatibility)
+	}
+	if httpServer.Compatibility.MaxPayloadBytes != 4096 {
+		t.Fatalf("max_payload_bytes = %d, want 4096", httpServer.Compatibility.MaxPayloadBytes)
 	}
 	stdioServer, err := manager.GetServer("filesystem")
 	if err != nil {
@@ -108,6 +126,17 @@ servers:
   - id: bad-http
     name: bad-http
     transport: http
+`,
+		},
+		{
+			name: "invalid dialect",
+			body: `
+servers:
+  - id: bad-dialect
+    name: bad-dialect
+    transport: http
+    url: http://localhost:3001/mcp
+    dialect: loose-json
 `,
 		},
 	}

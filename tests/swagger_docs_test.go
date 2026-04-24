@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"local-agent/internal/api"
-	"local-agent/internal/openapi"
 )
 
 func TestSwaggerRoutesAndSpec(t *testing.T) {
@@ -61,16 +60,13 @@ func TestSwaggerRoutesAndSpec(t *testing.T) {
 	}
 }
 
-func TestOpenAPIGenerationWritesDocument(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "openapi.json")
-	if err := openapi.WriteFile(path); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
+func TestGeneratedSwaggerArtifactContainsCorePath(t *testing.T) {
+	path := filepath.Join("..", "docs", "openapi.json")
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
 	if !strings.Contains(string(raw), `"/v1/health"`) {
-		t.Fatalf("generated OpenAPI document missing /v1/health")
+		t.Fatalf("generated Swagger document missing /v1/health")
 	}
 }
