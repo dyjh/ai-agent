@@ -46,6 +46,8 @@ func (e *Executor) Execute(ctx context.Context, input map[string]any) (*core.Too
 		return e.executeDiffSummary(ctx, workspace, paths, staged)
 	case "commit_message_proposal":
 		return e.executeCommitMessageProposal(ctx, workspace, paths)
+	case "commit":
+		return e.executeCommit(ctx, workspace, paths, input)
 	}
 	args, err := e.gitArgs(input, paths)
 	if err != nil {
@@ -214,6 +216,130 @@ func (e *Executor) executeCommitMessageProposal(ctx context.Context, workspace s
 	return &core.ToolResult{Output: output, StartedAt: startedAt, FinishedAt: time.Now().UTC()}, nil
 }
 
+func (e *Executor) executeCommit(ctx context.Context, workspace string, paths []string, input map[string]any) (*core.ToolResult, error) {
+	message, _ := input["message"].(string)
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return nil, errors.New("git.commit requires message")
+	}
+	startedAt := time.Now().UTC()
+	status, err := e.runGit(ctx, workspace, []string{"status", "--short"})
+	if err != nil {
+		return nil, err
+	}
+	staged, err := e.runGit(ctx, workspace, appendPathspec([]string{"diff", "--cached", "--name-only"}, paths))
+	if err != nil {
+		return nil, err
+	}
+	stagedFiles := nonEmptyLines(staged.Stdout)
+	outsideScopedFiles := []string{}
+	if len(paths) > 0 {
+		allStaged, err := e.runGit(ctx, workspace, []string{"diff", "--cached", "--name-only"})
+		if err != nil {
+			return nil, err
+		}
+		outsideScopedFiles = outsideFiles(nonEmptyLines(allStaged.Stdout), stagedFiles)
+		if len(outsideScopedFiles) > 0 {
+			return &core.ToolResult{
+				Output: map[string]any{
+					"workspace":            filepath.ToSlash(workspace),
+					"operation":            e.Operation,
+					"command":              "git commit -m " + shellQuoteForDisplay(message),
+					"paths":                paths,
+					"message":              security.RedactString(message),
+					"status":               status.Stdout,
+					"staged_files":         stagedFiles,
+					"outside_scoped_files": outsideScopedFiles,
+					"pre_commit_checks": map[string]any{
+						"git_status_checked":        true,
+						"staged_diff_checked":       true,
+						"commit_message_nonempty":   true,
+						"has_staged_changes":        len(stagedFiles) > 0,
+						"staged_changes_pathscoped": false,
+					},
+					"exit_code":   1,
+					"error":       "git.commit paths do not cover all staged changes",
+					"truncated":   status.Truncated || staged.Truncated || allStaged.Truncated,
+					"duration_ms": time.Since(startedAt).Milliseconds(),
+				},
+				StartedAt:  startedAt,
+				FinishedAt: time.Now().UTC(),
+			}, nil
+		}
+	}
+	if len(stagedFiles) == 0 {
+		return &core.ToolResult{
+			Output: map[string]any{
+				"workspace": filepath.ToSlash(workspace),
+				"operation": e.Operation,
+				"command":   "git commit -m " + shellQuoteForDisplay(message),
+				"paths":     paths,
+				"message":   security.RedactString(message),
+				"status":    status.Stdout,
+				"pre_commit_checks": map[string]any{
+					"git_status_checked":        true,
+					"staged_diff_checked":       true,
+					"commit_message_nonempty":   true,
+					"has_staged_changes":        false,
+					"staged_changes_pathscoped": len(paths) == 0,
+				},
+				"exit_code":   1,
+				"error":       "git.commit requires staged changes",
+				"truncated":   status.Truncated || staged.Truncated,
+				"duration_ms": time.Since(startedAt).Milliseconds(),
+			},
+			StartedAt:  startedAt,
+			FinishedAt: time.Now().UTC(),
+		}, nil
+	}
+
+	args := []string{"commit", "-m", message}
+	timeout := tools.GetInt(input, "timeout_seconds", e.timeoutSeconds())
+	runCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(runCtx, "git", args...)
+	cmd.Dir = workspace
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	runErr := cmd.Run()
+	finishedAt := time.Now().UTC()
+	stdoutText, stdoutTruncated := truncateBytes(security.RedactString(stdout.String()), e.maxOutputBytes())
+	stderrText, stderrTruncated := truncateBytes(security.RedactString(stderr.String()), e.maxOutputBytes())
+	exitCode := processExitCode(runErr)
+	if runCtx.Err() == context.DeadlineExceeded {
+		exitCode = -1
+	}
+	output := map[string]any{
+		"workspace":    filepath.ToSlash(workspace),
+		"operation":    e.Operation,
+		"command":      "git " + strings.Join(args, " "),
+		"args":         args,
+		"paths":        paths,
+		"message":      security.RedactString(message),
+		"status":       status.Stdout,
+		"staged_files": stagedFiles,
+		"stdout":       stdoutText,
+		"stderr":       stderrText,
+		"exit_code":    exitCode,
+		"truncated":    status.Truncated || staged.Truncated || stdoutTruncated || stderrTruncated,
+		"duration_ms":  finishedAt.Sub(startedAt).Milliseconds(),
+		"pre_commit_checks": map[string]any{
+			"git_status_checked":        true,
+			"staged_diff_checked":       true,
+			"commit_message_nonempty":   true,
+			"has_staged_changes":        true,
+			"staged_changes_pathscoped": true,
+		},
+	}
+	if runErr != nil {
+		output["error"] = security.RedactString(runErr.Error())
+	}
+	return &core.ToolResult{Output: output, StartedAt: startedAt, FinishedAt: finishedAt}, nil
+}
+
 type gitCapture struct {
 	Stdout    string
 	Stderr    string
@@ -313,6 +439,35 @@ func commitProposalWarnings(files []string) []string {
 		return []string{"no staged diff detected; stage files with git.add before git.commit"}
 	}
 	return nil
+}
+
+func nonEmptyLines(value string) []string {
+	var lines []string
+	for _, line := range strings.Split(value, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			lines = append(lines, filepath.ToSlash(line))
+		}
+	}
+	return lines
+}
+
+func outsideFiles(allFiles, scopedFiles []string) []string {
+	scoped := map[string]bool{}
+	for _, file := range scopedFiles {
+		scoped[file] = true
+	}
+	var outside []string
+	for _, file := range allFiles {
+		if !scoped[file] {
+			outside = append(outside, file)
+		}
+	}
+	return outside
+}
+
+func shellQuoteForDisplay(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
 func firstNonEmpty(values ...string) string {

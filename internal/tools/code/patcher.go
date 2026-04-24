@@ -24,6 +24,9 @@ type ApplyPatchExecutor struct {
 
 // Execute implements code.propose_patch.
 func (e *ProposePatchExecutor) Execute(_ context.Context, input map[string]any) (*core.ToolResult, error) {
+	if diff, _ := input["diff"].(string); strings.TrimSpace(diff) != "" {
+		return e.proposeUnifiedDiff(input, diff)
+	}
 	files, err := parsePatchFiles(input)
 	if err != nil {
 		return nil, err
@@ -64,6 +67,86 @@ func (e *ProposePatchExecutor) Execute(_ context.Context, input map[string]any) 
 			"changed_files": changedFiles,
 			"files":         fileOutputs,
 			"diff":          strings.Join(diffParts, "\n"),
+		},
+	}, nil
+}
+
+func (e *ProposePatchExecutor) proposeUnifiedDiff(input map[string]any, diff string) (*core.ToolResult, error) {
+	patches, err := parseUnifiedDiff(diff)
+	if err != nil {
+		return nil, err
+	}
+	parsed, err := ParseUnifiedDiff(diff)
+	if err != nil {
+		return nil, err
+	}
+
+	changedFiles := make([]string, 0, len(patches))
+	sensitiveFiles := []string{}
+	conflicts := []string{}
+	fileOutputs := make([]map[string]any, 0, len(patches))
+	stats := patchStats{}
+	for idx, patch := range patches {
+		abs, rel, err := e.Workspace.resolve(patch.Path)
+		if err != nil {
+			return nil, err
+		}
+		current, exists, _, err := readPatchTarget(abs)
+		if err != nil {
+			return nil, err
+		}
+		expected := expectedHashForPatch(input, rel, idx, len(patches))
+		oldHash := sha256Hex(current)
+		if expected != "" && expected != oldHash {
+			conflicts = append(conflicts, fmt.Sprintf("%s: expected_sha256 mismatch", rel))
+		}
+
+		newContent, apply, applyErr := applyUnifiedPatchToContentDetailed(string(current), patch)
+		if applyErr != nil {
+			conflicts = append(conflicts, fmt.Sprintf("%s: %v", rel, applyErr))
+		}
+		fileStats := patch.fileStats()
+		stats.add(fileStats)
+		changedFiles = append(changedFiles, rel)
+		if e.Workspace.isSensitive(rel) {
+			sensitiveFiles = append(sensitiveFiles, rel)
+		}
+		item := map[string]any{
+			"path":            rel,
+			"old_path":        patch.OldPath,
+			"new_path":        patch.NewPath,
+			"operation":       patch.Operation,
+			"hunks":           len(patch.Hunks),
+			"additions":       fileStats.Additions,
+			"deletions":       fileStats.Deletions,
+			"old_sha256":      oldHash,
+			"old_size":        len(current),
+			"expected_sha256": firstNonEmpty(expected, oldHash),
+			"existed_before":  exists,
+		}
+		if applyErr == nil {
+			item["new_sha256"] = sha256Hex([]byte(newContent))
+			item["new_size"] = len(newContent)
+			item["hunk_matches"] = apply.Hunks
+		} else {
+			item["conflict"] = applyErr.Error()
+		}
+		fileOutputs = append(fileOutputs, item)
+	}
+	stats.FileCount = len(uniqueStrings(changedFiles))
+	valid := len(conflicts) == 0
+	return &core.ToolResult{
+		Output: map[string]any{
+			"changed_files":                  uniqueStrings(changedFiles),
+			"files":                          fileOutputs,
+			"diff":                           diff,
+			"parsed_diff":                    parsed,
+			"valid":                          valid,
+			"conflicts":                      conflicts,
+			"sensitive_files":                uniqueStrings(sensitiveFiles),
+			"statistics":                     stats.toMap(),
+			"summary":                        patchValidationSummary(valid, changedFiles, conflicts, sensitiveFiles, stats),
+			"requires_approval_before_apply": true,
 		},
 	}, nil
 }

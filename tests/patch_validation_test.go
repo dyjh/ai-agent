@@ -73,6 +73,33 @@ func TestPatchValidationUnifiedDiffConflictAndDryRun(t *testing.T) {
 	}
 }
 
+func TestProposePatchAcceptsUnifiedDiffPreview(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nconst Old = true\n"), 0o644); err != nil {
+		t.Fatalf("write main.go: %v", err)
+	}
+	diff := "--- a/main.go\n+++ b/main.go\n@@ -1,3 +1,3 @@\n package main\n \n-const Old = true\n+const New = true\n"
+	result, err := (&code.ProposePatchExecutor{Workspace: code.Workspace{Root: root}}).Execute(context.Background(), map[string]any{
+		"diff": diff,
+	})
+	if err != nil {
+		t.Fatalf("ProposePatchExecutor.Execute(diff) error = %v", err)
+	}
+	if result.Output["valid"] != true {
+		t.Fatalf("valid = %v, conflicts=%v", result.Output["valid"], result.Output["conflicts"])
+	}
+	if result.Output["requires_approval_before_apply"] != true {
+		t.Fatalf("requires_approval_before_apply = %v, want true", result.Output["requires_approval_before_apply"])
+	}
+	files := result.Output["files"].([]map[string]any)
+	if files[0]["old_sha256"] == "" || files[0]["new_sha256"] == "" {
+		t.Fatalf("file hashes missing: %#v", files[0])
+	}
+	if parsed, ok := result.Output["parsed_diff"].(code.UnifiedDiff); !ok || len(parsed.Files) != 1 {
+		t.Fatalf("parsed_diff = %#v, want one file", result.Output["parsed_diff"])
+	}
+}
+
 func TestUnifiedDiffParserHashEscapeAndRollbackMetadata(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "main.go")

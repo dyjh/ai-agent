@@ -115,8 +115,15 @@ type FixLoopInput struct {
 	Workspace         string `json:"workspace,omitempty"`
 	TestCommand       string `json:"test_command,omitempty"`
 	MaxIterations     int    `json:"max_iterations,omitempty"`
+	Iteration         int    `json:"iteration,omitempty"`
 	StopOnApproval    bool   `json:"stop_on_approval,omitempty"`
 	AutoRerunTests    bool   `json:"auto_rerun_tests,omitempty"`
 	FailureContextMax int    `json:"failure_context_max,omitempty"`
 	TestNamePattern   string `json:"test_name_pattern,omitempty"`
+	ApprovalRejected  bool   `json:"approval_rejected,omitempty"`
+	PatchRejected     bool   `json:"patch_rejected,omitempty"`
+	TestRuns          []any  `json:"test_runs,omitempty"`
+	Failures          []any  `json:"failures,omitempty"`
+	ProposedPatches   []any  `json:"proposed_patches,omitempty"`
+	AppliedPatches    []any  `json:"applied_patches,omitempty"`
 }

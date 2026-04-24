@@ -1,0 +1,569 @@
+你是一个资深 Go 后端工程师、CloudWeGo Eino Agent 架构师、代码 Agent 工程师、测试自动化工程师、Git 工作流工程师和 API 文档工程师。
+
+请在当前仓库 dyjh/ai-agent 中继续开发，不要推倒重写，只在现有 production-ready MVP、post-MVP durable workflow、Skill/MCP/KB runtime，以及已完成的 F1-A/F1-B/F1-C/F1-D 代码能力基础上，继续完成：
+
+Phase F1-E — Code Capability Hardening: Model-driven Repair Loop, Robust Patch Engine, Schema-driven Code Workflow
+
+开始前必须先做：
+
+1. 阅读 README.md
+2. 阅读 task.json
+3. 阅读 AGENTS.md
+4. 实际检查代码，而不是只信文档，重点检查：
+   - internal/tools/code/
+   - internal/tools/code/workspace.go
+   - internal/tools/code/project.go
+   - internal/tools/code/patcher.go
+   - internal/tools/code/test_runner.go
+   - internal/tools/gittools/
+   - internal/app/bootstrap.go
+   - internal/agent/planner.go
+   - internal/agent/runtime.go
+   - internal/agent/effect_inference.go
+   - internal/agent/policy.go
+   - internal/tools/router.go
+   - internal/api/router.go
+   - internal/api/handlers/
+   - internal/events/
+   - cmd/agent/
+   - docs/openapi.json
+   - Makefile
+   - tests/ 下与 code / patch / approval / workflow / git / planner 相关测试
+5. 全局搜索：
+   - code.run_tests
+   - code.parse_test_failure
+   - code.fix_test_failure_loop
+   - code.validate_patch
+   - code.dry_run_patch
+   - code.apply_patch
+   - git.status
+   - git.diff
+   - git.add
+   - git.commit
+   - git.restore
+   - git.clean
+   - unified diff
+   - partial apply
+   - conflict
+   - rollback
+   - planner
+   - schema-driven
+   - @Tags
+   - @Router
+   - TODO
+   - placeholder
+6. 先输出：
+   - 当前 F1-E 相关问题列表
+   - 你准备修改的文件列表
+   - 你的实现顺序
+7. 然后再开始逐步修改代码
+
+==================================================
+当前背景，必须承认，不要回退
+==================================================
+
+当前仓库已经完成：
+
+- MVP 主链路
+- KB / Qdrant / kb.search
+- Skill ZIP / Sandbox / permissions / LinuxIsolatedRunner
+- MCP runtime / compatibility matrix
+- Eino Workflow / HITL
+- Durable RunState / multi-step run loop / run APIs
+- Swagger/OpenAPI
+- Phase F0 治理对齐
+- Phase F1-A/F1-B：
+  - code.list_files
+  - code.read_file
+  - code.search / code.search_text
+  - code.search_symbol
+  - code.inspect_project
+  - code.detect_language
+  - code.detect_test_command
+  - code.explain_diff
+  - code.propose_patch
+  - code.apply_patch
+- Phase F1-C/F1-D 第一版：
+  - code.run_tests
+  - code.parse_test_failure
+  - code.fix_test_failure_loop 最小闭环
+  - git.status / git.diff / git.log / git.branch
+  - git.add / git.commit / git.restore / git.clean
+  - code.validate_patch / code.dry_run_patch
+  - Planner/CLI 代码入口
+
+不要回退这些能力，不要把已注册 code/git tools 改回 placeholder。
+
+==================================================
+本阶段总目标
+==================================================
+
+完成 F1 代码能力闭环硬化，让 Agent 更接近 Codex-like 的真实代码任务能力。
+
+重点做 4 件事：
+
+1. 将 `code.fix_test_failure_loop` 从“保守的一轮框架”升级为 model-driven 多轮修复循环。
+2. 将 patch 系统从基础 full-file replacement / 简单 unified diff 校验，升级为更稳的 patch engine：
+   - 更完整 unified diff parser
+   - partial apply
+   - hunk-level conflict detection
+   - rollback snapshot API
+   - changed file summary
+3. 将 Planner 从启发式 code intent 升级为更稳定的 schema-driven code workflow。
+4. 如有新增 API / DTO / route，必须补 swag 注释并重新生成 Swagger/OpenAPI。
+
+==================================================
+必须遵守的架构约束
+==================================================
+
+1. 不要引入租户、多用户、RBAC、云端 SaaS 逻辑。
+2. 本项目仍然是单用户本地部署。
+3. 不要让 LLM / Eino Tool 直接读写文件、执行测试或调用 git。
+4. 模型只能生成 ToolProposal 或结构化 CodePlan。
+5. 所有外部动作仍必须经过：
+
+   ToolProposal
+   -> EffectInference
+   -> PolicyEngine
+   -> ApprovalCenter（需要时）
+   -> Executor
+
+6. 只读代码工具可以自动执行。
+7. 修改文件、apply patch、git add、git commit、git restore、git clean 必须审批。
+8. 危险 git 操作，例如 reset --hard、clean -fd、restore 大范围文件，必须强审批。
+9. approval 后只能执行 approval.input_snapshot。
+10. Resume 时不能重新规划替换已审批 patch / git command / test command。
+11. 不要把 secret、token、cookie、私钥、.env 正文写进：
+    - messages
+    - JSONL
+    - agent_events
+    - run state
+    - Markdown memory
+    - Qdrant payload
+    - Swagger 示例
+12. 不要让 README、Swagger、task.json 领先于实际实现。
+13. 不要破坏现有 KB feature gate、Skill runtime、MCP runtime、durable workflow、run APIs、Swagger 路由。
+
+==================================================
+任务 1：升级 code.fix_test_failure_loop 为多轮修复循环
+==================================================
+
+当前 `code.fix_test_failure_loop` 已经能运行测试、解析失败，并输出下一步 patch proposal 指引，但仍偏保守。本阶段要把它升级为真正的 workflow-level 多轮修复循环。
+
+目标流程：
+
+1. run tests
+2. parse failure
+3. inspect/search/read 相关文件
+4. planner 生成 patch proposal
+5. 请求审批
+6. apply approved patch
+7. rerun tests
+8. 如果仍失败，进入下一轮
+9. 达到 max iterations 后停止
+10. 输出最终总结
+
+建议输入：
+
+```go
+type CodeFixLoopInput struct {
+    Workspace         string `json:"workspace"`
+    TestCommand       string `json:"test_command,omitempty"`
+    MaxIterations     int    `json:"max_iterations,omitempty"`
+    StopOnApproval    bool   `json:"stop_on_approval,omitempty"`
+    AutoRerunTests    bool   `json:"auto_rerun_tests,omitempty"`
+    FailureContextMax int    `json:"failure_context_max,omitempty"`
+}
+````
+
+建议输出：
+
+```go
+type CodeFixLoopResult struct {
+    Iterations      int                   `json:"iterations"`
+    FinalPassed     bool                  `json:"final_passed"`
+    TestRuns        []RunTestsResult       `json:"test_runs"`
+    Failures        []TestFailureParse     `json:"failures,omitempty"`
+    ProposedPatches []PatchProposalSummary `json:"proposed_patches,omitempty"`
+    AppliedPatches  []PatchApplyResult     `json:"applied_patches,omitempty"`
+    StoppedReason   string                `json:"stopped_reason"`
+    Summary         string                `json:"summary"`
+}
+```
+
+要求：
+
+1. 必须有 max iterations，默认 3。
+2. 每轮都要落 RunStep。
+3. 每个 patch proposal 都是新的 approval snapshot。
+4. patch 未审批前不能 apply。
+5. 用户拒绝 patch 后 loop 停止。
+6. approval 后 workflow resume 应继续 loop，而不是重新从头规划。
+7. 如果测试命令本身需要审批，先请求测试命令审批。
+8. 不能无限循环。
+9. 测试输出和失败信息必须脱敏。
+10. loop summary 要说明：
+
+    * 执行了几轮
+    * 哪些测试通过/失败
+    * 哪些文件被改动
+    * 为什么停止
+
+如果完全自动 model-driven patch 生成工作量过大，可以先做：
+
+* loop 状态机
+* approval/resume 后 rerun tests
+* planner 返回 patch proposal 的结构化接口
+* 多轮状态保存
+
+但不能在 README 里夸大“已经能自动修复所有测试失败”。
+
+==================================================
+任务 2：增强 Patch Engine
+====================
+
+当前 patch 系统支持 full-file replacement 和基础 unified diff validation/dry-run。本阶段继续增强为更稳的 patch engine。
+
+需要实现或增强：
+
+1. 更完整 unified diff parser
+2. partial apply
+3. hunk-level conflict detection
+4. path escape 防护
+5. sensitive path guard
+6. expected_sha256 / file hash guard
+7. dry-run apply
+8. rollback snapshot API
+9. changed files summary
+10. diff statistics
+
+建议结构：
+
+```go
+type UnifiedDiff struct {
+    Files []DiffFile `json:"files"`
+}
+
+type DiffFile struct {
+    OldPath string     `json:"old_path"`
+    NewPath string     `json:"new_path"`
+    Hunks   []DiffHunk `json:"hunks"`
+}
+
+type DiffHunk struct {
+    OldStart int        `json:"old_start"`
+    OldCount int        `json:"old_count"`
+    NewStart int        `json:"new_start"`
+    NewCount int        `json:"new_count"`
+    Lines    []DiffLine `json:"lines"`
+}
+
+type DiffLine struct {
+    Kind string `json:"kind"` // context | add | delete
+    Text string `json:"text"`
+}
+```
+
+新增或强化：
+
+```text
+code.validate_patch
+code.dry_run_patch
+code.apply_patch
+```
+
+要求：
+
+1. 能解析常见 unified diff。
+2. 能检测 hunk context 不匹配。
+3. 能检测目标文件 hash mismatch。
+4. 能检测路径逃逸。
+5. 能识别敏感文件变更。
+6. dry-run 不写文件。
+7. apply_patch 必须先 validate。
+8. apply_patch 必须审批。
+9. apply 失败必须 rollback。
+10. rollback snapshot 应可追踪。
+11. README 明确支持边界，不要宣称完全等价 git apply，除非真的做到。
+
+==================================================
+任务 3：Schema-driven Code Workflow
+================================
+
+当前 Planner 已经能启发式选择 code tools。本阶段要把它升级成更稳定的 schema-driven code workflow。
+
+建议新增结构：
+
+```go
+type CodeTaskKind string
+
+const (
+    CodeTaskInspect CodeTaskKind = "inspect"
+    CodeTaskSearch  CodeTaskKind = "search"
+    CodeTaskPatch   CodeTaskKind = "patch"
+    CodeTaskTest    CodeTaskKind = "test"
+    CodeTaskFix     CodeTaskKind = "fix"
+    CodeTaskGit     CodeTaskKind = "git"
+)
+
+type CodePlan struct {
+    Kind             CodeTaskKind  `json:"kind"`
+    Workspace        string        `json:"workspace"`
+    Goal             string        `json:"goal"`
+    Steps            []CodePlanStep `json:"steps"`
+    RequiresApproval bool          `json:"requires_approval"`
+}
+
+type CodePlanStep struct {
+    Tool    string         `json:"tool"`
+    Purpose string         `json:"purpose"`
+    Input   map[string]any `json:"input"`
+}
+```
+
+要求：
+
+1. Planner 对代码任务先产出 CodePlan，再逐步转 ToolProposal。
+2. CodePlan 不直接执行。
+3. 每个 step 仍进入 ToolRouter / Policy / Approval。
+4. 修改型任务必须包含 patch proposal step。
+5. apply_patch step 必须等 approval。
+6. run_tests step 可自动执行，但仍受 Policy 约束。
+7. git 写入步骤必须审批。
+8. workflow 要能保存 CodePlan 到 RunStep / state，便于 replay。
+
+典型代码任务流程：
+
+```text
+inspect_project
+search_text/search_symbol
+read_file
+propose_patch
+approval
+apply_patch
+run_tests
+parse_test_failure
+continue or summarize
+```
+
+==================================================
+任务 4：增强 Git Workflow 安全与总结
+==========================
+
+现有 git 工具已实现。请增强：
+
+1. git diff summary
+2. staged diff summary
+3. commit message proposal
+4. commit 前检查：
+
+   * git status
+   * git diff --cached
+   * commit message 非空
+5. 对 dangerous git 操作加更强解释：
+
+   * clean
+   * restore 大范围路径
+   * reset-like 操作如未来加入必须强审批
+
+新增可选工具：
+
+```text
+git.diff_summary
+git.commit_message_proposal
+```
+
+要求：
+
+1. 只读 git summary 自动执行。
+2. commit message proposal 不创建 commit。
+3. git.commit 仍必须审批。
+4. 不自动 push。
+5. README 说明 git workflow 边界。
+
+==================================================
+任务 5：补 API / CLI / Swagger
+==========================
+
+如果本阶段新增 HTTP API，必须补 swag 注释和 Swagger。
+
+可选新增 API：
+
+```text
+POST /v1/code/fix-loop
+POST /v1/code/validate-patch
+POST /v1/code/dry-run-patch
+GET  /v1/code/runs/{run_id}/code-plan
+```
+
+也可以只保留 ToolRegistry / CLI 能力，不强行加 HTTP API。
+
+CLI 建议补：
+
+```text
+agent code fix-tests <workspace>
+agent code patch dry-run <patch_file>
+agent code patch apply <patch_file>   # 必须走审批，不得本地直写
+agent git diff-summary <workspace>
+agent git commit-message <workspace>
+```
+
+如果改 API：
+
+1. 增加 swag 注释
+2. 执行 make swagger
+3. 确认 /swagger/index.html 和 /swagger/doc.json 正常
+
+==================================================
+任务 6：测试要求
+=========
+
+至少新增或补齐以下测试：
+
+1. fix_loop_multiround_test.go
+
+   * 失败测试 -> patch proposal -> approval -> apply -> rerun
+   * max iterations 生效
+   * 用户拒绝 patch 后停止
+   * resume 后继续 loop，不重新规划旧 patch
+   * 不无限循环
+
+2. patch_unified_diff_test.go
+
+   * parse unified diff
+   * apply hunk
+   * hunk context mismatch
+   * path escape refused
+   * sensitive path detection
+   * expected_sha256 mismatch
+   * rollback snapshot created
+
+3. code_plan_test.go
+
+   * 代码任务生成 CodePlan
+   * CodePlan step 转 ToolProposal
+   * apply_patch step 不自动执行
+   * run_tests step 受 Policy 控制
+
+4. git_summary_test.go
+
+   * diff summary
+   * commit message proposal
+   * git.commit 仍需审批
+
+5. regression tests
+
+   * 现有 code.run_tests 不回退
+   * parse_test_failure 不回退
+   * git write tools 不回退审批
+   * patch apply 不绕过 approval
+
+要求：
+
+* 默认 go test ./... 不依赖外部服务。
+* 使用临时目录构造 fake repo / fake Go project。
+* 不要删除已有安全测试。
+
+==================================================
+任务 7：README / task.json 更新
+==========================
+
+README 需要补充：
+
+1. F1-E 当前能力
+2. fix loop 的多轮行为
+3. approval/resume 后如何继续修复循环
+4. patch engine 支持边界
+5. CodePlan / schema-driven workflow 说明
+6. Git summary / commit message proposal 说明
+7. 当前限制：
+
+   * 仍不保证所有测试失败可自动修好
+   * 仍不自动 push
+   * patch parser 不是完整 git apply 兼容时要说清楚
+
+task.json 更新：
+
+1. 在 full-agent-code-capability 中增加 F1-E 完成项。
+2. 如果 F1 可以认为完成：
+
+   * status -> completed
+   * current_task_id -> full-agent-ops-capability
+3. 如果 F1 仍有剩余：
+
+   * status 保持 in_progress
+   * remaining_items 写真实剩余项
+4. change_log 增加本次记录。
+
+==================================================
+建议实现顺序
+======
+
+请严格按顺序推进：
+
+1. 检查现有 test_runner / patcher / planner / runtime
+2. 设计 CodePlan / CodePlanStep
+3. 强化 patch parser / validator / dry-run / rollback
+4. 升级 fix_test_failure_loop 状态机
+5. 接入 approval/resume 后继续测试
+6. 增强 git summary / commit message proposal
+7. 增强 CLI
+8. 如有 API 变更，补 swag 注释并 make swagger
+9. 补测试
+10. gofmt
+11. go test ./...
+12. 更新 README / task.json
+
+==================================================
+验收标准
+====
+
+完成后必须满足：
+
+1. fix loop 支持多轮状态机，不再只是单轮建议。
+2. patch engine 支持更完整 unified diff 解析与 hunk conflict 检测。
+3. apply patch 仍必须审批。
+4. approval/resume 后能继续 fix loop。
+5. Planner 可以产出结构化 CodePlan。
+6. 每个 CodePlan step 仍走 ToolRouter / Policy / Approval。
+7. Git summary / commit message proposal 不写仓库。
+8. git.commit / git.clean 仍审批或强审批。
+9. go test ./... 通过。
+10. README / task.json 与实现一致。
+11. 没有新增绕过 ToolRouter / Policy / Approval 的路径。
+
+==================================================
+特别注意
+====
+
+* 不要让 fix loop 自动无限循环。
+* 不要让模型直接写文件。
+* 不要自动 apply patch。
+* 不要自动 git commit。
+* 不要自动 push。
+* 不要把 patch/parser 能力夸大成完整 git apply，除非测试覆盖足够。
+* 不要回退 KB / Skill / MCP / Workflow / Sandbox / Swagger 现有能力。
+
+现在开始执行。
+
+先输出：
+
+1. 当前 F1-E 相关问题列表
+2. 计划修改的文件列表
+3. 实现顺序
+
+然后再开始逐步修改，最后给出：
+
+* 测试结果
+* 多轮 fix loop 摘要
+* patch engine 增强摘要
+* CodePlan / schema-driven workflow 摘要
+* Git summary 增强摘要
+* 如果有 API 变更，Swagger 更新摘要
+* README 更新摘要
+* task.json 更新摘要
+
+```
+
+这一步完成后，如果 `full-agent-code-capability` 能达到稳定可用，就可以把 F1 标记为完成，下一阶段切到 **F2：Ops Capability Loop**，开始做 Host Profile、SSH/Docker/K8s、Runbook 和 Rollback Plan。
+```

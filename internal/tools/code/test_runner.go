@@ -191,33 +191,82 @@ func (e *FixTestFailureLoopExecutor) Execute(ctx context.Context, input map[stri
 	if failureContextMax <= 0 {
 		failureContextMax = 3
 	}
+	testRuns := mapSliceValue(input, "test_runs", "previous_test_runs")
+	failureHistory := mapSliceValue(input, "failures", "failure_history")
+	proposedPatches := mapSliceValue(input, "proposed_patches")
+	appliedPatches := mapSliceValue(input, "applied_patches")
+	iteration := tools.GetInt(input, "iteration", len(testRuns)+1)
+	if iteration <= 0 {
+		iteration = len(testRuns) + 1
+	}
+	if boolValue(input, "approval_rejected", false) || boolValue(input, "patch_rejected", false) {
+		return &core.ToolResult{Output: map[string]any{
+			"iterations":       len(testRuns),
+			"iteration":        len(testRuns),
+			"final_passed":     false,
+			"test_runs":        testRuns,
+			"failures":         failureHistory,
+			"proposed_patches": proposedPatches,
+			"applied_patches":  appliedPatches,
+			"stopped_reason":   "approval_rejected",
+			"summary":          fmt.Sprintf("repair loop stopped after %d iteration(s) because the patch approval was rejected", len(testRuns)),
+			"max_iterations":   maxIterations,
+		}}, nil
+	}
+	if iteration > maxIterations {
+		return &core.ToolResult{Output: map[string]any{
+			"iterations":           len(testRuns),
+			"iteration":            len(testRuns),
+			"final_passed":         false,
+			"test_runs":            testRuns,
+			"failures":             failureHistory,
+			"proposed_patches":     proposedPatches,
+			"applied_patches":      appliedPatches,
+			"stopped_reason":       "max_iterations_reached",
+			"summary":              fmt.Sprintf("repair loop stopped after %d/%d iteration(s); max_iterations reached", len(testRuns), maxIterations),
+			"max_iterations":       maxIterations,
+			"remaining_iterations": 0,
+		}}, nil
+	}
+	timeoutSeconds := tools.GetInt(input, "timeout_seconds", e.defaultTimeout())
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = e.defaultTimeout()
+	}
+	maxOutputBytes := getInt64(input, "max_output_bytes", e.defaultMaxOutput())
+	if maxOutputBytes <= 0 {
+		maxOutputBytes = e.defaultMaxOutput()
+	}
 	testInput := map[string]any{
 		"workspace":         stringValue(input, "workspace"),
 		"command":           stringValue(input, "test_command"),
 		"use_detected":      stringValue(input, "test_command") == "",
-		"timeout_seconds":   e.defaultTimeout(),
-		"max_output_bytes":  e.defaultMaxOutput(),
+		"timeout_seconds":   timeoutSeconds,
+		"max_output_bytes":  maxOutputBytes,
 		"test_name_pattern": stringValue(input, "test_name_pattern"),
 	}
 	runResult, err := (&RunTestsExecutor{
 		Workspace:             e.Workspace,
-		DefaultTimeoutSeconds: e.defaultTimeout(),
-		MaxOutputBytes:        e.defaultMaxOutput(),
+		DefaultTimeoutSeconds: timeoutSeconds,
+		MaxOutputBytes:        maxOutputBytes,
 	}).Execute(ctx, testInput)
 	if err != nil {
 		return nil, err
 	}
+	testRuns = append(testRuns, core.CloneMap(runResult.Output))
 	passed, _ := runResult.Output["passed"].(bool)
 	if passed {
 		return &core.ToolResult{Output: map[string]any{
-			"iterations":       1,
+			"iterations":       iteration,
+			"iteration":        iteration,
 			"final_passed":     true,
-			"test_runs":        []map[string]any{runResult.Output},
+			"test_runs":        testRuns,
 			"failures":         []map[string]any{},
-			"proposed_patches": []map[string]any{},
-			"applied_patches":  []map[string]any{},
+			"failure_history":  failureHistory,
+			"proposed_patches": proposedPatches,
+			"applied_patches":  appliedPatches,
 			"stopped_reason":   "tests_passed",
-			"summary":          "tests passed after 1 iteration; no repair patch needed",
+			"summary":          fmt.Sprintf("tests passed after %d iteration(s); no repair patch needed", iteration),
+			"max_iterations":   maxIterations,
 		}}, nil
 	}
 	parseResult, err := (&ParseTestFailureExecutor{Workspace: e.Workspace}).Execute(ctx, map[string]any{
@@ -234,6 +283,26 @@ func (e *FixTestFailureLoopExecutor) Execute(ctx context.Context, input map[stri
 	if len(failures) > failureContextMax {
 		failures = failures[:failureContextMax]
 	}
+	failureHistory = append(failureHistory, core.CloneMap(parseResult.Output))
+	if iteration >= maxIterations {
+		return &core.ToolResult{Output: map[string]any{
+			"iterations":           iteration,
+			"iteration":            iteration,
+			"final_passed":         false,
+			"test_runs":            testRuns,
+			"failures":             failures,
+			"failure_history":      failureHistory,
+			"proposed_patches":     proposedPatches,
+			"applied_patches":      appliedPatches,
+			"remaining_failures":   failures,
+			"stopped_reason":       "max_iterations_reached",
+			"summary":              fmt.Sprintf("tests still failed after %d/%d iteration(s); max_iterations reached", iteration, maxIterations),
+			"max_iterations":       maxIterations,
+			"remaining_iterations": 0,
+			"last_test_result":     runResult.Output,
+			"last_parse_result":    parseResult.Output,
+		}}, nil
+	}
 	nextProposal := map[string]any{
 		"tool": "code.propose_patch",
 		"input": map[string]any{
@@ -242,22 +311,25 @@ func (e *FixTestFailureLoopExecutor) Execute(ctx context.Context, input map[stri
 		"requires_approval_before_apply": true,
 	}
 	return &core.ToolResult{Output: map[string]any{
-		"iterations":         1,
-		"final_passed":       false,
-		"test_runs":          []map[string]any{runResult.Output},
-		"failures":           failures,
-		"proposed_patches":   []map[string]any{},
-		"applied_patches":    []map[string]any{},
-		"remaining_failures": failures,
-		"stopped_reason":     "waiting_for_patch_proposal",
-		"summary":            fmt.Sprintf("tests failed after 1/%d iteration(s); generate a code.propose_patch proposal, request approval for code.apply_patch, then rerun tests", maxIterations),
-		"next_tool":          "code.propose_patch",
-		"next_proposal":      nextProposal,
-		"stop_on_approval":   boolValue(input, "stop_on_approval", true),
-		"auto_rerun_tests":   boolValue(input, "auto_rerun_tests", true),
-		"max_iterations":     maxIterations,
-		"last_test_result":   runResult.Output,
-		"last_parse_result":  parseResult.Output,
+		"iterations":           iteration,
+		"iteration":            iteration,
+		"final_passed":         false,
+		"test_runs":            testRuns,
+		"failures":             failures,
+		"failure_history":      failureHistory,
+		"proposed_patches":     proposedPatches,
+		"applied_patches":      appliedPatches,
+		"remaining_failures":   failures,
+		"stopped_reason":       "waiting_for_patch_proposal",
+		"summary":              fmt.Sprintf("tests failed after %d/%d iteration(s); generate a code.propose_patch proposal, request approval for code.apply_patch, then rerun tests", iteration, maxIterations),
+		"next_tool":            "code.propose_patch",
+		"next_proposal":        nextProposal,
+		"stop_on_approval":     boolValue(input, "stop_on_approval", true),
+		"auto_rerun_tests":     boolValue(input, "auto_rerun_tests", true),
+		"max_iterations":       maxIterations,
+		"remaining_iterations": maxIterations - iteration,
+		"last_test_result":     runResult.Output,
+		"last_parse_result":    parseResult.Output,
 	}}, nil
 }
 
@@ -613,6 +685,32 @@ func stringSlice(raw any) []string {
 	default:
 		return nil
 	}
+}
+
+func mapSliceValue(input map[string]any, keys ...string) []map[string]any {
+	for _, key := range keys {
+		raw, ok := input[key]
+		if !ok {
+			continue
+		}
+		switch typed := raw.(type) {
+		case []map[string]any:
+			out := make([]map[string]any, 0, len(typed))
+			for _, item := range typed {
+				out = append(out, core.CloneMap(item))
+			}
+			return out
+		case []any:
+			out := make([]map[string]any, 0, len(typed))
+			for _, item := range typed {
+				if m, ok := item.(map[string]any); ok {
+					out = append(out, core.CloneMap(m))
+				}
+			}
+			return out
+		}
+	}
+	return nil
 }
 
 func getInt64(input map[string]any, key string, fallback int64) int64 {

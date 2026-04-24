@@ -93,3 +93,39 @@ func TestPlannerCreatesFixCodePlanAndRerunsAfterPatch(t *testing.T) {
 		t.Fatalf("tool = %#v, want code.run_tests after apply_patch", next.ToolProposal)
 	}
 }
+
+func TestPlannerPropagatesWorkspaceHint(t *testing.T) {
+	planner := agent.HeuristicPlanner{}
+	plan, err := planner.Plan(context.Background(), agent.PlanInput{
+		UserMessage: "请检测并运行测试，workspace: services/api",
+	})
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+	if got := plan.ToolProposal.Input["workspace"]; got != "services/api" {
+		t.Fatalf("workspace = %v, want services/api", got)
+	}
+	if plan.CodePlan == nil || plan.CodePlan.Workspace != "services/api" {
+		t.Fatalf("code plan workspace = %#v, want services/api", plan.CodePlan)
+	}
+
+	gitPlan, err := planner.Plan(context.Background(), agent.PlanInput{
+		UserMessage: "请总结 git diff，workspace: packages/web",
+	})
+	if err != nil {
+		t.Fatalf("Plan(git) error = %v", err)
+	}
+	if got := gitPlan.ToolProposal.Input["workspace"]; got != "packages/web" {
+		t.Fatalf("git workspace = %v, want packages/web", got)
+	}
+
+	readPlan, err := planner.Plan(context.Background(), agent.PlanInput{
+		UserMessage: "请读取文件 `main.go`，workspace: cmd/agent",
+	})
+	if err != nil {
+		t.Fatalf("Plan(read) error = %v", err)
+	}
+	if got := readPlan.ToolProposal.Input["path"]; got != "cmd/agent/main.go" {
+		t.Fatalf("read path = %v, want cmd/agent/main.go", got)
+	}
+}

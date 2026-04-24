@@ -119,6 +119,43 @@ func TestGitToolWorkspaceEscapeRejected(t *testing.T) {
 	}
 }
 
+func TestGitCommitPerformsPreCommitChecks(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	root := newGitRepo(t)
+	noStaged, err := (&gittools.Executor{Root: root, Operation: "commit", MaxOutputBytes: 20000}).Execute(context.Background(), map[string]any{
+		"workspace": ".",
+		"message":   "update file",
+	})
+	if err != nil {
+		t.Fatalf("git.commit no staged Execute() error = %v", err)
+	}
+	if noStaged.Output["exit_code"] != 1 {
+		t.Fatalf("exit_code = %v, want 1 for no staged changes", noStaged.Output["exit_code"])
+	}
+	checks := noStaged.Output["pre_commit_checks"].(map[string]any)
+	if checks["has_staged_changes"] != false {
+		t.Fatalf("pre_commit_checks = %#v, want has_staged_changes=false", checks)
+	}
+
+	runGit(t, root, "add", "file.txt")
+	committed, err := (&gittools.Executor{Root: root, Operation: "commit", MaxOutputBytes: 20000}).Execute(context.Background(), map[string]any{
+		"workspace": ".",
+		"message":   "update file",
+	})
+	if err != nil {
+		t.Fatalf("git.commit Execute() error = %v", err)
+	}
+	if committed.Output["exit_code"] != 0 {
+		t.Fatalf("exit_code = %v, stderr=%v", committed.Output["exit_code"], committed.Output["stderr"])
+	}
+	checks = committed.Output["pre_commit_checks"].(map[string]any)
+	if checks["git_status_checked"] != true || checks["staged_diff_checked"] != true || checks["has_staged_changes"] != true {
+		t.Fatalf("pre_commit_checks = %#v", checks)
+	}
+}
+
 func newGitRepo(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()

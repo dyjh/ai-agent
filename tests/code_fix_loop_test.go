@@ -68,3 +68,59 @@ func TestCodeFixTestFailureLoopPassedShape(t *testing.T) {
 		t.Fatalf("stopped_reason = %v, want tests_passed", result.Output["stopped_reason"])
 	}
 }
+
+func TestCodeFixTestFailureLoopCarriesStateAndStopsAtMax(t *testing.T) {
+	root := newGoTestProject(t, `func TestFailAgain(t *testing.T) {
+	t.Fatalf("still broken")
+}
+`)
+	result, err := (&code.FixTestFailureLoopExecutor{
+		Workspace:             code.Workspace{Root: root},
+		DefaultTimeoutSeconds: 10,
+		MaxOutputBytes:        20000,
+		MaxIterations:         3,
+	}).Execute(context.Background(), map[string]any{
+		"workspace":      ".",
+		"max_iterations": 2,
+		"iteration":      2,
+		"test_runs": []any{
+			map[string]any{"command": "go test ./...", "passed": false},
+		},
+		"proposed_patches": []any{
+			map[string]any{"summary": "first proposal"},
+		},
+		"applied_patches": []any{
+			map[string]any{"status": "applied"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("FixTestFailureLoopExecutor.Execute() error = %v", err)
+	}
+	if result.Output["stopped_reason"] != "max_iterations_reached" {
+		t.Fatalf("stopped_reason = %v, want max_iterations_reached", result.Output["stopped_reason"])
+	}
+	if result.Output["iterations"] != 2 {
+		t.Fatalf("iterations = %v, want 2", result.Output["iterations"])
+	}
+	if runs, ok := result.Output["test_runs"].([]map[string]any); !ok || len(runs) != 2 {
+		t.Fatalf("test_runs = %#v, want prior plus current run", result.Output["test_runs"])
+	}
+	if patches, ok := result.Output["applied_patches"].([]map[string]any); !ok || len(patches) != 1 {
+		t.Fatalf("applied_patches = %#v, want carried patch state", result.Output["applied_patches"])
+	}
+}
+
+func TestCodeFixTestFailureLoopStopsOnRejectedApproval(t *testing.T) {
+	result, err := (&code.FixTestFailureLoopExecutor{}).Execute(context.Background(), map[string]any{
+		"approval_rejected": true,
+		"test_runs": []any{
+			map[string]any{"command": "go test ./...", "passed": false},
+		},
+	})
+	if err != nil {
+		t.Fatalf("FixTestFailureLoopExecutor.Execute() rejection error = %v", err)
+	}
+	if result.Output["stopped_reason"] != "approval_rejected" {
+		t.Fatalf("stopped_reason = %v, want approval_rejected", result.Output["stopped_reason"])
+	}
+}

@@ -62,6 +62,7 @@ func (p HeuristicPlanner) Plan(_ context.Context, input PlanInput) (Plan, error)
 	}
 
 	normalized := strings.ToLower(strings.TrimSpace(input.UserMessage))
+	workspace := extractWorkspace(input.UserMessage)
 	switch {
 	case wantsPatchApply(normalized):
 		path := extractPathAfter(input.UserMessage, []string{"file", "文件"})
@@ -76,7 +77,7 @@ func (p HeuristicPlanner) Plan(_ context.Context, input PlanInput) (Plan, error)
 			Decision:     PlanDecisionTool,
 			Preamble:     "我会先读取 patch 文件内容，再将具体 patch snapshot 送入审批流程。",
 			ToolProposal: &proposal,
-			CodePlan:     newCodePlan(CodeTaskPatch, ".", input.UserMessage, []CodePlanStep{{Tool: "code.read_file", Purpose: "读取 patch 文件", Input: proposal.Input}, {Tool: "code.apply_patch", Purpose: "审批后应用 patch", RequiresApproval: true}}),
+			CodePlan:     newCodePlan(CodeTaskPatch, workspace, input.UserMessage, []CodePlanStep{{Tool: "code.read_file", Purpose: "读取 patch 文件", Input: proposal.Input}, {Tool: "code.apply_patch", Purpose: "审批后应用 patch", RequiresApproval: true}}),
 			Reason:       "matched patch apply intent",
 		}, nil
 	case wantsPatchValidate(normalized):
@@ -92,68 +93,68 @@ func (p HeuristicPlanner) Plan(_ context.Context, input PlanInput) (Plan, error)
 			Decision:     PlanDecisionTool,
 			Preamble:     "我会先读取 patch 文件内容，再做 dry-run 校验。",
 			ToolProposal: &proposal,
-			CodePlan:     newCodePlan(CodeTaskPatch, ".", input.UserMessage, []CodePlanStep{{Tool: "code.read_file", Purpose: "读取 patch 文件", Input: proposal.Input}, {Tool: "code.validate_patch", Purpose: "校验 patch 内容"}}),
+			CodePlan:     newCodePlan(CodeTaskPatch, workspace, input.UserMessage, []CodePlanStep{{Tool: "code.read_file", Purpose: "读取 patch 文件", Input: proposal.Input}, {Tool: "code.validate_patch", Purpose: "校验 patch 内容"}}),
 			Reason:       "matched patch validation intent",
 		}, nil
 	case wantsGitStatus(normalized):
 		proposal := p.Adapter.NewProposal("git.status", map[string]any{
-			"workspace": ".",
+			"workspace": workspace,
 		}, "查看 git 工作区状态", []string{"git.read"})
 		return Plan{
 			Decision:     PlanDecisionTool,
 			Preamble:     "我会先读取当前 Git 工作区状态。",
 			ToolProposal: &proposal,
-			CodePlan:     newCodePlan(CodeTaskGit, ".", input.UserMessage, []CodePlanStep{{Tool: "git.status", Purpose: "查看 git 工作区状态", Input: proposal.Input}}),
+			CodePlan:     newCodePlan(CodeTaskGit, workspace, input.UserMessage, []CodePlanStep{{Tool: "git.status", Purpose: "查看 git 工作区状态", Input: proposal.Input}}),
 			Reason:       "matched git status intent",
 		}, nil
 	case wantsGitDiff(normalized):
 		proposal := p.Adapter.NewProposal("git.diff", map[string]any{
-			"workspace": ".",
+			"workspace": workspace,
 		}, "查看 git diff", []string{"git.read"})
 		return Plan{
 			Decision:     PlanDecisionTool,
 			Preamble:     "我会先读取当前 Git diff。",
 			ToolProposal: &proposal,
-			CodePlan:     newCodePlan(CodeTaskGit, ".", input.UserMessage, []CodePlanStep{{Tool: "git.diff", Purpose: "读取 git diff", Input: proposal.Input}}),
+			CodePlan:     newCodePlan(CodeTaskGit, workspace, input.UserMessage, []CodePlanStep{{Tool: "git.diff", Purpose: "读取 git diff", Input: proposal.Input}}),
 			Reason:       "matched git diff intent",
 		}, nil
 	case wantsGitDiffSummary(normalized):
 		proposal := p.Adapter.NewProposal("git.diff_summary", map[string]any{
-			"workspace": ".",
+			"workspace": workspace,
 		}, "总结 git diff", []string{"git.read"})
 		return Plan{
 			Decision:     PlanDecisionTool,
 			Preamble:     "我会先生成当前 Git diff 摘要。",
 			ToolProposal: &proposal,
-			CodePlan:     newCodePlan(CodeTaskGit, ".", input.UserMessage, []CodePlanStep{{Tool: "git.diff_summary", Purpose: "总结 git diff", Input: proposal.Input}}),
+			CodePlan:     newCodePlan(CodeTaskGit, workspace, input.UserMessage, []CodePlanStep{{Tool: "git.diff_summary", Purpose: "总结 git diff", Input: proposal.Input}}),
 			Reason:       "matched git diff summary intent",
 		}, nil
 	case wantsGitCommitMessage(normalized):
 		proposal := p.Adapter.NewProposal("git.commit_message_proposal", map[string]any{
-			"workspace": ".",
+			"workspace": workspace,
 		}, "生成提交信息建议", []string{"git.read"})
 		return Plan{
 			Decision:     PlanDecisionTool,
 			Preamble:     "我会先基于当前 Git 状态和 staged diff 生成提交信息建议。",
 			ToolProposal: &proposal,
-			CodePlan:     newCodePlan(CodeTaskGit, ".", input.UserMessage, []CodePlanStep{{Tool: "git.status", Purpose: "检查提交前状态"}, {Tool: "git.diff_summary", Purpose: "总结 staged diff", Input: map[string]any{"staged": true}}, {Tool: "git.commit_message_proposal", Purpose: "生成提交信息建议", Input: proposal.Input}}),
+			CodePlan:     newCodePlan(CodeTaskGit, workspace, input.UserMessage, []CodePlanStep{{Tool: "git.status", Purpose: "检查提交前状态", Input: map[string]any{"workspace": workspace}}, {Tool: "git.diff_summary", Purpose: "总结 staged diff", Input: map[string]any{"workspace": workspace, "staged": true}}, {Tool: "git.commit_message_proposal", Purpose: "生成提交信息建议", Input: proposal.Input}}),
 			Reason:       "matched git commit message proposal intent",
 		}, nil
 	case wantsGitLog(normalized):
 		proposal := p.Adapter.NewProposal("git.log", map[string]any{
-			"workspace": ".",
+			"workspace": workspace,
 			"limit":     20,
 		}, "查看 git log", []string{"git.read"})
 		return Plan{
 			Decision:     PlanDecisionTool,
 			Preamble:     "我会先读取最近的 Git 提交记录。",
 			ToolProposal: &proposal,
-			CodePlan:     newCodePlan(CodeTaskGit, ".", input.UserMessage, []CodePlanStep{{Tool: "git.log", Purpose: "读取最近提交记录", Input: proposal.Input}}),
+			CodePlan:     newCodePlan(CodeTaskGit, workspace, input.UserMessage, []CodePlanStep{{Tool: "git.log", Purpose: "读取最近提交记录", Input: proposal.Input}}),
 			Reason:       "matched git log intent",
 		}, nil
 	case wantsFixTests(normalized):
 		proposal := p.Adapter.NewProposal("code.fix_test_failure_loop", map[string]any{
-			"workspace":           ".",
+			"workspace":           workspace,
 			"use_detected":        true,
 			"max_iterations":      3,
 			"stop_on_approval":    true,
@@ -164,12 +165,12 @@ func (p HeuristicPlanner) Plan(_ context.Context, input PlanInput) (Plan, error)
 			Decision:     PlanDecisionTool,
 			Preamble:     "我会先运行测试并整理失败上下文，后续修改仍需要 patch 审批。",
 			ToolProposal: &proposal,
-			CodePlan:     codeFixPlan(".", input.UserMessage),
+			CodePlan:     codeFixPlan(workspace, input.UserMessage),
 			Reason:       "matched code fix loop intent",
 		}, nil
 	case wantsRunTests(normalized):
 		proposal := p.Adapter.NewProposal("code.run_tests", map[string]any{
-			"workspace":        ".",
+			"workspace":        workspace,
 			"use_detected":     true,
 			"timeout_seconds":  300,
 			"max_output_bytes": 200000,
@@ -178,7 +179,7 @@ func (p HeuristicPlanner) Plan(_ context.Context, input PlanInput) (Plan, error)
 			Decision:     PlanDecisionTool,
 			Preamble:     "我会先检测并运行项目测试。",
 			ToolProposal: &proposal,
-			CodePlan:     newCodePlan(CodeTaskTest, ".", input.UserMessage, []CodePlanStep{{Tool: "code.inspect_project", Purpose: "检测项目结构"}, {Tool: "code.run_tests", Purpose: "运行测试", Input: proposal.Input}, {Tool: "code.parse_test_failure", Purpose: "如失败则解析测试输出"}}),
+			CodePlan:     newCodePlan(CodeTaskTest, workspace, input.UserMessage, []CodePlanStep{{Tool: "code.inspect_project", Purpose: "检测项目结构", Input: map[string]any{"path": workspace}}, {Tool: "code.run_tests", Purpose: "运行测试", Input: proposal.Input}, {Tool: "code.parse_test_failure", Purpose: "如失败则解析测试输出"}}),
 			Reason:       "matched code test intent",
 		}, nil
 	case wantsCodeRead(normalized):
@@ -186,6 +187,7 @@ func (p HeuristicPlanner) Plan(_ context.Context, input PlanInput) (Plan, error)
 		if path == "" {
 			path = "."
 		}
+		path = scopedWorkspacePath(workspace, path)
 		proposal := p.Adapter.NewProposal("code.read_file", map[string]any{
 			"path":      path,
 			"max_bytes": 200000,
@@ -194,7 +196,7 @@ func (p HeuristicPlanner) Plan(_ context.Context, input PlanInput) (Plan, error)
 			Decision:     PlanDecisionTool,
 			Preamble:     "我会先读取相关文件内容。",
 			ToolProposal: &proposal,
-			CodePlan:     newCodePlan(CodeTaskInspect, ".", input.UserMessage, []CodePlanStep{{Tool: "code.read_file", Purpose: "读取工作区文件", Input: proposal.Input}}),
+			CodePlan:     newCodePlan(CodeTaskInspect, workspace, input.UserMessage, []CodePlanStep{{Tool: "code.read_file", Purpose: "读取工作区文件", Input: proposal.Input}}),
 			Reason:       "matched code read intent",
 		}, nil
 	case wantsCodeSearch(normalized):
@@ -203,7 +205,7 @@ func (p HeuristicPlanner) Plan(_ context.Context, input PlanInput) (Plan, error)
 			query = strings.TrimSpace(input.UserMessage)
 		}
 		proposal := p.Adapter.NewProposal("code.search_text", map[string]any{
-			"path":  ".",
+			"path":  workspace,
 			"query": query,
 			"limit": 50,
 		}, "搜索工作区代码", []string{"code.read"})
@@ -211,18 +213,18 @@ func (p HeuristicPlanner) Plan(_ context.Context, input PlanInput) (Plan, error)
 			Decision:     PlanDecisionTool,
 			Preamble:     "我会先在工作区搜索相关代码。",
 			ToolProposal: &proposal,
-			CodePlan:     newCodePlan(CodeTaskSearch, ".", input.UserMessage, []CodePlanStep{{Tool: "code.search_text", Purpose: "搜索相关代码", Input: proposal.Input}}),
+			CodePlan:     newCodePlan(CodeTaskSearch, workspace, input.UserMessage, []CodePlanStep{{Tool: "code.search_text", Purpose: "搜索相关代码", Input: proposal.Input}}),
 			Reason:       "matched code search intent",
 		}, nil
 	case wantsCodeWork(normalized):
 		proposal := p.Adapter.NewProposal("code.inspect_project", map[string]any{
-			"path": ".",
+			"path": workspace,
 		}, "检查项目结构和测试命令", []string{"code.read"})
 		return Plan{
 			Decision:     PlanDecisionTool,
 			Preamble:     "我会先检查项目结构、语言和测试命令，再决定后续代码工具调用。",
 			ToolProposal: &proposal,
-			CodePlan:     codeInspectPlan(".", input.UserMessage),
+			CodePlan:     codeInspectPlan(workspace, input.UserMessage),
 			Reason:       "matched code work intent",
 		}, nil
 	case strings.Contains(normalized, "cpu") && strings.Contains(normalized, "进程"):
@@ -297,6 +299,7 @@ func (p HeuristicPlanner) planAfterTool(input PlanInput) (Plan, bool) {
 	if input.LastProposal == nil || input.LastToolResult == nil {
 		return Plan{}, false
 	}
+	workspace := extractWorkspace(input.UserMessage)
 	switch input.LastProposal.Tool {
 	case "code.run_tests":
 		passed, _ := input.LastToolResult.Output["passed"].(bool)
@@ -308,7 +311,7 @@ func (p HeuristicPlanner) planAfterTool(input PlanInput) (Plan, bool) {
 			}, true
 		}
 		proposal := p.Adapter.NewProposal("code.parse_test_failure", map[string]any{
-			"workspace": ".",
+			"workspace": workspace,
 			"command":   fmtString(input.LastToolResult.Output["command"]),
 			"stdout":    fmtString(input.LastToolResult.Output["stdout"]),
 			"stderr":    fmtString(input.LastToolResult.Output["stderr"]),
@@ -318,7 +321,7 @@ func (p HeuristicPlanner) planAfterTool(input PlanInput) (Plan, bool) {
 			Decision:     PlanDecisionTool,
 			Preamble:     "测试没有通过，我会解析失败信息。",
 			ToolProposal: &proposal,
-			CodePlan:     codeTestPlan(".", input.UserMessage),
+			CodePlan:     codeTestPlan(workspace, input.UserMessage),
 			Reason:       "parse failed test output",
 		}, true
 	case "code.fix_test_failure_loop":
@@ -326,21 +329,21 @@ func (p HeuristicPlanner) planAfterTool(input PlanInput) (Plan, bool) {
 			return Plan{
 				Decision: PlanDecisionStop,
 				Message:  "测试已通过，不需要生成修复 patch。",
-				CodePlan: codeFixPlan(".", input.UserMessage),
+				CodePlan: codeFixPlan(workspace, input.UserMessage),
 				Reason:   "fix loop tests passed",
 			}, true
 		}
 		return Plan{
 			Decision: PlanDecisionStop,
 			Message:  summarizeFixLoop(input.LastToolResult),
-			CodePlan: codeFixPlan(".", input.UserMessage),
+			CodePlan: codeFixPlan(workspace, input.UserMessage),
 			Reason:   "fix loop waiting for patch proposal",
 		}, true
 	case "code.parse_test_failure":
 		return Plan{
 			Decision: PlanDecisionStop,
 			Message:  summarizeParsedFailure(input.LastToolResult),
-			CodePlan: codeTestPlan(".", input.UserMessage),
+			CodePlan: codeTestPlan(workspace, input.UserMessage),
 			Reason:   "parsed test failure",
 		}, true
 	case "code.read_file":
@@ -353,7 +356,7 @@ func (p HeuristicPlanner) planAfterTool(input PlanInput) (Plan, bool) {
 				Decision:     PlanDecisionTool,
 				Preamble:     "patch 文件已读取，我会继续校验是否能干净应用。",
 				ToolProposal: &proposal,
-				CodePlan:     newCodePlan(CodeTaskPatch, ".", input.UserMessage, []CodePlanStep{{Tool: "code.read_file", Purpose: "读取 patch 文件"}, {Tool: "code.validate_patch", Purpose: "验证 patch 内容", Input: proposal.Input}}),
+				CodePlan:     newCodePlan(CodeTaskPatch, workspace, input.UserMessage, []CodePlanStep{{Tool: "code.read_file", Purpose: "读取 patch 文件"}, {Tool: "code.validate_patch", Purpose: "验证 patch 内容", Input: proposal.Input}}),
 				Reason:       "validate patch after reading patch file",
 			}, true
 		}
@@ -365,7 +368,7 @@ func (p HeuristicPlanner) planAfterTool(input PlanInput) (Plan, bool) {
 				Decision:     PlanDecisionTool,
 				Preamble:     "patch 文件已读取，我会请求审批后应用这个 snapshot。",
 				ToolProposal: &proposal,
-				CodePlan:     newCodePlan(CodeTaskPatch, ".", input.UserMessage, []CodePlanStep{{Tool: "code.read_file", Purpose: "读取 patch 文件"}, {Tool: "code.apply_patch", Purpose: "审批后应用 patch", Input: proposal.Input, RequiresApproval: true}}),
+				CodePlan:     newCodePlan(CodeTaskPatch, workspace, input.UserMessage, []CodePlanStep{{Tool: "code.read_file", Purpose: "读取 patch 文件"}, {Tool: "code.apply_patch", Purpose: "审批后应用 patch", Input: proposal.Input, RequiresApproval: true}}),
 				Reason:       "apply patch after reading patch file",
 			}, true
 		}
@@ -373,7 +376,7 @@ func (p HeuristicPlanner) planAfterTool(input PlanInput) (Plan, bool) {
 		normalized := strings.ToLower(strings.TrimSpace(input.UserMessage))
 		if wantsRunTests(normalized) {
 			proposal := p.Adapter.NewProposal("code.run_tests", map[string]any{
-				"workspace":        ".",
+				"workspace":        workspace,
 				"use_detected":     true,
 				"timeout_seconds":  300,
 				"max_output_bytes": 200000,
@@ -382,14 +385,14 @@ func (p HeuristicPlanner) planAfterTool(input PlanInput) (Plan, bool) {
 				Decision:     PlanDecisionTool,
 				Preamble:     "项目检查完成，我会继续运行测试。",
 				ToolProposal: &proposal,
-				CodePlan:     codeTestPlan(".", input.UserMessage),
+				CodePlan:     codeTestPlan(workspace, input.UserMessage),
 				Reason:       "continue from project inspection to tests",
 			}, true
 		}
 	case "code.apply_patch":
 		if wantsCodeWork(strings.ToLower(strings.TrimSpace(input.UserMessage))) || wantsRunTests(strings.ToLower(strings.TrimSpace(input.UserMessage))) {
 			proposal := p.Adapter.NewProposal("code.run_tests", map[string]any{
-				"workspace":        ".",
+				"workspace":        workspace,
 				"use_detected":     true,
 				"timeout_seconds":  300,
 				"max_output_bytes": 200000,
@@ -398,7 +401,7 @@ func (p HeuristicPlanner) planAfterTool(input PlanInput) (Plan, bool) {
 				Decision:     PlanDecisionTool,
 				Preamble:     "patch 已应用，我会继续重新运行测试。",
 				ToolProposal: &proposal,
-				CodePlan:     codeFixPlan(".", input.UserMessage),
+				CodePlan:     codeFixPlan(workspace, input.UserMessage),
 				Reason:       "rerun tests after approved patch application",
 			}, true
 		}
@@ -565,6 +568,43 @@ func extractPathAfter(value string, markers []string) string {
 		}
 	}
 	return extractQuoted(value)
+}
+
+func extractWorkspace(value string) string {
+	for _, marker := range []string{"workspace:", "workspace：", "工作区:", "工作区："} {
+		idx := strings.Index(strings.ToLower(value), strings.ToLower(marker))
+		if idx < 0 {
+			continue
+		}
+		rest := strings.TrimSpace(value[idx+len(marker):])
+		if rest == "" {
+			break
+		}
+		fields := strings.Fields(rest)
+		if len(fields) == 0 {
+			break
+		}
+		workspace := strings.Trim(fields[0], "`'\"，,。;；")
+		if workspace != "" {
+			return workspace
+		}
+	}
+	return "."
+}
+
+func scopedWorkspacePath(workspace, path string) string {
+	workspace = strings.TrimSpace(workspace)
+	path = strings.TrimSpace(path)
+	if path == "" {
+		path = "."
+	}
+	if workspace == "" || workspace == "." || strings.HasPrefix(path, "/") {
+		return path
+	}
+	if path == "." {
+		return workspace
+	}
+	return strings.TrimRight(workspace, "/") + "/" + strings.TrimLeft(strings.TrimPrefix(path, "./"), "/")
 }
 
 func fmtString(value any) string {

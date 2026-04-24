@@ -220,7 +220,7 @@ func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb
 		Provider:       "local",
 		Name:           "code.propose_patch",
 		Description:    "Preview a code patch without applying it",
-		InputSchema:    map[string]any{"path": "string", "content": "string", "files": "array"},
+		InputSchema:    map[string]any{"path": "string", "content": "string", "files": "array", "diff": "string", "expected_sha256": "string", "expected_sha256_by_path": "object"},
 		DefaultEffects: []string{"read", "code.plan"},
 	}, &code.ProposePatchExecutor{Workspace: workspace})
 	registry.Register(core.ToolSpec{
@@ -276,7 +276,7 @@ func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb
 		Provider:       "local",
 		Name:           "code.fix_test_failure_loop",
 		Description:    "Run tests and prepare the next repair-loop action without applying code changes",
-		InputSchema:    map[string]any{"workspace": "string", "test_command": "string", "max_iterations": "number", "stop_on_approval": "boolean"},
+		InputSchema:    map[string]any{"workspace": "string", "test_command": "string", "max_iterations": "number", "iteration": "number", "test_runs": "array", "failures": "array", "proposed_patches": "array", "applied_patches": "array", "approval_rejected": "boolean", "stop_on_approval": "boolean", "auto_rerun_tests": "boolean"},
 		DefaultEffects: []string{"code.test", "process.read", "fs.read", "code.plan"},
 	}, &code.FixTestFailureLoopExecutor{Workspace: workspace, DefaultTimeoutSeconds: cfg.Shell.DefaultTimeoutSeconds, MaxOutputBytes: int64(cfg.Shell.MaxOutputChars), MaxIterations: 3})
 
