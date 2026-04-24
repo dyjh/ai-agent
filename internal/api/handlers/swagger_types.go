@@ -6,6 +6,7 @@ import (
 	"local-agent/internal/agent"
 	"local-agent/internal/core"
 	"local-agent/internal/tools/mcp"
+	"local-agent/internal/tools/ops"
 	"local-agent/internal/tools/skills"
 )
 
@@ -218,4 +219,20 @@ type MCPToolPolicyListResponse struct {
 type MCPCallToolRequest struct {
 	Arguments map[string]any `json:"arguments"`
 	Purpose   string         `json:"purpose"`
+}
+
+// OpsHostListResponse wraps host profile lists.
+type OpsHostListResponse struct {
+	Items []ops.HostProfile `json:"items"`
+}
+
+// OpsRunbookListResponse wraps runbook lists.
+type OpsRunbookListResponse struct {
+	Items []ops.Runbook `json:"items"`
+}
+
+// OpsRunbookPlanRequest is the runbook plan payload.
+type OpsRunbookPlanRequest struct {
+	HostID string `json:"host_id,omitempty"`
+	DryRun bool   `json:"dry_run,omitempty"`
 }

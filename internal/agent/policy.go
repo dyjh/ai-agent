@@ -6,6 +6,7 @@ import (
 
 	"local-agent/internal/config"
 	"local-agent/internal/core"
+	"local-agent/internal/tools/ops"
 )
 
 // PolicyEngine converts inferred effects into an execution decision.
@@ -19,7 +20,7 @@ func NewPolicyEngine(cfg config.PolicyConfig) *PolicyEngine {
 }
 
 // Decide decides whether a proposal may execute automatically.
-func (p *PolicyEngine) Decide(_ context.Context, _ core.ToolProposal, inference core.EffectInferenceResult) (core.PolicyDecision, error) {
+func (p *PolicyEngine) Decide(_ context.Context, proposal core.ToolProposal, inference core.EffectInferenceResult) (core.PolicyDecision, error) {
 	decision := core.PolicyDecision{
 		Allowed:          true,
 		RequiresApproval: false,
@@ -53,9 +54,37 @@ func (p *PolicyEngine) Decide(_ context.Context, _ core.ToolProposal, inference 
 			"risk_level": inference.RiskLevel,
 			"effects":    inference.Effects,
 		}
+		if strings.HasPrefix(proposal.Tool, "ops.") {
+			decision.ApprovalPayload["operation"] = proposal.Tool
+			decision.ApprovalPayload["impact"] = opsApprovalImpact(proposal)
+			decision.ApprovalPayload["rollback_plan"] = ops.RollbackForTool(proposal.Tool, proposal.Input)
+			if proposal.Tool == "ops.k8s.apply" {
+				decision.ApprovalPayload["manifest_summary"] = ops.ManifestSummary(proposal.Input)
+			}
+		}
 	}
 
 	return decision, nil
+}
+
+func opsApprovalImpact(proposal core.ToolProposal) map[string]any {
+	impact := map[string]any{}
+	for _, key := range []string{"host_id", "service", "service_name", "container", "container_id", "resource", "name", "namespace", "target"} {
+		if value, ok := proposal.Input[key]; ok && value != "" {
+			impact[key] = value
+		}
+	}
+	switch {
+	case strings.HasPrefix(proposal.Tool, "ops.docker."):
+		impact["scope"] = "docker container lifecycle"
+	case strings.HasPrefix(proposal.Tool, "ops.k8s."):
+		impact["scope"] = "kubernetes cluster resource"
+	case strings.HasPrefix(proposal.Tool, "ops.ssh."):
+		impact["scope"] = "remote ssh host"
+	case strings.HasPrefix(proposal.Tool, "ops.local."):
+		impact["scope"] = "local host"
+	}
+	return impact
 }
 
 func effectNeedsApproval(effect string) bool {

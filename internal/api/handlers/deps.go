@@ -10,6 +10,7 @@ import (
 	"local-agent/internal/tools/kb"
 	"local-agent/internal/tools/mcp"
 	memstore "local-agent/internal/tools/memory"
+	"local-agent/internal/tools/ops"
 	"local-agent/internal/tools/skills"
 )
 
@@ -25,4 +26,5 @@ type Dependencies struct {
 	Knowledge *kb.Service
 	Skills    *skills.Manager
 	MCP       *mcp.Manager
+	Ops       *ops.Manager
 }

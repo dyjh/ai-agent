@@ -1015,6 +1015,355 @@
                 }
             }
         },
+        "/v1/ops/hosts": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ops"
+                ],
+                "summary": "List operations host profiles",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.OpsHostListResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ops"
+                ],
+                "summary": "Create operations host profile",
+                "parameters": [
+                    {
+                        "description": "Host profile payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_ops.HostProfileInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_ops.HostProfile"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/ops/hosts/{host_id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ops"
+                ],
+                "summary": "Get operations host profile",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Host profile ID",
+                        "name": "host_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_ops.HostProfile"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ops"
+                ],
+                "summary": "Delete operations host profile",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Host profile ID",
+                        "name": "host_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.StatusResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ops"
+                ],
+                "summary": "Update operations host profile",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Host profile ID",
+                        "name": "host_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Host profile payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_ops.HostProfileInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_ops.HostProfile"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/ops/hosts/{host_id}/test": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ops"
+                ],
+                "summary": "Test operations host profile connectivity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Host profile ID",
+                        "name": "host_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_ops.HostTestResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/ops/runbooks": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ops"
+                ],
+                "summary": "List operations runbooks",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.OpsRunbookListResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/ops/runbooks/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ops"
+                ],
+                "summary": "Read operations runbook",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Runbook ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_ops.Runbook"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/ops/runbooks/{id}/execute": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ops"
+                ],
+                "summary": "Execute operations runbook through ToolRouter",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Runbook ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Runbook execute payload",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_ops.RunbookExecuteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ToolRouteResponse"
+                        }
+                    },
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ToolRouteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/ops/runbooks/{id}/plan": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ops"
+                ],
+                "summary": "Plan operations runbook without executing steps",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Runbook ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Runbook plan payload",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.OpsRunbookPlanRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_ops.RunbookPlan"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/runs": {
             "get": {
                 "produces": [
@@ -2054,6 +2403,39 @@
                 }
             }
         },
+        "internal_api_handlers.OpsHostListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_tools_ops.HostProfile"
+                    }
+                }
+            }
+        },
+        "internal_api_handlers.OpsRunbookListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_tools_ops.Runbook"
+                    }
+                }
+            }
+        },
+        "internal_api_handlers.OpsRunbookPlanRequest": {
+            "type": "object",
+            "properties": {
+                "dry_run": {
+                    "type": "boolean"
+                },
+                "host_id": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_api_handlers.PostMessageRequest": {
             "type": "object",
             "properties": {
@@ -2195,9 +2577,78 @@
                 }
             }
         },
+        "local-agent_internal_agent.CodePlan": {
+            "type": "object",
+            "properties": {
+                "goal": {
+                    "type": "string"
+                },
+                "iteration": {
+                    "type": "integer"
+                },
+                "kind": {
+                    "$ref": "#/definitions/local-agent_internal_agent.CodeTaskKind"
+                },
+                "max_iterations": {
+                    "type": "integer"
+                },
+                "requires_approval": {
+                    "type": "boolean"
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_agent.CodePlanStep"
+                    }
+                },
+                "workspace": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_agent.CodePlanStep": {
+            "type": "object",
+            "properties": {
+                "input": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "purpose": {
+                    "type": "string"
+                },
+                "requires_approval": {
+                    "type": "boolean"
+                },
+                "tool": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_agent.CodeTaskKind": {
+            "type": "string",
+            "enum": [
+                "inspect",
+                "search",
+                "patch",
+                "test",
+                "fix",
+                "git"
+            ],
+            "x-enum-varnames": [
+                "CodeTaskInspect",
+                "CodeTaskSearch",
+                "CodeTaskPatch",
+                "CodeTaskTest",
+                "CodeTaskFix",
+                "CodeTaskGit"
+            ]
+        },
         "local-agent_internal_agent.Plan": {
             "type": "object",
             "properties": {
+                "code_plan": {
+                    "$ref": "#/definitions/local-agent_internal_agent.CodePlan"
+                },
                 "decision": {
                     "$ref": "#/definitions/local-agent_internal_agent.PlanDecision"
                 },
@@ -2355,6 +2806,9 @@
             "properties": {
                 "approval": {
                     "$ref": "#/definitions/local-agent_internal_core.ApprovalRecord"
+                },
+                "code_plan": {
+                    "$ref": "#/definitions/local-agent_internal_agent.CodePlan"
                 },
                 "created_at": {
                     "type": "string"
@@ -3077,6 +3531,232 @@
                     "type": "string"
                 },
                 "tool_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_tools_ops.HostProfile": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "default_shell": {
+                    "type": "string"
+                },
+                "host_id": {
+                    "type": "string"
+                },
+                "k8s": {
+                    "$ref": "#/definitions/local-agent_internal_tools_ops.K8sHostConfig"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "policy_profile": {
+                    "type": "string"
+                },
+                "ssh": {
+                    "$ref": "#/definitions/local-agent_internal_tools_ops.SSHHostConfig"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "working_directory": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_tools_ops.HostProfileInput": {
+            "type": "object",
+            "properties": {
+                "default_shell": {
+                    "type": "string"
+                },
+                "k8s": {
+                    "$ref": "#/definitions/local-agent_internal_tools_ops.K8sHostConfig"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "policy_profile": {
+                    "type": "string"
+                },
+                "ssh": {
+                    "$ref": "#/definitions/local-agent_internal_tools_ops.SSHHostConfig"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "working_directory": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_tools_ops.HostTestResult": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "host_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_tools_ops.K8sHostConfig": {
+            "type": "object",
+            "properties": {
+                "context": {
+                    "type": "string"
+                },
+                "kubeconfig_path": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_tools_ops.Runbook": {
+            "type": "object",
+            "properties": {
+                "body": {
+                    "type": "string"
+                },
+                "host_type": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "loaded_at": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "scope": {
+                    "type": "string"
+                },
+                "source_path": {
+                    "type": "string"
+                },
+                "step_texts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_tools_ops.RunbookExecuteRequest": {
+            "type": "object",
+            "properties": {
+                "dry_run": {
+                    "type": "boolean"
+                },
+                "host_id": {
+                    "type": "string"
+                },
+                "max_steps": {
+                    "type": "integer"
+                }
+            }
+        },
+        "local-agent_internal_tools_ops.RunbookPlan": {
+            "type": "object",
+            "properties": {
+                "dry_run": {
+                    "type": "boolean"
+                },
+                "host_id": {
+                    "type": "string"
+                },
+                "runbook_id": {
+                    "type": "string"
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_tools_ops.RunbookPlanStep"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_tools_ops.RunbookPlanStep": {
+            "type": "object",
+            "properties": {
+                "index": {
+                    "type": "integer"
+                },
+                "input": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "requires_approval": {
+                    "type": "boolean"
+                },
+                "text": {
+                    "type": "string"
+                },
+                "tool": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_tools_ops.SSHHostConfig": {
+            "type": "object",
+            "properties": {
+                "auth_type": {
+                    "type": "string"
+                },
+                "host": {
+                    "type": "string"
+                },
+                "key_path": {
+                    "type": "string"
+                },
+                "password_ref": {
+                    "type": "string"
+                },
+                "port": {
+                    "type": "integer"
+                },
+                "user": {
                     "type": "string"
                 }
             }

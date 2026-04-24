@@ -43,6 +43,12 @@ func NewEffectInferrer(cfg config.PolicyConfig, resolvers ...any) *EffectInferre
 
 // Infer infers effects for a tool proposal.
 func (e *EffectInferrer) Infer(_ context.Context, proposal core.ToolProposal) (core.EffectInferenceResult, error) {
+	if strings.HasPrefix(proposal.Tool, "ops.") {
+		return e.inferOps(proposal), nil
+	}
+	if strings.HasPrefix(proposal.Tool, "runbook.") {
+		return e.inferRunbook(proposal), nil
+	}
 	switch proposal.Tool {
 	case "shell.exec":
 		return e.inferShell(proposal), nil
@@ -188,6 +194,142 @@ func (e *EffectInferrer) inferCodeRead(proposal core.ToolProposal) core.EffectIn
 		}
 	}
 	return readOnlyCodeInference("read-only code workspace tool")
+}
+
+func (e *EffectInferrer) inferOps(proposal core.ToolProposal) core.EffectInferenceResult {
+	if e.proposalTouchesSensitivePath(proposal) {
+		return core.EffectInferenceResult{
+			Effects:          []string{"sensitive_read", "log.read"},
+			RiskLevel:        "sensitive",
+			Sensitive:        true,
+			ApprovalRequired: true,
+			Confidence:       0.95,
+			ReasonSummary:    "ops tool touches sensitive resources",
+		}
+	}
+	switch proposal.Tool {
+	case "ops.local.system_info":
+		return readOnlyOpsInference([]string{"system.read"}, "local system information read")
+	case "ops.local.processes":
+		return readOnlyOpsInference([]string{"process.read", "system.metrics.read"}, "local process metrics read")
+	case "ops.local.disk_usage":
+		return readOnlyOpsInference([]string{"disk.read", "system.metrics.read"}, "local disk usage read")
+	case "ops.local.memory_usage":
+		return readOnlyOpsInference([]string{"memory.read", "system.metrics.read"}, "local memory usage read")
+	case "ops.local.network_info":
+		return readOnlyOpsInference([]string{"network.read"}, "local network information read")
+	case "ops.local.service_status":
+		return readOnlyOpsInference([]string{"service.read"}, "local service status read")
+	case "ops.local.logs_tail":
+		return readOnlyOpsInference([]string{"log.read"}, "local log tail read")
+	case "ops.local.service_restart":
+		return core.EffectInferenceResult{
+			Effects:          []string{"service.restart", "system.write"},
+			RiskLevel:        "danger",
+			ApprovalRequired: true,
+			Confidence:       0.99,
+			ReasonSummary:    "local service restart changes process state",
+		}
+	case "ops.ssh.system_info":
+		return readOnlyOpsInference([]string{"ssh.read", "system.read"}, "ssh system information read")
+	case "ops.ssh.processes":
+		return readOnlyOpsInference([]string{"ssh.read", "process.read", "system.metrics.read"}, "ssh process metrics read")
+	case "ops.ssh.disk_usage":
+		return readOnlyOpsInference([]string{"ssh.read", "disk.read", "system.metrics.read"}, "ssh disk usage read")
+	case "ops.ssh.memory_usage":
+		return readOnlyOpsInference([]string{"ssh.read", "memory.read", "system.metrics.read"}, "ssh memory usage read")
+	case "ops.ssh.logs_tail":
+		return readOnlyOpsInference([]string{"ssh.read", "log.read"}, "ssh log tail read")
+	case "ops.ssh.service_status":
+		return readOnlyOpsInference([]string{"ssh.read", "service.read"}, "ssh service status read")
+	case "ops.ssh.service_restart":
+		return core.EffectInferenceResult{
+			Effects:          []string{"ssh.write", "service.restart", "system.write"},
+			RiskLevel:        "danger",
+			ApprovalRequired: true,
+			Confidence:       0.99,
+			ReasonSummary:    "ssh service restart changes remote process state",
+		}
+	case "ops.docker.ps", "ops.docker.inspect":
+		return readOnlyOpsInference([]string{"container.read"}, "docker container metadata read")
+	case "ops.docker.logs":
+		return readOnlyOpsInference([]string{"container.read", "log.read"}, "docker logs read")
+	case "ops.docker.stats":
+		return readOnlyOpsInference([]string{"container.read", "system.metrics.read"}, "docker stats read")
+	case "ops.docker.restart", "ops.docker.stop", "ops.docker.start":
+		return core.EffectInferenceResult{
+			Effects:          []string{"container.write", "container." + strings.TrimPrefix(proposal.Tool, "ops.docker.")},
+			RiskLevel:        "write",
+			ApprovalRequired: true,
+			Confidence:       0.99,
+			ReasonSummary:    "docker lifecycle operation changes container state",
+		}
+	case "ops.k8s.get", "ops.k8s.describe", "ops.k8s.events":
+		return readOnlyOpsInference([]string{"k8s.read"}, "kubernetes resource read")
+	case "ops.k8s.logs":
+		return readOnlyOpsInference([]string{"k8s.read", "log.read"}, "kubernetes logs read")
+	case "ops.k8s.apply", "ops.k8s.rollout_restart":
+		return core.EffectInferenceResult{
+			Effects:          []string{"k8s.write", strings.TrimPrefix(proposal.Tool, "ops.")},
+			RiskLevel:        "write",
+			ApprovalRequired: true,
+			Confidence:       0.99,
+			ReasonSummary:    "kubernetes operation changes cluster state",
+		}
+	case "ops.k8s.delete":
+		return core.EffectInferenceResult{
+			Effects:          []string{"k8s.delete", "dangerous"},
+			RiskLevel:        "danger",
+			ApprovalRequired: true,
+			Confidence:       0.99,
+			ReasonSummary:    "kubernetes delete is destructive",
+		}
+	default:
+		return core.EffectInferenceResult{
+			Effects:          []string{"unknown.effect"},
+			RiskLevel:        "unknown",
+			ApprovalRequired: true,
+			Confidence:       0.3,
+			ReasonSummary:    "unknown ops tool",
+		}
+	}
+}
+
+func (e *EffectInferrer) inferRunbook(proposal core.ToolProposal) core.EffectInferenceResult {
+	switch proposal.Tool {
+	case "runbook.list", "runbook.read", "runbook.plan":
+		return core.EffectInferenceResult{
+			Effects:       []string{"read", "runbook.read"},
+			RiskLevel:     "read",
+			Confidence:    0.95,
+			ReasonSummary: "runbook planning is read-only",
+		}
+	case "runbook.execute_step", "runbook.execute":
+		return core.EffectInferenceResult{
+			Effects:       []string{"runbook.execute", "workflow.route"},
+			RiskLevel:     "read",
+			Confidence:    0.9,
+			ReasonSummary: "runbook execution routes each concrete step through ToolRouter",
+		}
+	default:
+		return core.EffectInferenceResult{
+			Effects:          []string{"unknown.effect"},
+			RiskLevel:        "unknown",
+			ApprovalRequired: true,
+			Confidence:       0.3,
+			ReasonSummary:    "unknown runbook tool",
+		}
+	}
+}
+
+func readOnlyOpsInference(effects []string, reason string) core.EffectInferenceResult {
+	allEffects := append([]string{"read"}, effects...)
+	return core.EffectInferenceResult{
+		Effects:       uniq(allEffects),
+		RiskLevel:     "read",
+		Confidence:    0.95,
+		ReasonSummary: reason,
+	}
 }
 
 func (e *EffectInferrer) inferCodeTest(proposal core.ToolProposal) core.EffectInferenceResult {

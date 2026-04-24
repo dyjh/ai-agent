@@ -28,6 +28,7 @@ func NewServer(bootstrap *Bootstrap) *Server {
 		Knowledge: bootstrap.Knowledge,
 		Skills:    bootstrap.Skills,
 		MCP:       bootstrap.MCP,
+		Ops:       bootstrap.Ops,
 	})
 	addr := fmt.Sprintf("%s:%d", bootstrap.Config.Server.Host, bootstrap.Config.Server.Port)
 

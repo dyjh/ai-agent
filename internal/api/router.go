@@ -27,6 +27,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	knowledge := handlers.NewKnowledgeHandler(deps)
 	skillsHandler := handlers.NewSkillsHandler(deps)
 	mcpHandler := handlers.NewMCPHandler(deps)
+	opsHandler := handlers.NewOpsHandler(deps)
 	wsHandler := ws.NewChatHandler(deps)
 
 	apidocs.SwaggerInfo.BasePath = "/"
@@ -93,6 +94,17 @@ func NewRouter(deps Dependencies) http.Handler {
 		r.Post("/mcp/servers/{id}/tools/{tool_name}/call", mcpHandler.CallTool)
 		r.Get("/mcp/tools", mcpHandler.ListPolicies)
 		r.Patch("/mcp/tools/{id}/policy", mcpHandler.UpdatePolicy)
+
+		r.Get("/ops/hosts", opsHandler.ListHosts)
+		r.Post("/ops/hosts", opsHandler.CreateHost)
+		r.Get("/ops/hosts/{host_id}", opsHandler.GetHost)
+		r.Patch("/ops/hosts/{host_id}", opsHandler.UpdateHost)
+		r.Delete("/ops/hosts/{host_id}", opsHandler.DeleteHost)
+		r.Post("/ops/hosts/{host_id}/test", opsHandler.TestHost)
+		r.Get("/ops/runbooks", opsHandler.ListRunbooks)
+		r.Get("/ops/runbooks/{id}", opsHandler.ReadRunbook)
+		r.Post("/ops/runbooks/{id}/plan", opsHandler.PlanRunbook)
+		r.Post("/ops/runbooks/{id}/execute", opsHandler.ExecuteRunbook)
 	})
 
 	return r

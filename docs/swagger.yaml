@@ -216,6 +216,27 @@ definitions:
           $ref: '#/definitions/local-agent_internal_core.Message'
         type: array
     type: object
+  internal_api_handlers.OpsHostListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_tools_ops.HostProfile'
+        type: array
+    type: object
+  internal_api_handlers.OpsRunbookListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_tools_ops.Runbook'
+        type: array
+    type: object
+  internal_api_handlers.OpsRunbookPlanRequest:
+    properties:
+      dry_run:
+        type: boolean
+      host_id:
+        type: string
+    type: object
   internal_api_handlers.PostMessageRequest:
     properties:
       content:
@@ -306,8 +327,57 @@ definitions:
           $ref: '#/definitions/schema.Message'
         type: array
     type: object
+  local-agent_internal_agent.CodePlan:
+    properties:
+      goal:
+        type: string
+      iteration:
+        type: integer
+      kind:
+        $ref: '#/definitions/local-agent_internal_agent.CodeTaskKind'
+      max_iterations:
+        type: integer
+      requires_approval:
+        type: boolean
+      steps:
+        items:
+          $ref: '#/definitions/local-agent_internal_agent.CodePlanStep'
+        type: array
+      workspace:
+        type: string
+    type: object
+  local-agent_internal_agent.CodePlanStep:
+    properties:
+      input:
+        additionalProperties: {}
+        type: object
+      purpose:
+        type: string
+      requires_approval:
+        type: boolean
+      tool:
+        type: string
+    type: object
+  local-agent_internal_agent.CodeTaskKind:
+    enum:
+    - inspect
+    - search
+    - patch
+    - test
+    - fix
+    - git
+    type: string
+    x-enum-varnames:
+    - CodeTaskInspect
+    - CodeTaskSearch
+    - CodeTaskPatch
+    - CodeTaskTest
+    - CodeTaskFix
+    - CodeTaskGit
   local-agent_internal_agent.Plan:
     properties:
+      code_plan:
+        $ref: '#/definitions/local-agent_internal_agent.CodePlan'
       decision:
         $ref: '#/definitions/local-agent_internal_agent.PlanDecision'
       message:
@@ -425,6 +495,8 @@ definitions:
     properties:
       approval:
         $ref: '#/definitions/local-agent_internal_core.ApprovalRecord'
+      code_plan:
+        $ref: '#/definitions/local-agent_internal_agent.CodePlan'
       created_at:
         type: string
       error:
@@ -912,6 +984,154 @@ definitions:
       risk_level:
         type: string
       tool_name:
+        type: string
+    type: object
+  local-agent_internal_tools_ops.HostProfile:
+    properties:
+      created_at:
+        type: string
+      default_shell:
+        type: string
+      host_id:
+        type: string
+      k8s:
+        $ref: '#/definitions/local-agent_internal_tools_ops.K8sHostConfig'
+      metadata:
+        additionalProperties:
+          type: string
+        type: object
+      name:
+        type: string
+      policy_profile:
+        type: string
+      ssh:
+        $ref: '#/definitions/local-agent_internal_tools_ops.SSHHostConfig'
+      type:
+        type: string
+      updated_at:
+        type: string
+      working_directory:
+        type: string
+    type: object
+  local-agent_internal_tools_ops.HostProfileInput:
+    properties:
+      default_shell:
+        type: string
+      k8s:
+        $ref: '#/definitions/local-agent_internal_tools_ops.K8sHostConfig'
+      metadata:
+        additionalProperties:
+          type: string
+        type: object
+      name:
+        type: string
+      policy_profile:
+        type: string
+      ssh:
+        $ref: '#/definitions/local-agent_internal_tools_ops.SSHHostConfig'
+      type:
+        type: string
+      working_directory:
+        type: string
+    type: object
+  local-agent_internal_tools_ops.HostTestResult:
+    properties:
+      error:
+        type: string
+      host_id:
+        type: string
+      status:
+        type: string
+      type:
+        type: string
+    type: object
+  local-agent_internal_tools_ops.K8sHostConfig:
+    properties:
+      context:
+        type: string
+      kubeconfig_path:
+        type: string
+      namespace:
+        type: string
+    type: object
+  local-agent_internal_tools_ops.Runbook:
+    properties:
+      body:
+        type: string
+      host_type:
+        type: string
+      id:
+        type: string
+      loaded_at:
+        type: string
+      metadata:
+        additionalProperties:
+          type: string
+        type: object
+      scope:
+        type: string
+      source_path:
+        type: string
+      step_texts:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+    type: object
+  local-agent_internal_tools_ops.RunbookExecuteRequest:
+    properties:
+      dry_run:
+        type: boolean
+      host_id:
+        type: string
+      max_steps:
+        type: integer
+    type: object
+  local-agent_internal_tools_ops.RunbookPlan:
+    properties:
+      dry_run:
+        type: boolean
+      host_id:
+        type: string
+      runbook_id:
+        type: string
+      steps:
+        items:
+          $ref: '#/definitions/local-agent_internal_tools_ops.RunbookPlanStep'
+        type: array
+      title:
+        type: string
+    type: object
+  local-agent_internal_tools_ops.RunbookPlanStep:
+    properties:
+      index:
+        type: integer
+      input:
+        additionalProperties: {}
+        type: object
+      reason:
+        type: string
+      requires_approval:
+        type: boolean
+      text:
+        type: string
+      tool:
+        type: string
+    type: object
+  local-agent_internal_tools_ops.SSHHostConfig:
+    properties:
+      auth_type:
+        type: string
+      host:
+        type: string
+      key_path:
+        type: string
+      password_ref:
+        type: string
+      port:
+        type: integer
+      user:
         type: string
     type: object
   local-agent_internal_tools_skills.ApprovalConfig:
@@ -2403,6 +2623,232 @@ paths:
       summary: Search markdown memory
       tags:
       - Memory
+  /v1/ops/hosts:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.OpsHostListResponse'
+      summary: List operations host profiles
+      tags:
+      - Ops
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Host profile payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/local-agent_internal_tools_ops.HostProfileInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_ops.HostProfile'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Create operations host profile
+      tags:
+      - Ops
+  /v1/ops/hosts/{host_id}:
+    delete:
+      parameters:
+      - description: Host profile ID
+        in: path
+        name: host_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.StatusResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Delete operations host profile
+      tags:
+      - Ops
+    get:
+      parameters:
+      - description: Host profile ID
+        in: path
+        name: host_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_ops.HostProfile'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Get operations host profile
+      tags:
+      - Ops
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Host profile ID
+        in: path
+        name: host_id
+        required: true
+        type: string
+      - description: Host profile payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/local-agent_internal_tools_ops.HostProfileInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_ops.HostProfile'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Update operations host profile
+      tags:
+      - Ops
+  /v1/ops/hosts/{host_id}/test:
+    post:
+      parameters:
+      - description: Host profile ID
+        in: path
+        name: host_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_ops.HostTestResult'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Test operations host profile connectivity
+      tags:
+      - Ops
+  /v1/ops/runbooks:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.OpsRunbookListResponse'
+      summary: List operations runbooks
+      tags:
+      - Ops
+  /v1/ops/runbooks/{id}:
+    get:
+      parameters:
+      - description: Runbook ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_ops.Runbook'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Read operations runbook
+      tags:
+      - Ops
+  /v1/ops/runbooks/{id}/execute:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Runbook ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Runbook execute payload
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/local-agent_internal_tools_ops.RunbookExecuteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ToolRouteResponse'
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ToolRouteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Execute operations runbook through ToolRouter
+      tags:
+      - Ops
+  /v1/ops/runbooks/{id}/plan:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Runbook ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Runbook plan payload
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/internal_api_handlers.OpsRunbookPlanRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_ops.RunbookPlan'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Plan operations runbook without executing steps
+      tags:
+      - Ops
   /v1/runs:
     get:
       parameters:

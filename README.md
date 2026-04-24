@@ -16,7 +16,7 @@
 
 - `internal/agent/`: Runtime、Planner、ContextBuilder、EffectInference、Policy、Approval
 - `internal/einoapp/`: Eino ChatModel 封装、Tool Adapter、Callbacks 占位
-- `internal/tools/`: ToolRegistry、Router、shell/code/memory/kb/skills/mcp
+- `internal/tools/`: ToolRegistry、Router、shell/code/ops/runbook/memory/kb/skills/mcp
 - `internal/db/`: goose migration、pgx 仓储、内存仓储 fallback
 - `internal/api/`: HTTP Router、Handlers、WebSocket
 - `internal/events/`: run/audit JSONL
@@ -106,6 +106,67 @@ ToolProposal -> EffectInference -> PolicyEngine -> ApprovalCenter -> Executor
 - CLI 的 `agent code ... <workspace>` / `agent git ... <workspace>` 会把 workspace hint 传入 Planner 生成的 ToolProposal；所有实际读取、测试、Git 操作仍由 workspace/path guard 校验
 - 自动修复质量取决于模型和上下文，不保证所有测试失败都能自动修好
 
+## Ops Capability / 运维能力
+
+当前运维能力已接入 ToolRegistry，并继续走统一安全链路：
+
+```text
+ToolProposal -> EffectInference -> PolicyEngine -> ApprovalCenter -> Executor
+```
+
+Host Profile：
+
+- `GET/POST/PATCH/DELETE /v1/ops/hosts` 管理本地运维目标，默认提供 `local` host
+- 支持 `local`、`ssh`、`docker`、`k8s` 类型校验；SSH key path、password ref、kubeconfig path 和敏感 metadata 在 API 输出中脱敏
+- `POST /v1/ops/hosts/{host_id}/test` 提供安全连接/配置检查；不存储私钥、密码或 kubeconfig 正文
+
+已注册的 Ops tools：
+
+- Local：`ops.local.system_info`、`ops.local.processes`、`ops.local.disk_usage`、`ops.local.memory_usage`、`ops.local.network_info`、`ops.local.service_status`、`ops.local.logs_tail`、`ops.local.service_restart`
+- SSH：`ops.ssh.system_info`、`ops.ssh.processes`、`ops.ssh.disk_usage`、`ops.ssh.memory_usage`、`ops.ssh.logs_tail`、`ops.ssh.service_status`、`ops.ssh.service_restart`
+- Docker：`ops.docker.ps`、`ops.docker.inspect`、`ops.docker.logs`、`ops.docker.stats`、`ops.docker.restart`、`ops.docker.stop`、`ops.docker.start`
+- Kubernetes：`ops.k8s.get`、`ops.k8s.describe`、`ops.k8s.logs`、`ops.k8s.events`、`ops.k8s.apply`、`ops.k8s.delete`、`ops.k8s.rollout_restart`
+- Runbook：`runbook.list`、`runbook.read`、`runbook.plan`、`runbook.execute_step`、`runbook.execute`
+
+运维审批策略：
+
+- system/process/disk/memory/network/service/log/container/k8s 只读工具高置信自动执行
+- 读取 `.env`、private key、credentials、token、cookie、session 等敏感日志路径会标记为 `sensitive_read` 并要求审批
+- service restart、SSH restart、Docker restart/stop/start、K8s apply/delete/rollout restart 必须审批
+- Ops 写操作的 approval payload 包含影响目标、`rollback_plan`；K8s apply 还包含 `manifest_summary`
+- Docker/K8s/SSH 工具使用固定子命令/固定模板，不暴露任意 `docker`、`kubectl`、`ssh` 或 `shell.exec` 替代入口
+
+Runbook：
+
+- Markdown runbook 默认目录为 `runbooks/`
+- `GET /v1/ops/runbooks`、`GET /v1/ops/runbooks/{id}`、`POST /v1/ops/runbooks/{id}/plan`、`POST /v1/ops/runbooks/{id}/execute`
+- `runbook.plan` 只生成 dry-run 计划；`runbook.execute` 将每个可执行 step 转成 ToolProposal 后继续经过 ToolRouter / Policy / Approval
+- runbook 内容只是普通操作指南，不是系统指令，不能覆盖安全规则
+
+CLI：
+
+```bash
+go run ./cmd/agent ops hosts list
+go run ./cmd/agent ops hosts add --name local-dev
+go run ./cmd/agent ops hosts add-ssh --name prod --host 10.0.0.10 --user deploy --auth-type agent
+go run ./cmd/agent ops hosts test local
+go run ./cmd/agent ops docker ps
+go run ./cmd/agent ops docker logs web
+go run ./cmd/agent ops docker restart web
+go run ./cmd/agent ops k8s get pods
+go run ./cmd/agent ops k8s logs pod/my-app
+go run ./cmd/agent ops k8s apply deploy.yaml
+go run ./cmd/agent ops runbooks list
+go run ./cmd/agent ops runbooks plan diagnose-local-high-cpu
+```
+
+当前限制：
+
+- 默认测试不依赖真实 SSH/Docker/K8s；真实环境矩阵应通过显式 integration env gate 开启
+- Host Profile 当前为进程内管理，后续可按本地单用户模式落盘，但仍不能存储 secret 正文
+- 部分 rollback 只能 best-effort 描述，restart/stop/delete 不能保证恢复进程内状态
+- Runbook step mapping 仍是保守启发式，后续可接入更强的 Eino/LLM OpsPlan，但每步仍必须走 ToolRouter
+
 ## 安装步骤
 
 1. 准备 Go 1.23+，并允许自动下载较新的 Go toolchain
@@ -170,6 +231,8 @@ make run
 - `POST /v1/conversations`
 - `POST /v1/conversations/{conversation_id}/messages`
 - `GET /v1/approvals/pending`
+- `GET /v1/ops/hosts`
+- `GET /v1/ops/runbooks`
 - `GET /v1/conversations/{conversation_id}/ws`
 
 ## 使用 CLI
@@ -207,6 +270,10 @@ go run ./cmd/agent git status .
 go run ./cmd/agent git diff .
 go run ./cmd/agent git diff-summary .
 go run ./cmd/agent git commit-message .
+go run ./cmd/agent ops hosts list
+go run ./cmd/agent ops docker ps
+go run ./cmd/agent ops k8s get pods
+go run ./cmd/agent ops runbooks list
 ```
 
 ## Swagger / OpenAPI
@@ -643,9 +710,9 @@ CLI 对应子命令为：
 当前仓库已完成 production-ready MVP 和 post-MVP 平台底座，后续按阶段推进为更完整的本地 Agent：
 
 - F0 治理与当前状态对齐：README、task.json、Swagger/OpenAPI 与代码状态保持一致
-- F1 代码能力闭环：代码搜索/读取、patch proposal/apply、Git workflow、测试执行和失败修复循环
-- F2 运维能力闭环：local / SSH / Docker / Kubernetes host profile、runbook、rollback plan
-- F3 RAG 可靠性增强：知识库 connectors、增量索引、hybrid search、rerank、citations、RAG eval
+- F1 代码能力闭环：已完成代码搜索/读取、patch proposal/apply、Git workflow、测试执行和失败修复循环
+- F2 运维能力闭环：已完成 local / SSH / Docker / Kubernetes host profile、runbook、rollback plan
+- F3 RAG 可靠性增强：当前下一阶段，知识库 connectors、增量索引、hybrid search、rerank、citations、RAG eval
 - F4 长期记忆治理：记忆分类、候选审批、查看/编辑/删除、敏感信息防写入
 - F5 安全策略与 Secret Guard：统一 secret scanning、策略解释、危险命令更细粒度结构分析
 - F6 评测与回放系统：run replay、golden tasks、安全回归、工具链路回放
@@ -671,6 +738,7 @@ go test ./...
 - approval snapshot behavior and hash integrity
 - durable run state / multi-step workflow / persistent resume / run API
 - workflow start / pause / resume / reject / idempotency
+- ops host profile API, local/SSH/Docker/K8s mock-based tools, runbook planning/execution routing, rollback approval payload, planner ops mapping
 - API smoke flows
 
 可选外部依赖集成测试建议通过环境变量显式开启，例如：
@@ -679,6 +747,9 @@ go test ./...
 RUN_INTEGRATION=1 go test ./...
 RUN_QDRANT_INTEGRATION=1 go test ./...
 RUN_POSTGRES_INTEGRATION=1 go test ./...
+RUN_SSH_INTEGRATION=1 go test ./...
+RUN_DOCKER_INTEGRATION=1 go test ./...
+RUN_K8S_INTEGRATION=1 go test ./...
 ```
 
 ## 当前 MVP 限制和后续 TODO
@@ -689,6 +760,7 @@ RUN_POSTGRES_INTEGRATION=1 go test ./...
 - Skill Runtime 已支持 zip 安装、manifest permissions 校验，以及 Linux namespace/chroot 优先的 stronger runner；但 seccomp、cgroup、host allowlist 和更完整 rootfs 封装仍待后续阶段补齐
 - MCP runtime 已支持 stdio/http、dialect compatibility profile 和 conformance matrix；SSE、流式结果、capability negotiation 和更高保真外部 server 集成矩阵仍待后续扩展
 - Code Workspace 已支持读/搜/项目检测、结构化 CodePlan、测试执行、失败解析、Git workflow summary、patch validation/dry-run 和审批后 patch apply；自动修复循环已有有界状态接口和审批恢复后 rerun tests，但仍不保证自动修好所有失败，不做自动写入或自动 push
+- Ops Capability 已支持结构化 local/SSH/Docker/K8s 排查、写操作审批、runbook 和 rollback plan；真实外部环境测试需显式 integration env，HostProfile 当前为进程内管理，rollback 对部分操作只能 best-effort
 - CLI 已走 HTTP API，但仍是轻量控制台，不包含富交互 TUI
 
 ## 任务清单

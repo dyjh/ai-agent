@@ -17,7 +17,7 @@ var redactionPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)(session\s*[:=]\s*)([^\s"']+)`),
 }
 
-var sensitiveKeyPattern = regexp.MustCompile(`(?i)(api[_-]?key|authorization|bearer|cookie|password|private[_-]?key|secret|session|token)`)
+var sensitiveKeyPattern = regexp.MustCompile(`(?i)(api[_-]?key|authorization|bearer|cookie|credential|identity[_-]?file|key[_-]?path|kubeconfig|password|private[_-]?key|secret|session|token)`)
 
 // RedactString masks high-risk secrets before logging or persistence.
 func RedactString(value string) string {

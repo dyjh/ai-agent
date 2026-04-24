@@ -270,8 +270,25 @@ func approvalSummary(proposal core.ToolProposal, inference core.EffectInferenceR
 		if serverID != "" && toolName != "" {
 			return fmt.Sprintf("准备调用 MCP 工具 `%s/%s`，风险等级为 %s。", serverID, toolName, inference.RiskLevel)
 		}
+	default:
+		if strings.HasPrefix(proposal.Tool, "ops.") {
+			target := opsApprovalTarget(proposal.Input)
+			if target != "" {
+				return fmt.Sprintf("准备执行运维操作 `%s`，目标 `%s`，风险等级为 %s。", proposal.Tool, target, inference.RiskLevel)
+			}
+			return fmt.Sprintf("准备执行运维操作 `%s`，风险等级为 %s。", proposal.Tool, inference.RiskLevel)
+		}
 	}
 	return fmt.Sprintf("准备执行 `%s`，风险等级为 %s。", proposal.Tool, inference.RiskLevel)
+}
+
+func opsApprovalTarget(input map[string]any) string {
+	for _, key := range []string{"service", "service_name", "container", "container_id", "target", "name", "resource"} {
+		if value, ok := input[key].(string); ok && value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func cloneApproval(record core.ApprovalRecord) *core.ApprovalRecord {

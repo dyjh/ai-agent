@@ -1,16 +1,16 @@
 {
   "project": "local-agent",
-  "source": "promote-stageF-2",
-  "last_updated": "2026-04-24T21:10:00+08:00",
+  "source": "promote-stageF-4",
+  "last_updated": "2026-04-24T22:30:00+08:00",
   "overall_status": "post_mvp_full_agent_in_progress",
-  "current_task_id": "full-agent-code-capability",
-  "current_task_title": "Phase F1: Code Capability Loop (F1-E continued hardening)",
+  "current_task_id": "full-agent-rag-reliability",
+  "current_task_title": "Phase F3: RAG Reliability",
   "summary": {
-    "headline": "MVP 主链路保持稳定，已完成 F0 状态治理，并继续推进全能型 Agent 的 F1 代码能力闭环硬化。",
+    "headline": "MVP 主链路保持稳定，F1 代码能力闭环和 F2 运维能力闭环已完成，下一阶段进入 RAG 可靠性增强。",
     "progress": {
-      "completed": 16,
+      "completed": 18,
       "in_progress": 1,
-      "pending": 6,
+      "pending": 4,
       "total": 23
     },
     "verified": [
@@ -30,7 +30,8 @@
       "2026-04-24 已完成 Phase F1-A/F1-B 首轮：补齐 code.list_files / search_text / search_symbol / inspect_project / detect_language / detect_test_command / explain_diff，强化 code.propose_patch / code.apply_patch 的 diff preview、hash guard、敏感路径审批和失败回滚，并确认 go test ./... 通过。",
       "2026-04-24 已完成 Phase F1-C/F1-D：新增 code.run_tests / code.parse_test_failure / code.fix_test_failure_loop 最小闭环、Git workflow tools、patch validate/dry-run、planner/CLI 代码入口和对应测试。",
       "2026-04-24 已完成 Phase F1-E 首轮硬化：新增 schema-driven CodePlan 持久化、fix loop 状态接口、审批后 apply_patch -> rerun tests、增强 unified diff parser/hash/rollback metadata、git.diff_summary / git.commit_message_proposal 和对应测试，并确认 go test ./... 通过。",
-      "2026-04-24 继续完成 F1-E 硬化：code.propose_patch 支持 unified diff preview，fix loop 可携带 test/patch 状态并处理 approval rejected/max iterations，Planner 正确传递 CLI workspace hint，git.commit 增加 status/staged diff/message pre-check，并补充回归测试。"
+      "2026-04-24 继续完成 F1-E 硬化：code.propose_patch 支持 unified diff preview，fix loop 可携带 test/patch 状态并处理 approval rejected/max iterations，Planner 正确传递 CLI workspace hint，git.commit 增加 status/staged diff/message pre-check，并补充回归测试。",
+      "2026-04-24 已完成 Phase F2：新增 HostProfile API/CLI、Local/SSH/Docker/K8s 结构化 Ops tools、Runbook plan/execute、Rollback Plan、Ops planner mapping、Swagger/OpenAPI 更新和 mock-based 回归测试，并确认 go test ./... 通过。"
     ],
     "unfinished_overview": [
       "当前 step loop 已覆盖本地单用户可恢复多步任务，但仍不是无限自动规划的通用 graph 平台。",
@@ -38,6 +39,7 @@
       "当前 LinuxIsolatedRunner 已提供 namespace/chroot 优先的 stronger path，但 seccomp、cgroup、host allowlist、bind mount rootfs 和动态依赖自动封装仍属于 post-MVP backlog。",
       "MCP runtime 已有 stdio/http compatibility profile 和默认 conformance matrix，但 SSE、流式结果、capability negotiation 和真实外部 server 集成矩阵仍属于后续 backlog。",
       "Code Workspace 已覆盖读/搜/项目检测、结构化 CodePlan、测试执行、失败解析、Git workflow summary、patch propose/validate/dry-run 和审批后 patch apply；自动修复循环已有有界状态接口和状态携带能力，但自动 patch 质量仍依赖 planner/model。",
+      "Ops Capability 已覆盖本地/SSH/Docker/K8s 结构化排查、写操作审批、runbook 和 rollback plan；真实 SSH/Docker/K8s 集成测试仍需要显式环境 gate，部分 rollback 只能 best-effort。",
       "更复杂的 graph/branch/parallel workflow 仍属于后续 backlog。"
     ]
   },
@@ -360,7 +362,7 @@
     {
       "id": "full-agent-code-capability",
       "title": "Phase F1: Code Capability Loop",
-      "status": "in_progress",
+      "status": "completed",
       "completed_items": [
         "补齐 code.list_files、code.search_text、code.search_symbol、code.inspect_project、code.detect_language、code.detect_test_command 和 code.explain_diff ToolSpec / executor。",
         "保留 code.search 作为 code.search_text 的兼容 alias。",
@@ -404,17 +406,35 @@
     {
       "id": "full-agent-ops-capability",
       "title": "Phase F2: Ops Capability Loop",
-      "status": "pending",
+      "status": "completed",
+      "completed_items": [
+        "新增 Ops Manager 和 HostProfile 结构，支持 local / ssh / docker / k8s 类型校验、默认 local host、敏感 metadata/key/password/kubeconfig 字段脱敏，以及 /v1/ops/hosts CRUD/test API。",
+        "新增 Local Ops tools：ops.local.system_info、processes、disk_usage、memory_usage、network_info、service_status、logs_tail 和 service_restart；只读工具高置信自动执行，敏感日志路径和 service_restart 进入审批。",
+        "新增 SSH Ops tools：ops.ssh.system_info、processes、disk_usage、memory_usage、logs_tail、service_status 和 service_restart；固定远程命令模板，不暴露任意 SSH 命令，写操作必须审批。",
+        "新增 Docker Ops tools：ops.docker.ps、inspect、logs、stats、restart、stop、start；读操作自动执行，生命周期变更必须审批并附带 rollback_plan。",
+        "新增 Kubernetes Ops tools：ops.k8s.get、describe、logs、events、apply、delete、rollout_restart；读操作自动执行，apply/restart/delete 必须审批，apply 审批包含 manifest_summary。",
+        "新增 Markdown Runbook 支持：runbook.list/read/plan/execute_step/execute，dry-run 不执行，每个可执行 step 都转成 ToolProposal 走 ToolRouter / Policy / Approval。",
+        "PolicyEngine 对 ops 写操作审批 payload 增加 impact、rollback_plan 和 K8s manifest_summary；Approval summary 支持 ops 目标描述。",
+        "Planner 常见运维请求优先映射到结构化 Ops tools，CLI 新增 agent ops hosts/ssh/docker/k8s/runbooks 命令。",
+        "补充 HostProfile API、local tools、SSH/Docker/K8s mock executor、runbook、rollback plan 和 planner ops mapping 回归测试，并确认 go test ./... 通过。"
+      ],
+      "remaining_items": [
+        "默认测试不依赖真实 SSH/Docker/K8s；后续可增加 RUN_SSH_INTEGRATION、RUN_DOCKER_INTEGRATION、RUN_K8S_INTEGRATION gate 下的真实环境矩阵。",
+        "HostProfile 当前为进程内管理，后续可按本地单用户模式落盘到配置文件，但仍不存储密钥正文。",
+        "Runbook step mapping 仍是保守启发式，后续可接入更强的 Eino/LLM OpsPlan，但每步仍必须走 ToolRouter。",
+        "Rollback Plan 对 restart/stop/delete 等操作只提供 best-effort 说明，不能保证恢复进程内状态。"
+      ],
       "deliverables": [
-        "Host profile",
-        "Ops tools",
-        "Runbook and rollback plan"
+        "Host profile API and CLI",
+        "Local / SSH / Docker / Kubernetes structured Ops tools",
+        "Runbook plan/execute and rollback plan",
+        "Ops policy, approval payload, planner mapping, Swagger and tests"
       ]
     },
     {
       "id": "full-agent-rag-reliability",
       "title": "Phase F3: RAG Reliability",
-      "status": "pending",
+      "status": "in_progress",
       "deliverables": [
         "Knowledge connectors",
         "Incremental indexing",
@@ -547,6 +567,11 @@
       "at": "2026-04-24T21:10:00+08:00",
       "task_id": "full-agent-code-capability",
       "summary": "继续推进 F1-E：code.propose_patch 支持 unified diff preview，fix loop 状态携带和 max iteration/approval rejected 停止语义，Planner workspace hint 传递，git.commit pre-check，以及对应回归测试和文档更新。"
+    },
+    {
+      "at": "2026-04-24T22:30:00+08:00",
+      "task_id": "full-agent-ops-capability",
+      "summary": "完成 F1 finalization 并实现 F2：HostProfile API/CLI、Local/SSH/Docker/K8s 结构化运维工具、Runbook dry-run/execute、Rollback Plan、Ops Policy/Planner 映射、Swagger/OpenAPI 更新和 mock-based 回归测试。"
     }
   ]
 }

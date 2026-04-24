@@ -7,6 +7,7 @@ import (
 
 	"local-agent/internal/core"
 	"local-agent/internal/einoapp"
+	"local-agent/internal/tools/ops"
 )
 
 // PlanDecision is the planner outcome for one planning pass.
@@ -227,6 +228,123 @@ func (p HeuristicPlanner) Plan(_ context.Context, input PlanInput) (Plan, error)
 			CodePlan:     codeInspectPlan(workspace, input.UserMessage),
 			Reason:       "matched code work intent",
 		}, nil
+	case wantsRunbookOps(normalized):
+		runbookID := extractQuoted(input.UserMessage)
+		if runbookID == "" {
+			runbookID = extractPathAfter(input.UserMessage, []string{"runbook", "排查", "runbooks"})
+		}
+		if runbookID == "" {
+			runbookID = "diagnose-local-high-cpu"
+		}
+		proposal := p.Adapter.NewProposal("runbook.plan", map[string]any{
+			"runbook_id": runbookID,
+			"host_id":    "local",
+		}, "规划运维 runbook", []string{"runbook.read"})
+		return Plan{
+			Decision:     PlanDecisionTool,
+			Preamble:     "我会先把 runbook 解析为结构化运维步骤，执行时每步仍走工具路由和审批。",
+			ToolProposal: &proposal,
+			Reason:       "matched runbook ops intent",
+		}, nil
+	case wantsSSHOps(normalized):
+		hostID := extractHostID(input.UserMessage)
+		if hostID == "" {
+			hostID = "local"
+		}
+		tool := "ops.ssh.processes"
+		inputMap := map[string]any{"host_id": hostID}
+		purpose := "查看 SSH 主机进程"
+		if strings.Contains(normalized, "日志") || strings.Contains(normalized, "log") {
+			tool = "ops.ssh.logs_tail"
+			inputMap["path"] = fallbackLogPath(input.UserMessage)
+			inputMap["max_lines"] = 100
+			purpose = "读取 SSH 主机日志"
+		}
+		proposal := p.Adapter.NewProposal(tool, inputMap, purpose, nil)
+		return Plan{
+			Decision:     PlanDecisionTool,
+			Preamble:     "我会使用结构化 SSH 运维工具；远程写操作会进入审批。",
+			ToolProposal: &proposal,
+			Reason:       "matched ssh ops intent",
+		}, nil
+	case wantsDockerOps(normalized):
+		tool := "ops.docker.ps"
+		inputMap := map[string]any{}
+		purpose := "查看 Docker 容器状态"
+		if strings.Contains(normalized, "stats") || strings.Contains(normalized, "资源") {
+			tool = "ops.docker.stats"
+			purpose = "查看 Docker 容器资源使用情况"
+		}
+		if strings.Contains(normalized, "log") || strings.Contains(normalized, "日志") {
+			tool = "ops.docker.logs"
+			inputMap["container"] = fallbackTarget(input.UserMessage, "container")
+			inputMap["max_lines"] = 200
+			purpose = "读取 Docker 容器日志"
+		}
+		if strings.Contains(normalized, "restart") || strings.Contains(normalized, "重启") {
+			tool = "ops.docker.restart"
+			inputMap["container"] = fallbackTarget(input.UserMessage, "container")
+			purpose = "重启 Docker 容器"
+		}
+		proposal := p.Adapter.NewProposal(tool, inputMap, purpose, nil)
+		return Plan{
+			Decision:     PlanDecisionTool,
+			Preamble:     "我会使用结构化 Docker 运维工具；变更容器状态的操作会进入审批。",
+			ToolProposal: &proposal,
+			Reason:       "matched docker ops intent",
+		}, nil
+	case wantsK8sOps(normalized):
+		tool := "ops.k8s.get"
+		inputMap := map[string]any{"resource": extractK8sResource(input.UserMessage, "pods")}
+		purpose := "查看 Kubernetes 资源"
+		if strings.Contains(normalized, "log") || strings.Contains(normalized, "日志") {
+			tool = "ops.k8s.logs"
+			inputMap = map[string]any{"target": fallbackTarget(input.UserMessage, "pod"), "max_lines": 200}
+			purpose = "读取 Kubernetes Pod 日志"
+		}
+		if strings.Contains(normalized, "describe") || strings.Contains(normalized, "描述") {
+			tool = "ops.k8s.describe"
+			inputMap = map[string]any{"resource": "pod", "name": fallbackTarget(input.UserMessage, "pod")}
+			purpose = "Describe Kubernetes 资源"
+		}
+		if strings.Contains(normalized, "apply") {
+			tool = "ops.k8s.apply"
+			inputMap = map[string]any{"manifest_path": fallbackTarget(input.UserMessage, "manifest.yaml")}
+			purpose = "应用 Kubernetes manifest"
+		}
+		proposal := p.Adapter.NewProposal(tool, inputMap, purpose, nil)
+		return Plan{
+			Decision:     PlanDecisionTool,
+			Preamble:     "我会使用结构化 Kubernetes 运维工具；apply/delete/restart 会进入审批。",
+			ToolProposal: &proposal,
+			Reason:       "matched k8s ops intent",
+		}, nil
+	case wantsLocalRestart(normalized):
+		service := extractQuoted(input.UserMessage)
+		if service == "" {
+			service = extractPathAfter(input.UserMessage, []string{"service", "服务"})
+		}
+		if service == "" {
+			service = "unknown"
+		}
+		proposal := p.Adapter.NewProposal("ops.local.service_restart", map[string]any{
+			"service": service,
+		}, "重启本地服务", []string{"service.restart", "system.write"})
+		return Plan{
+			Decision:     PlanDecisionTool,
+			Preamble:     "这个运维操作会改变本机服务状态，我会先请求审批并附带 rollback plan。",
+			ToolProposal: &proposal,
+			Reason:       "matched local service restart intent",
+		}, nil
+	case wantsLocalOps(normalized):
+		tool, purpose, inputMap := localOpsToolFor(input.UserMessage, normalized)
+		proposal := p.Adapter.NewProposal(tool, inputMap, purpose, nil)
+		return Plan{
+			Decision:     PlanDecisionTool,
+			Preamble:     "我会使用结构化本地运维只读工具进行排查。",
+			ToolProposal: &proposal,
+			Reason:       "matched local ops intent",
+		}, nil
 	case strings.Contains(normalized, "cpu") && strings.Contains(normalized, "进程"):
 		proposal := p.Adapter.NewProposal("shell.exec", map[string]any{
 			"shell":           "bash",
@@ -301,6 +419,29 @@ func (p HeuristicPlanner) planAfterTool(input PlanInput) (Plan, bool) {
 	}
 	workspace := extractWorkspace(input.UserMessage)
 	switch input.LastProposal.Tool {
+	case "runbook.plan":
+		if !wantsRunbookExecution(strings.ToLower(strings.TrimSpace(input.UserMessage))) {
+			return Plan{
+				Decision: PlanDecisionStop,
+				Message:  summarizeToolResult(input.LastToolResult),
+				Reason:   "runbook plan requested without execution intent",
+			}, true
+		}
+		step, ok := firstExecutableRunbookStep(input.LastToolResult)
+		if !ok {
+			return Plan{
+				Decision: PlanDecisionStop,
+				Message:  "Runbook plan 已生成，但没有可自动映射的执行步骤。",
+				Reason:   "runbook plan has no executable step",
+			}, true
+		}
+		proposal := p.Adapter.NewProposal(step.Tool, step.Input, "执行 runbook step: "+step.Text, nil)
+		return Plan{
+			Decision:     PlanDecisionTool,
+			Preamble:     "Runbook 已规划，我会把下一步转换为结构化 Ops 工具调用。",
+			ToolProposal: &proposal,
+			Reason:       "execute first runbook step through workflow",
+		}, true
 	case "code.run_tests":
 		passed, _ := input.LastToolResult.Output["passed"].(bool)
 		if passed {
@@ -531,6 +672,152 @@ func wantsGitCommitMessage(normalized string) bool {
 
 func wantsGitLog(normalized string) bool {
 	return strings.Contains(normalized, "git log") || strings.Contains(normalized, "提交记录")
+}
+
+func wantsLocalOps(normalized string) bool {
+	return containsAny(normalized, []string{
+		"本机 cpu", "cpu 占用", "cpu占用", "磁盘空间", "disk usage", "内存", "memory usage",
+		"系统信息", "网络信息", "最近日志", "local ops",
+	})
+}
+
+func wantsLocalRestart(normalized string) bool {
+	return (strings.Contains(normalized, "重启") || strings.Contains(normalized, "restart")) &&
+		(strings.Contains(normalized, "服务") || strings.Contains(normalized, "service"))
+}
+
+func wantsDockerOps(normalized string) bool {
+	return strings.Contains(normalized, "docker")
+}
+
+func wantsK8sOps(normalized string) bool {
+	return strings.Contains(normalized, "k8s") || strings.Contains(normalized, "kubernetes") || strings.Contains(normalized, "kubectl")
+}
+
+func wantsRunbookOps(normalized string) bool {
+	return strings.Contains(normalized, "runbook") || strings.Contains(normalized, "运行手册") || strings.Contains(normalized, "按 runbook")
+}
+
+func wantsRunbookExecution(normalized string) bool {
+	return strings.Contains(normalized, "执行") || strings.Contains(normalized, "execute") || strings.Contains(normalized, "排查") || strings.Contains(normalized, "diagnose") || strings.Contains(normalized, "按 runbook")
+}
+
+func wantsSSHOps(normalized string) bool {
+	return strings.Contains(normalized, "ssh")
+}
+
+func localOpsToolFor(message, normalized string) (string, string, map[string]any) {
+	switch {
+	case strings.Contains(normalized, "磁盘") || strings.Contains(normalized, "disk"):
+		return "ops.local.disk_usage", "查看本机磁盘使用情况", map[string]any{}
+	case strings.Contains(normalized, "内存") || strings.Contains(normalized, "memory"):
+		return "ops.local.memory_usage", "查看本机内存使用情况", map[string]any{}
+	case strings.Contains(normalized, "网络") || strings.Contains(normalized, "network"):
+		return "ops.local.network_info", "查看本机网络接口信息", map[string]any{}
+	case strings.Contains(normalized, "日志") || strings.Contains(normalized, "log"):
+		path := fallbackLogPath(message)
+		return "ops.local.logs_tail", "读取本机日志尾部", map[string]any{"path": path, "max_lines": 100}
+	case strings.Contains(normalized, "系统") || strings.Contains(normalized, "system"):
+		return "ops.local.system_info", "查看本机系统信息", map[string]any{}
+	default:
+		return "ops.local.processes", "查看本机进程和 CPU 占用", map[string]any{}
+	}
+}
+
+func fallbackLogPath(message string) string {
+	path := extractQuoted(message)
+	if path == "" {
+		path = "/var/log/syslog"
+	}
+	return path
+}
+
+func fallbackTarget(message, fallback string) string {
+	if quoted := extractQuoted(message); quoted != "" {
+		return quoted
+	}
+	fields := strings.Fields(message)
+	for idx, field := range fields {
+		lower := strings.ToLower(strings.Trim(field, "`'\"，,。;；"))
+		if lower == "container" || lower == "容器" || lower == "pod" || lower == "pods" || lower == "service" || lower == "服务" {
+			if idx+1 < len(fields) {
+				return strings.Trim(fields[idx+1], "`'\"，,。;；")
+			}
+		}
+	}
+	return fallback
+}
+
+func extractHostID(message string) string {
+	fields := strings.Fields(message)
+	for idx, field := range fields {
+		lower := strings.ToLower(strings.Trim(field, "`'\"，,。;；"))
+		if lower == "host" || lower == "host_id" || lower == "主机" {
+			if idx+1 < len(fields) {
+				return strings.Trim(fields[idx+1], "`'\"，,。;；")
+			}
+		}
+	}
+	return extractQuoted(message)
+}
+
+func extractK8sResource(message, fallback string) string {
+	fields := strings.Fields(message)
+	for idx, field := range fields {
+		lower := strings.ToLower(strings.Trim(field, "`'\"，,。;；"))
+		if lower == "get" && idx+1 < len(fields) {
+			return strings.Trim(fields[idx+1], "`'\"，,。;；")
+		}
+	}
+	return fallback
+}
+
+func firstExecutableRunbookStep(result *core.ToolResult) (ops.RunbookPlanStep, bool) {
+	if result == nil {
+		return ops.RunbookPlanStep{}, false
+	}
+	switch plan := result.Output["plan"].(type) {
+	case ops.RunbookPlan:
+		for _, step := range plan.Steps {
+			if step.Tool != "" {
+				return step, true
+			}
+		}
+	case map[string]any:
+		steps, _ := plan["steps"].([]any)
+		for _, item := range steps {
+			raw, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			tool, _ := raw["tool"].(string)
+			if tool == "" {
+				continue
+			}
+			input, _ := raw["input"].(map[string]any)
+			text, _ := raw["text"].(string)
+			return ops.RunbookPlanStep{
+				Index: toolsInt(raw["index"]),
+				Text:  text,
+				Tool:  tool,
+				Input: core.CloneMap(input),
+			}, true
+		}
+	}
+	return ops.RunbookPlanStep{}, false
+}
+
+func toolsInt(value any) int {
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	default:
+		return 0
+	}
 }
 
 func containsAny(value string, needles []string) bool {

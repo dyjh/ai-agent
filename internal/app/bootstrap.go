@@ -20,6 +20,7 @@ import (
 	"local-agent/internal/tools/kb"
 	"local-agent/internal/tools/mcp"
 	memstore "local-agent/internal/tools/memory"
+	"local-agent/internal/tools/ops"
 	"local-agent/internal/tools/shell"
 	"local-agent/internal/tools/skills"
 )
@@ -38,6 +39,7 @@ type Bootstrap struct {
 	Knowledge *kb.Service
 	Skills    *skills.Manager
 	MCP       *mcp.Manager
+	Ops       *ops.Manager
 }
 
 // NewBootstrap wires the base application dependencies.
@@ -50,6 +52,8 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 	_ = os.MkdirAll(cfg.Events.AuditRoot, 0o755)
 	skillsRoot := filepath.Join(filepath.Dir(cfg.Memory.RootDir), "skills")
 	_ = os.MkdirAll(skillsRoot, 0o755)
+	runbookRoot := filepath.Join(filepath.Dir(cfg.Memory.RootDir), "runbooks")
+	_ = os.MkdirAll(runbookRoot, 0o755)
 
 	store := repo.NewMemoryStore()
 	if cfg.Database.URL != "" {
@@ -92,9 +96,10 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 	if err := mcpManager.LoadConfig(resolveConfigPath("config/mcp.servers.yaml"), resolveConfigPath("config/mcp.tool-policies.yaml")); err != nil {
 		return nil, err
 	}
+	opsManager := ops.NewManager(runbookRoot)
 	approvals := agent.NewApprovalCenter()
 	eventWriter := events.NewJSONLWriter(cfg.Events.JSONLRoot, cfg.Events.AuditRoot)
-	registry := registerTools(cfg, memoryStore, knowledgeService, skillsManager, mcpManager)
+	registry := registerTools(cfg, memoryStore, knowledgeService, skillsManager, mcpManager, opsManager)
 	router := toolscore.NewRouter(
 		registry,
 		agent.NewEffectInferrer(cfg.Policy, skillsManager, mcpManager),
@@ -102,6 +107,7 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 		approvals,
 		eventWriter,
 	)
+	opsManager.SetRouter(router)
 
 	model, err := einoapp.NewChatModel(ctx, cfg.LLM)
 	if err != nil {
@@ -139,10 +145,11 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 		Knowledge: knowledgeService,
 		Skills:    skillsManager,
 		MCP:       mcpManager,
+		Ops:       opsManager,
 	}, nil
 }
 
-func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb.Service, skillsManager *skills.Manager, mcpManager *mcp.Manager) *toolscore.Registry {
+func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb.Service, skillsManager *skills.Manager, mcpManager *mcp.Manager, opsManager *ops.Manager) *toolscore.Registry {
 	registry := toolscore.NewRegistry()
 	workspace := code.Workspace{Root: cfg.Owner.DefaultWorkspace, SensitivePaths: cfg.Policy.SensitivePaths}
 
@@ -281,6 +288,7 @@ func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb
 	}, &code.FixTestFailureLoopExecutor{Workspace: workspace, DefaultTimeoutSeconds: cfg.Shell.DefaultTimeoutSeconds, MaxOutputBytes: int64(cfg.Shell.MaxOutputChars), MaxIterations: 3})
 
 	registerGitTools(registry, cfg)
+	registerOpsTools(registry, cfg, opsManager)
 	registry.Register(core.ToolSpec{
 		ID:             "memory.search",
 		Provider:       "local",
@@ -388,6 +396,153 @@ func registerGitTools(registry *toolscore.Registry, cfg config.Config) {
 			TimeoutSeconds: cfg.Shell.DefaultTimeoutSeconds,
 			MaxOutputBytes: int64(cfg.Shell.MaxOutputChars),
 		})
+	}
+}
+
+func registerOpsTools(registry *toolscore.Registry, cfg config.Config, opsManager *ops.Manager) {
+	localReadEffects := map[string][]string{
+		"system_info":    []string{"system.read"},
+		"processes":      []string{"process.read", "system.metrics.read"},
+		"disk_usage":     []string{"disk.read", "system.metrics.read"},
+		"memory_usage":   []string{"memory.read", "system.metrics.read"},
+		"network_info":   []string{"network.read"},
+		"service_status": []string{"service.read"},
+		"logs_tail":      []string{"log.read"},
+	}
+	for operation, effects := range localReadEffects {
+		toolName := "ops.local." + operation
+		registry.Register(core.ToolSpec{
+			ID:             toolName,
+			Provider:       "local",
+			Name:           toolName,
+			Description:    "Run fixed local ops read operation: " + operation,
+			InputSchema:    map[string]any{"path": "string", "service": "string", "max_lines": "number", "max_output_bytes": "number"},
+			DefaultEffects: append([]string{"read"}, effects...),
+		}, &ops.LocalExecutor{
+			Operation:             operation,
+			DefaultTimeoutSeconds: cfg.Shell.DefaultTimeoutSeconds,
+			MaxOutputBytes:        int64(cfg.Shell.MaxOutputChars),
+		})
+	}
+	registry.Register(core.ToolSpec{
+		ID:             "ops.local.service_restart",
+		Provider:       "local",
+		Name:           "ops.local.service_restart",
+		Description:    "Restart a local service after approval",
+		InputSchema:    map[string]any{"service": "string", "timeout_seconds": "number"},
+		DefaultEffects: []string{"service.restart", "system.write"},
+	}, &ops.LocalExecutor{
+		Operation:             "service_restart",
+		DefaultTimeoutSeconds: cfg.Shell.DefaultTimeoutSeconds,
+		MaxOutputBytes:        int64(cfg.Shell.MaxOutputChars),
+	})
+
+	sshReadOps := []string{"system_info", "processes", "disk_usage", "memory_usage", "logs_tail", "service_status"}
+	for _, operation := range sshReadOps {
+		toolName := "ops.ssh." + operation
+		registry.Register(core.ToolSpec{
+			ID:             toolName,
+			Provider:       "local",
+			Name:           toolName,
+			Description:    "Run fixed SSH ops read operation: " + operation,
+			InputSchema:    map[string]any{"host_id": "string", "path": "string", "service": "string", "max_lines": "number", "max_output_bytes": "number"},
+			DefaultEffects: []string{"read", "ssh.read"},
+		}, &ops.SSHExecutor{
+			Manager:               opsManager,
+			Operation:             operation,
+			DefaultTimeoutSeconds: cfg.Shell.DefaultTimeoutSeconds,
+			MaxOutputBytes:        int64(cfg.Shell.MaxOutputChars),
+		})
+	}
+	registry.Register(core.ToolSpec{
+		ID:             "ops.ssh.service_restart",
+		Provider:       "local",
+		Name:           "ops.ssh.service_restart",
+		Description:    "Restart a service over SSH after approval",
+		InputSchema:    map[string]any{"host_id": "string", "service": "string"},
+		DefaultEffects: []string{"ssh.write", "service.restart", "system.write"},
+	}, &ops.SSHExecutor{
+		Manager:               opsManager,
+		Operation:             "service_restart",
+		DefaultTimeoutSeconds: cfg.Shell.DefaultTimeoutSeconds,
+		MaxOutputBytes:        int64(cfg.Shell.MaxOutputChars),
+	})
+
+	for _, operation := range []string{"ps", "inspect", "logs", "stats", "restart", "stop", "start"} {
+		toolName := "ops.docker." + operation
+		effects := []string{"read", "container.read"}
+		if operation == "logs" {
+			effects = append(effects, "log.read")
+		}
+		if operation == "stats" {
+			effects = append(effects, "system.metrics.read")
+		}
+		if operation == "restart" || operation == "stop" || operation == "start" {
+			effects = []string{"container.write", "container." + operation}
+		}
+		registry.Register(core.ToolSpec{
+			ID:             toolName,
+			Provider:       "local",
+			Name:           toolName,
+			Description:    "Run fixed Docker ops operation: " + operation,
+			InputSchema:    map[string]any{"container": "string", "max_lines": "number", "max_output_bytes": "number"},
+			DefaultEffects: effects,
+		}, &ops.DockerExecutor{
+			Operation:             operation,
+			DefaultTimeoutSeconds: cfg.Shell.DefaultTimeoutSeconds,
+			MaxOutputBytes:        int64(cfg.Shell.MaxOutputChars),
+		})
+	}
+
+	for _, operation := range []string{"get", "describe", "logs", "events", "apply", "delete", "rollout_restart"} {
+		toolName := "ops.k8s." + operation
+		effects := []string{"read", "k8s.read"}
+		if operation == "logs" {
+			effects = append(effects, "log.read")
+		}
+		if operation == "apply" || operation == "rollout_restart" {
+			effects = []string{"k8s.write"}
+		}
+		if operation == "delete" {
+			effects = []string{"k8s.delete", "dangerous"}
+		}
+		registry.Register(core.ToolSpec{
+			ID:             toolName,
+			Provider:       "local",
+			Name:           toolName,
+			Description:    "Run fixed Kubernetes ops operation: " + operation,
+			InputSchema:    map[string]any{"resource": "string", "name": "string", "target": "string", "namespace": "string", "manifest_path": "string", "context": "string"},
+			DefaultEffects: effects,
+		}, &ops.K8sExecutor{
+			Manager:               opsManager,
+			Operation:             operation,
+			DefaultTimeoutSeconds: cfg.Shell.DefaultTimeoutSeconds,
+			MaxOutputBytes:        int64(cfg.Shell.MaxOutputChars),
+		})
+	}
+
+	runbookSpecs := []struct {
+		name        string
+		description string
+		executor    toolscore.Executor
+		effects     []string
+	}{
+		{name: "list", description: "List local Markdown runbooks", executor: &ops.RunbookListExecutor{Manager: opsManager}, effects: []string{"read", "runbook.read"}},
+		{name: "read", description: "Read one local Markdown runbook", executor: &ops.RunbookReadExecutor{Manager: opsManager}, effects: []string{"read", "runbook.read"}},
+		{name: "plan", description: "Plan a runbook without executing steps", executor: &ops.RunbookPlanExecutor{Manager: opsManager}, effects: []string{"read", "runbook.read"}},
+		{name: "execute_step", description: "Route one runbook step through ToolRouter", executor: &ops.RunbookExecuteStepExecutor{Manager: opsManager}, effects: []string{"runbook.execute", "workflow.route"}},
+		{name: "execute", description: "Execute a runbook by routing each step through ToolRouter", executor: &ops.RunbookExecuteExecutor{Manager: opsManager}, effects: []string{"runbook.execute", "workflow.route"}},
+	}
+	for _, spec := range runbookSpecs {
+		toolName := "runbook." + spec.name
+		registry.Register(core.ToolSpec{
+			ID:             toolName,
+			Provider:       "local",
+			Name:           toolName,
+			Description:    spec.description,
+			InputSchema:    map[string]any{"id": "string", "runbook_id": "string", "host_id": "string", "dry_run": "boolean", "max_steps": "number", "step": "object"},
+			DefaultEffects: append([]string(nil), spec.effects...),
+		}, spec.executor)
 	}
 }
 

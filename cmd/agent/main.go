@@ -33,6 +33,7 @@ func main() {
 	root.AddCommand(runsCommand(&serverURL))
 	root.AddCommand(codeCommand(&serverURL))
 	root.AddCommand(gitCommand(&serverURL))
+	root.AddCommand(opsCommand(&serverURL))
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
@@ -543,6 +544,222 @@ func gitCommand(serverURL *string) *cobra.Command {
 			return askWorkflow(*serverURL, fmt.Sprintf("请生成 commit message 建议但不要提交，workspace: %s", args[0]))
 		},
 	})
+	return cmd
+}
+
+func opsCommand(serverURL *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "ops",
+		Short: "Use operations tools through the agent workflow",
+	}
+	hostsCmd := &cobra.Command{
+		Use:   "hosts",
+		Short: "Manage operations host profiles",
+	}
+	hostsCmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List host profiles",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return printRequest(http.MethodGet, *serverURL+"/v1/ops/hosts", nil)
+		},
+	})
+	addHostCmd := &cobra.Command{
+		Use:   "add",
+		Short: "Add a local host profile",
+		RunE: func(c *cobra.Command, _ []string) error {
+			name, _ := c.Flags().GetString("name")
+			hostType, _ := c.Flags().GetString("type")
+			workspace, _ := c.Flags().GetString("working-directory")
+			return printJSONRequest(http.MethodPost, *serverURL+"/v1/ops/hosts", map[string]any{
+				"name":              name,
+				"type":              hostType,
+				"working_directory": workspace,
+			})
+		},
+	}
+	addHostCmd.Flags().String("name", "Localhost", "host profile name")
+	addHostCmd.Flags().String("type", "local", "host type")
+	addHostCmd.Flags().String("working-directory", ".", "working directory")
+	hostsCmd.AddCommand(addHostCmd)
+	addSSHCmd := &cobra.Command{
+		Use:   "add-ssh",
+		Short: "Add an SSH host profile without storing secrets",
+		RunE: func(c *cobra.Command, _ []string) error {
+			name, _ := c.Flags().GetString("name")
+			host, _ := c.Flags().GetString("host")
+			user, _ := c.Flags().GetString("user")
+			port, _ := c.Flags().GetInt("port")
+			authType, _ := c.Flags().GetString("auth-type")
+			keyPath, _ := c.Flags().GetString("key-path")
+			passwordRef, _ := c.Flags().GetString("password-ref")
+			return printJSONRequest(http.MethodPost, *serverURL+"/v1/ops/hosts", map[string]any{
+				"name": name,
+				"type": "ssh",
+				"ssh": map[string]any{
+					"host":         host,
+					"user":         user,
+					"port":         port,
+					"auth_type":    authType,
+					"key_path":     keyPath,
+					"password_ref": passwordRef,
+				},
+			})
+		},
+	}
+	addSSHCmd.Flags().String("name", "SSH host", "host profile name")
+	addSSHCmd.Flags().String("host", "", "SSH hostname")
+	addSSHCmd.Flags().String("user", "", "SSH user")
+	addSSHCmd.Flags().Int("port", 22, "SSH port")
+	addSSHCmd.Flags().String("auth-type", "agent", "SSH auth type: agent, key, password-ref")
+	addSSHCmd.Flags().String("key-path", "", "SSH key path; value is redacted in API responses")
+	addSSHCmd.Flags().String("password-ref", "", "external password reference; value is redacted in API responses")
+	hostsCmd.AddCommand(addSSHCmd)
+	hostsCmd.AddCommand(&cobra.Command{
+		Use:   "get [host_id]",
+		Short: "Get one host profile",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printRequest(http.MethodGet, fmt.Sprintf("%s/v1/ops/hosts/%s", *serverURL, args[0]), nil)
+		},
+	})
+	hostsCmd.AddCommand(&cobra.Command{
+		Use:   "test [host_id]",
+		Short: "Test one host profile",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/ops/hosts/%s/test", *serverURL, args[0]), map[string]any{})
+		},
+	})
+	hostsCmd.AddCommand(&cobra.Command{
+		Use:   "remove [host_id]",
+		Short: "Remove one host profile",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printRequest(http.MethodDelete, fmt.Sprintf("%s/v1/ops/hosts/%s", *serverURL, args[0]), nil)
+		},
+	})
+	cmd.AddCommand(hostsCmd)
+
+	sshCmd := &cobra.Command{Use: "ssh", Short: "Run SSH ops through the workflow"}
+	sshCmd.AddCommand(&cobra.Command{
+		Use:   "processes [host_id]",
+		Short: "Inspect remote processes",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请查看 SSH host %s 的进程和 CPU 占用", args[0]))
+		},
+	})
+	sshCmd.AddCommand(&cobra.Command{
+		Use:   "logs [host_id] [path]",
+		Short: "Tail remote logs",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请查看 SSH host %s 的日志 `%s`", args[0], args[1]))
+		},
+	})
+	cmd.AddCommand(sshCmd)
+
+	dockerCmd := &cobra.Command{Use: "docker", Short: "Run Docker ops through the workflow"}
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "ps",
+		Short: "List Docker containers",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return askWorkflow(*serverURL, "请查看 docker 容器状态")
+		},
+	})
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "logs [container]",
+		Short: "Read Docker logs",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请查看 docker container `%s` 的日志", args[0]))
+		},
+	})
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "stats",
+		Short: "Read Docker stats",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return askWorkflow(*serverURL, "请查看 docker stats")
+		},
+	})
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "restart [container]",
+		Short: "Request approval to restart a Docker container",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请重启 docker container `%s`，必须审批", args[0]))
+		},
+	})
+	cmd.AddCommand(dockerCmd)
+
+	k8sCmd := &cobra.Command{Use: "k8s", Short: "Run Kubernetes ops through the workflow"}
+	k8sCmd.AddCommand(&cobra.Command{
+		Use:   "get [resource]",
+		Short: "Get Kubernetes resources",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请查看 k8s get %s", args[0]))
+		},
+	})
+	k8sCmd.AddCommand(&cobra.Command{
+		Use:   "logs [target]",
+		Short: "Read Kubernetes logs",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请查看 k8s pod `%s` 日志", args[0]))
+		},
+	})
+	k8sCmd.AddCommand(&cobra.Command{
+		Use:   "describe [resource] [name]",
+		Short: "Describe a Kubernetes resource",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请 describe k8s %s `%s`", args[0], args[1]))
+		},
+	})
+	k8sCmd.AddCommand(&cobra.Command{
+		Use:   "apply [manifest]",
+		Short: "Request approval to apply a Kubernetes manifest",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请 k8s apply `%s`，必须审批", args[0]))
+		},
+	})
+	cmd.AddCommand(k8sCmd)
+
+	runbooksCmd := &cobra.Command{Use: "runbooks", Short: "Manage operations runbooks"}
+	runbooksCmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List runbooks",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return printRequest(http.MethodGet, *serverURL+"/v1/ops/runbooks", nil)
+		},
+	})
+	runbooksCmd.AddCommand(&cobra.Command{
+		Use:   "read [id]",
+		Short: "Read a runbook",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printRequest(http.MethodGet, fmt.Sprintf("%s/v1/ops/runbooks/%s", *serverURL, args[0]), nil)
+		},
+	})
+	runbooksCmd.AddCommand(&cobra.Command{
+		Use:   "plan [id]",
+		Short: "Plan a runbook",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/ops/runbooks/%s/plan", *serverURL, args[0]), map[string]any{"dry_run": true})
+		},
+	})
+	runbooksCmd.AddCommand(&cobra.Command{
+		Use:   "execute [id]",
+		Short: "Execute a runbook through ToolRouter",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/ops/runbooks/%s/execute", *serverURL, args[0]), map[string]any{"max_steps": 5})
+		},
+	})
+	cmd.AddCommand(runbooksCmd)
 	return cmd
 }
 
