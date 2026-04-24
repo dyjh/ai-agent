@@ -90,6 +90,11 @@ definitions:
         additionalProperties: {}
         type: object
     type: object
+  internal_api_handlers.KBAnswerResponse:
+    properties:
+      answer:
+        $ref: '#/definitions/local-agent_internal_tools_kb.AnswerResult'
+    type: object
   internal_api_handlers.KBChunkListResponse:
     properties:
       items:
@@ -141,6 +146,20 @@ definitions:
       items:
         items:
           $ref: '#/definitions/local-agent_internal_core.KnowledgeBase'
+        type: array
+    type: object
+  internal_api_handlers.KnowledgeIndexJobListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_tools_kb.KnowledgeIndexJob'
+        type: array
+    type: object
+  internal_api_handlers.KnowledgeSourceListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_tools_kb.KnowledgeSource'
         type: array
     type: object
   internal_api_handlers.LegacyErrorResponse:
@@ -242,6 +261,20 @@ definitions:
       content:
         type: string
     type: object
+  internal_api_handlers.RAGEvalCaseListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_tools_kb.RAGEvalCase'
+        type: array
+    type: object
+  internal_api_handlers.RAGEvalRunRequest:
+    properties:
+      case_ids:
+        items:
+          type: string
+        type: array
+    type: object
   internal_api_handlers.RejectApprovalRequest:
     properties:
       reason:
@@ -253,6 +286,13 @@ definitions:
         type: string
       approved:
         type: boolean
+    type: object
+  internal_api_handlers.RetrievalResultListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_tools_kb.RetrievalResult'
+        type: array
     type: object
   internal_api_handlers.RunListResponse:
     properties:
@@ -270,10 +310,19 @@ definitions:
     type: object
   internal_api_handlers.SearchRequest:
     properties:
+      filters:
+        additionalProperties: {}
+        type: object
       limit:
         type: integer
+      mode:
+        type: string
       query:
         type: string
+      rerank:
+        type: boolean
+      top_k:
+        type: integer
     type: object
   internal_api_handlers.SkillDetailResponse:
     properties:
@@ -883,6 +932,302 @@ definitions:
       started_at:
         type: string
       tool_call_id:
+        type: string
+    type: object
+  local-agent_internal_tools_kb.AnswerInput:
+    properties:
+      filters:
+        additionalProperties: {}
+        type: object
+      kb_id:
+        type: string
+      mode:
+        $ref: '#/definitions/local-agent_internal_tools_kb.AnswerMode'
+      query:
+        type: string
+      require_citations:
+        type: boolean
+      rerank:
+        type: boolean
+      top_k:
+        type: integer
+    type: object
+  local-agent_internal_tools_kb.AnswerMode:
+    enum:
+    - normal
+    - kb_only
+    - no_citation_no_answer
+    type: string
+    x-enum-varnames:
+    - AnswerModeNormal
+    - AnswerModeKBOnly
+    - AnswerModeNoCitationNoAnswer
+  local-agent_internal_tools_kb.AnswerResult:
+    properties:
+      answer:
+        type: string
+      citations:
+        items:
+          $ref: '#/definitions/local-agent_internal_tools_kb.Citation'
+        type: array
+      has_evidence:
+        type: boolean
+      mode:
+        $ref: '#/definitions/local-agent_internal_tools_kb.AnswerMode'
+    type: object
+  local-agent_internal_tools_kb.Citation:
+    properties:
+      chunk_id:
+        type: string
+      document_id:
+        type: string
+      score:
+        type: number
+      section:
+        type: string
+      source_file:
+        type: string
+      source_id:
+        type: string
+      source_uri:
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  local-agent_internal_tools_kb.CreateSourceInput:
+    properties:
+      enabled:
+        type: boolean
+      exclude_globs:
+        items:
+          type: string
+        type: array
+      include_globs:
+        items:
+          type: string
+        type: array
+      metadata:
+        additionalProperties: {}
+        type: object
+      name:
+        type: string
+      root_path:
+        type: string
+      type:
+        $ref: '#/definitions/local-agent_internal_tools_kb.KnowledgeSourceType'
+      uri:
+        type: string
+    type: object
+  local-agent_internal_tools_kb.IndexJobStatus:
+    enum:
+    - pending
+    - running
+    - completed
+    - failed
+    type: string
+    x-enum-varnames:
+    - IndexJobPending
+    - IndexJobRunning
+    - IndexJobCompleted
+    - IndexJobFailed
+  local-agent_internal_tools_kb.KnowledgeIndexJob:
+    properties:
+      deleted_files:
+        type: integer
+      error:
+        type: string
+      finished_at:
+        type: string
+      indexed_files:
+        type: integer
+      job_id:
+        type: string
+      kb_id:
+        type: string
+      skipped_files:
+        type: integer
+      source_id:
+        type: string
+      started_at:
+        type: string
+      status:
+        $ref: '#/definitions/local-agent_internal_tools_kb.IndexJobStatus'
+      total_chunks:
+        type: integer
+      total_files:
+        type: integer
+    type: object
+  local-agent_internal_tools_kb.KnowledgeSource:
+    properties:
+      created_at:
+        type: string
+      enabled:
+        type: boolean
+      exclude_globs:
+        items:
+          type: string
+        type: array
+      include_globs:
+        items:
+          type: string
+        type: array
+      kb_id:
+        type: string
+      metadata:
+        additionalProperties: {}
+        type: object
+      name:
+        type: string
+      root_path:
+        type: string
+      source_id:
+        type: string
+      type:
+        $ref: '#/definitions/local-agent_internal_tools_kb.KnowledgeSourceType'
+      updated_at:
+        type: string
+      uri:
+        type: string
+    type: object
+  local-agent_internal_tools_kb.KnowledgeSourceType:
+    enum:
+    - local_folder
+    - git_docs
+    - url
+    - upload
+    - pdf
+    - office
+    - api_docs
+    type: string
+    x-enum-varnames:
+    - KnowledgeSourceLocalFolder
+    - KnowledgeSourceGitDocs
+    - KnowledgeSourceURL
+    - KnowledgeSourceUpload
+    - KnowledgeSourcePDF
+    - KnowledgeSourceOffice
+    - KnowledgeSourceAPIDocs
+  local-agent_internal_tools_kb.RAGEvalCase:
+    properties:
+      expected_hints:
+        items:
+          type: string
+        type: array
+      expected_sources:
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      kb_id:
+        type: string
+      must_refuse:
+        type: boolean
+      question:
+        type: string
+    type: object
+  local-agent_internal_tools_kb.RAGEvalResult:
+    properties:
+      case_id:
+        type: string
+      citation_correct:
+        type: boolean
+      recall_hit:
+        type: boolean
+      refused:
+        type: boolean
+      retrieved_sources:
+        items:
+          type: string
+        type: array
+      summary:
+        type: string
+    type: object
+  local-agent_internal_tools_kb.RAGEvalRun:
+    properties:
+      created_at:
+        type: string
+      recall_hits:
+        type: integer
+      results:
+        items:
+          $ref: '#/definitions/local-agent_internal_tools_kb.RAGEvalResult'
+        type: array
+      run_id:
+        type: string
+      total:
+        type: integer
+    type: object
+  local-agent_internal_tools_kb.RetrievalMode:
+    enum:
+    - vector
+    - keyword
+    - hybrid
+    type: string
+    x-enum-varnames:
+    - RetrievalModeVector
+    - RetrievalModeKeyword
+    - RetrievalModeHybrid
+  local-agent_internal_tools_kb.RetrievalQuery:
+    properties:
+      filters:
+        additionalProperties: {}
+        type: object
+      kb_id:
+        type: string
+      mode:
+        $ref: '#/definitions/local-agent_internal_tools_kb.RetrievalMode'
+      query:
+        type: string
+      rerank:
+        type: boolean
+      top_k:
+        type: integer
+    type: object
+  local-agent_internal_tools_kb.RetrievalResult:
+    properties:
+      chunk_id:
+        type: string
+      citation:
+        $ref: '#/definitions/local-agent_internal_tools_kb.Citation'
+      keyword_score:
+        type: number
+      metadata:
+        additionalProperties: {}
+        type: object
+      rerank_score:
+        type: number
+      score:
+        type: number
+      text:
+        type: string
+      vector_score:
+        type: number
+    type: object
+  local-agent_internal_tools_kb.UpdateSourceInput:
+    properties:
+      enabled:
+        type: boolean
+      exclude_globs:
+        items:
+          type: string
+        type: array
+      include_globs:
+        items:
+          type: string
+        type: array
+      metadata:
+        additionalProperties: {}
+        type: object
+      name:
+        type: string
+      root_path:
+        type: string
+      type:
+        $ref: '#/definitions/local-agent_internal_tools_kb.KnowledgeSourceType'
+      uri:
         type: string
     type: object
   local-agent_internal_tools_mcp.CompatibilityInput:
@@ -2218,6 +2563,40 @@ paths:
       summary: Create knowledge base
       tags:
       - Knowledge
+  /v1/kbs/{kb_id}/answer:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Knowledge base ID
+        in: path
+        name: kb_id
+        required: true
+        type: string
+      - description: Answer payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/local-agent_internal_tools_kb.AnswerInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.KBAnswerResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Answer from KB with citations
+      tags:
+      - Knowledge
   /v1/kbs/{kb_id}/documents/upload:
     post:
       consumes:
@@ -2252,6 +2631,97 @@ paths:
       summary: Upload KB document
       tags:
       - Knowledge
+  /v1/kbs/{kb_id}/index-jobs:
+    get:
+      parameters:
+      - description: Knowledge base ID
+        in: path
+        name: kb_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.KnowledgeIndexJobListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: List KB index jobs
+      tags:
+      - Knowledge
+  /v1/kbs/{kb_id}/index-jobs/{job_id}:
+    get:
+      parameters:
+      - description: Knowledge base ID
+        in: path
+        name: kb_id
+        required: true
+        type: string
+      - description: Index job ID
+        in: path
+        name: job_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_kb.KnowledgeIndexJob'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Get KB index job
+      tags:
+      - Knowledge
+  /v1/kbs/{kb_id}/retrieve:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Knowledge base ID
+        in: path
+        name: kb_id
+        required: true
+        type: string
+      - description: Retrieval payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/local-agent_internal_tools_kb.RetrievalQuery'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.RetrievalResultListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Retrieve KB chunks with citations
+      tags:
+      - Knowledge
   /v1/kbs/{kb_id}/search:
     post:
       consumes:
@@ -2284,6 +2754,195 @@ paths:
           schema:
             $ref: '#/definitions/internal_api_handlers.ErrorResponse'
       summary: Search knowledge base
+      tags:
+      - Knowledge
+  /v1/kbs/{kb_id}/sources:
+    get:
+      parameters:
+      - description: Knowledge base ID
+        in: path
+        name: kb_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.KnowledgeSourceListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: List knowledge sources
+      tags:
+      - Knowledge
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Knowledge base ID
+        in: path
+        name: kb_id
+        required: true
+        type: string
+      - description: Source payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/local-agent_internal_tools_kb.CreateSourceInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_kb.KnowledgeSource'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Create knowledge source
+      tags:
+      - Knowledge
+  /v1/kbs/{kb_id}/sources/{source_id}:
+    delete:
+      parameters:
+      - description: Knowledge base ID
+        in: path
+        name: kb_id
+        required: true
+        type: string
+      - description: Source ID
+        in: path
+        name: source_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.StatusResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Delete knowledge source
+      tags:
+      - Knowledge
+    get:
+      parameters:
+      - description: Knowledge base ID
+        in: path
+        name: kb_id
+        required: true
+        type: string
+      - description: Source ID
+        in: path
+        name: source_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_kb.KnowledgeSource'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Get knowledge source
+      tags:
+      - Knowledge
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Knowledge base ID
+        in: path
+        name: kb_id
+        required: true
+        type: string
+      - description: Source ID
+        in: path
+        name: source_id
+        required: true
+        type: string
+      - description: Source patch
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/local-agent_internal_tools_kb.UpdateSourceInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_kb.KnowledgeSource'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Update knowledge source
+      tags:
+      - Knowledge
+  /v1/kbs/{kb_id}/sources/{source_id}/sync:
+    post:
+      parameters:
+      - description: Knowledge base ID
+        in: path
+        name: kb_id
+        required: true
+        type: string
+      - description: Source ID
+        in: path
+        name: source_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_kb.KnowledgeIndexJob'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Sync knowledge source
       tags:
       - Knowledge
   /v1/kbs/health:
@@ -2849,6 +3508,104 @@ paths:
       summary: Plan operations runbook without executing steps
       tags:
       - Ops
+  /v1/rag/evals:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.RAGEvalCaseListResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: List RAG eval cases
+      tags:
+      - RAG
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Eval case
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/local-agent_internal_tools_kb.RAGEvalCase'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_kb.RAGEvalCase'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Create RAG eval case
+      tags:
+      - RAG
+  /v1/rag/evals/run:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Run selection
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/internal_api_handlers.RAGEvalRunRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_kb.RAGEvalRun'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Run RAG eval
+      tags:
+      - RAG
+  /v1/rag/evals/runs/{run_id}:
+    get:
+      parameters:
+      - description: Eval run ID
+        in: path
+        name: run_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_kb.RAGEvalRun'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Get RAG eval run
+      tags:
+      - RAG
   /v1/runs:
     get:
       parameters:

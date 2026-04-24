@@ -413,6 +413,58 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/kbs/{kb_id}/answer": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Knowledge"
+                ],
+                "summary": "Answer from KB with citations",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Knowledge base ID",
+                        "name": "kb_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Answer payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_kb.AnswerInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.KBAnswerResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/kbs/{kb_id}/documents/upload": {
             "post": {
                 "consumes": [
@@ -465,6 +517,145 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/kbs/{kb_id}/index-jobs": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Knowledge"
+                ],
+                "summary": "List KB index jobs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Knowledge base ID",
+                        "name": "kb_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.KnowledgeIndexJobListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/kbs/{kb_id}/index-jobs/{job_id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Knowledge"
+                ],
+                "summary": "Get KB index job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Knowledge base ID",
+                        "name": "kb_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Index job ID",
+                        "name": "job_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_kb.KnowledgeIndexJob"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/kbs/{kb_id}/retrieve": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Knowledge"
+                ],
+                "summary": "Retrieve KB chunks with citations",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Knowledge base ID",
+                        "name": "kb_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Retrieval payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_kb.RetrievalQuery"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.RetrievalResultListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/kbs/{kb_id}/search": {
             "post": {
                 "consumes": [
@@ -500,6 +691,292 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/internal_api_handlers.KBChunkListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/kbs/{kb_id}/sources": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Knowledge"
+                ],
+                "summary": "List knowledge sources",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Knowledge base ID",
+                        "name": "kb_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.KnowledgeSourceListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Knowledge"
+                ],
+                "summary": "Create knowledge source",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Knowledge base ID",
+                        "name": "kb_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Source payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_kb.CreateSourceInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_kb.KnowledgeSource"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/kbs/{kb_id}/sources/{source_id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Knowledge"
+                ],
+                "summary": "Get knowledge source",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Knowledge base ID",
+                        "name": "kb_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Source ID",
+                        "name": "source_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_kb.KnowledgeSource"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Knowledge"
+                ],
+                "summary": "Delete knowledge source",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Knowledge base ID",
+                        "name": "kb_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Source ID",
+                        "name": "source_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.StatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Knowledge"
+                ],
+                "summary": "Update knowledge source",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Knowledge base ID",
+                        "name": "kb_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Source ID",
+                        "name": "source_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Source patch",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_kb.UpdateSourceInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_kb.KnowledgeSource"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/kbs/{kb_id}/sources/{source_id}/sync": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Knowledge"
+                ],
+                "summary": "Sync knowledge source",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Knowledge base ID",
+                        "name": "kb_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Source ID",
+                        "name": "source_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_kb.KnowledgeIndexJob"
                         }
                     },
                     "400": {
@@ -1368,6 +1845,158 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/rag/evals": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "RAG"
+                ],
+                "summary": "List RAG eval cases",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.RAGEvalCaseListResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "RAG"
+                ],
+                "summary": "Create RAG eval case",
+                "parameters": [
+                    {
+                        "description": "Eval case",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_kb.RAGEvalCase"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_kb.RAGEvalCase"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/rag/evals/run": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "RAG"
+                ],
+                "summary": "Run RAG eval",
+                "parameters": [
+                    {
+                        "description": "Run selection",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.RAGEvalRunRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_kb.RAGEvalRun"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/rag/evals/runs/{run_id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "RAG"
+                ],
+                "summary": "Get RAG eval run",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Eval run ID",
+                        "name": "run_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_kb.RAGEvalRun"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/runs": {
             "get": {
                 "produces": [
@@ -2211,6 +2840,14 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_api_handlers.KBAnswerResponse": {
+            "type": "object",
+            "properties": {
+                "answer": {
+                    "$ref": "#/definitions/local-agent_internal_tools_kb.AnswerResult"
+                }
+            }
+        },
         "internal_api_handlers.KBChunkListResponse": {
             "type": "object",
             "properties": {
@@ -2289,6 +2926,28 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/local-agent_internal_core.KnowledgeBase"
+                    }
+                }
+            }
+        },
+        "internal_api_handlers.KnowledgeIndexJobListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_tools_kb.KnowledgeIndexJob"
+                    }
+                }
+            }
+        },
+        "internal_api_handlers.KnowledgeSourceListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_tools_kb.KnowledgeSource"
                     }
                 }
             }
@@ -2448,6 +3107,28 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_api_handlers.RAGEvalCaseListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_tools_kb.RAGEvalCase"
+                    }
+                }
+            }
+        },
+        "internal_api_handlers.RAGEvalRunRequest": {
+            "type": "object",
+            "properties": {
+                "case_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "internal_api_handlers.RejectApprovalRequest": {
             "type": "object",
             "properties": {
@@ -2464,6 +3145,17 @@ const docTemplate = `{
                 },
                 "approved": {
                     "type": "boolean"
+                }
+            }
+        },
+        "internal_api_handlers.RetrievalResultListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_tools_kb.RetrievalResult"
+                    }
                 }
             }
         },
@@ -2492,11 +3184,24 @@ const docTemplate = `{
         "internal_api_handlers.SearchRequest": {
             "type": "object",
             "properties": {
+                "filters": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
                 "limit": {
                     "type": "integer"
                 },
+                "mode": {
+                    "type": "string"
+                },
                 "query": {
                     "type": "string"
+                },
+                "rerank": {
+                    "type": "boolean"
+                },
+                "top_k": {
+                    "type": "integer"
                 }
             }
         },
@@ -3382,6 +4087,440 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "tool_call_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_tools_kb.AnswerInput": {
+            "type": "object",
+            "properties": {
+                "filters": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "kb_id": {
+                    "type": "string"
+                },
+                "mode": {
+                    "$ref": "#/definitions/local-agent_internal_tools_kb.AnswerMode"
+                },
+                "query": {
+                    "type": "string"
+                },
+                "require_citations": {
+                    "type": "boolean"
+                },
+                "rerank": {
+                    "type": "boolean"
+                },
+                "top_k": {
+                    "type": "integer"
+                }
+            }
+        },
+        "local-agent_internal_tools_kb.AnswerMode": {
+            "type": "string",
+            "enum": [
+                "normal",
+                "kb_only",
+                "no_citation_no_answer"
+            ],
+            "x-enum-varnames": [
+                "AnswerModeNormal",
+                "AnswerModeKBOnly",
+                "AnswerModeNoCitationNoAnswer"
+            ]
+        },
+        "local-agent_internal_tools_kb.AnswerResult": {
+            "type": "object",
+            "properties": {
+                "answer": {
+                    "type": "string"
+                },
+                "citations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_tools_kb.Citation"
+                    }
+                },
+                "has_evidence": {
+                    "type": "boolean"
+                },
+                "mode": {
+                    "$ref": "#/definitions/local-agent_internal_tools_kb.AnswerMode"
+                }
+            }
+        },
+        "local-agent_internal_tools_kb.Citation": {
+            "type": "object",
+            "properties": {
+                "chunk_id": {
+                    "type": "string"
+                },
+                "document_id": {
+                    "type": "string"
+                },
+                "score": {
+                    "type": "number"
+                },
+                "section": {
+                    "type": "string"
+                },
+                "source_file": {
+                    "type": "string"
+                },
+                "source_id": {
+                    "type": "string"
+                },
+                "source_uri": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_tools_kb.CreateSourceInput": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "exclude_globs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "include_globs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "name": {
+                    "type": "string"
+                },
+                "root_path": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/local-agent_internal_tools_kb.KnowledgeSourceType"
+                },
+                "uri": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_tools_kb.IndexJobStatus": {
+            "type": "string",
+            "enum": [
+                "pending",
+                "running",
+                "completed",
+                "failed"
+            ],
+            "x-enum-varnames": [
+                "IndexJobPending",
+                "IndexJobRunning",
+                "IndexJobCompleted",
+                "IndexJobFailed"
+            ]
+        },
+        "local-agent_internal_tools_kb.KnowledgeIndexJob": {
+            "type": "object",
+            "properties": {
+                "deleted_files": {
+                    "type": "integer"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "indexed_files": {
+                    "type": "integer"
+                },
+                "job_id": {
+                    "type": "string"
+                },
+                "kb_id": {
+                    "type": "string"
+                },
+                "skipped_files": {
+                    "type": "integer"
+                },
+                "source_id": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/local-agent_internal_tools_kb.IndexJobStatus"
+                },
+                "total_chunks": {
+                    "type": "integer"
+                },
+                "total_files": {
+                    "type": "integer"
+                }
+            }
+        },
+        "local-agent_internal_tools_kb.KnowledgeSource": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "exclude_globs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "include_globs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "kb_id": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "name": {
+                    "type": "string"
+                },
+                "root_path": {
+                    "type": "string"
+                },
+                "source_id": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/local-agent_internal_tools_kb.KnowledgeSourceType"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "uri": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_tools_kb.KnowledgeSourceType": {
+            "type": "string",
+            "enum": [
+                "local_folder",
+                "git_docs",
+                "url",
+                "upload",
+                "pdf",
+                "office",
+                "api_docs"
+            ],
+            "x-enum-varnames": [
+                "KnowledgeSourceLocalFolder",
+                "KnowledgeSourceGitDocs",
+                "KnowledgeSourceURL",
+                "KnowledgeSourceUpload",
+                "KnowledgeSourcePDF",
+                "KnowledgeSourceOffice",
+                "KnowledgeSourceAPIDocs"
+            ]
+        },
+        "local-agent_internal_tools_kb.RAGEvalCase": {
+            "type": "object",
+            "properties": {
+                "expected_hints": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "expected_sources": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kb_id": {
+                    "type": "string"
+                },
+                "must_refuse": {
+                    "type": "boolean"
+                },
+                "question": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_tools_kb.RAGEvalResult": {
+            "type": "object",
+            "properties": {
+                "case_id": {
+                    "type": "string"
+                },
+                "citation_correct": {
+                    "type": "boolean"
+                },
+                "recall_hit": {
+                    "type": "boolean"
+                },
+                "refused": {
+                    "type": "boolean"
+                },
+                "retrieved_sources": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "summary": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_tools_kb.RAGEvalRun": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "recall_hits": {
+                    "type": "integer"
+                },
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_tools_kb.RAGEvalResult"
+                    }
+                },
+                "run_id": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "local-agent_internal_tools_kb.RetrievalMode": {
+            "type": "string",
+            "enum": [
+                "vector",
+                "keyword",
+                "hybrid"
+            ],
+            "x-enum-varnames": [
+                "RetrievalModeVector",
+                "RetrievalModeKeyword",
+                "RetrievalModeHybrid"
+            ]
+        },
+        "local-agent_internal_tools_kb.RetrievalQuery": {
+            "type": "object",
+            "properties": {
+                "filters": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "kb_id": {
+                    "type": "string"
+                },
+                "mode": {
+                    "$ref": "#/definitions/local-agent_internal_tools_kb.RetrievalMode"
+                },
+                "query": {
+                    "type": "string"
+                },
+                "rerank": {
+                    "type": "boolean"
+                },
+                "top_k": {
+                    "type": "integer"
+                }
+            }
+        },
+        "local-agent_internal_tools_kb.RetrievalResult": {
+            "type": "object",
+            "properties": {
+                "chunk_id": {
+                    "type": "string"
+                },
+                "citation": {
+                    "$ref": "#/definitions/local-agent_internal_tools_kb.Citation"
+                },
+                "keyword_score": {
+                    "type": "number"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "rerank_score": {
+                    "type": "number"
+                },
+                "score": {
+                    "type": "number"
+                },
+                "text": {
+                    "type": "string"
+                },
+                "vector_score": {
+                    "type": "number"
+                }
+            }
+        },
+        "local-agent_internal_tools_kb.UpdateSourceInput": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "exclude_globs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "include_globs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "name": {
+                    "type": "string"
+                },
+                "root_path": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/local-agent_internal_tools_kb.KnowledgeSourceType"
+                },
+                "uri": {
                     "type": "string"
                 }
             }

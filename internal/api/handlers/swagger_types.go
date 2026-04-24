@@ -5,6 +5,7 @@ import (
 
 	"local-agent/internal/agent"
 	"local-agent/internal/core"
+	kbtools "local-agent/internal/tools/kb"
 	"local-agent/internal/tools/mcp"
 	"local-agent/internal/tools/ops"
 	"local-agent/internal/tools/skills"
@@ -101,8 +102,12 @@ type MemoryFilePathListResponse struct {
 
 // SearchRequest is a generic query+limit payload.
 type SearchRequest struct {
-	Query string `json:"query"`
-	Limit int    `json:"limit"`
+	Query   string         `json:"query"`
+	Limit   int            `json:"limit"`
+	TopK    int            `json:"top_k,omitempty"`
+	Mode    string         `json:"mode,omitempty"`
+	Rerank  bool           `json:"rerank,omitempty"`
+	Filters map[string]any `json:"filters,omitempty"`
 }
 
 // CreateMemoryPatchRequest creates a markdown memory patch.
@@ -141,6 +146,36 @@ type KnowledgeBaseDocumentUploadRequest struct {
 // KBChunkListResponse wraps KB chunk search/upload results.
 type KBChunkListResponse struct {
 	Items []core.KBChunk `json:"items"`
+}
+
+// KnowledgeSourceListResponse wraps KB source lists.
+type KnowledgeSourceListResponse struct {
+	Items []kbtools.KnowledgeSource `json:"items"`
+}
+
+// KnowledgeIndexJobListResponse wraps KB index job lists.
+type KnowledgeIndexJobListResponse struct {
+	Items []kbtools.KnowledgeIndexJob `json:"items"`
+}
+
+// RetrievalResultListResponse wraps citation-aware retrieval results.
+type RetrievalResultListResponse struct {
+	Items []kbtools.RetrievalResult `json:"items"`
+}
+
+// KBAnswerResponse documents grounded KB answers.
+type KBAnswerResponse struct {
+	Answer kbtools.AnswerResult `json:"answer"`
+}
+
+// RAGEvalCaseListResponse wraps RAG eval cases.
+type RAGEvalCaseListResponse struct {
+	Items []kbtools.RAGEvalCase `json:"items"`
+}
+
+// RAGEvalRunRequest starts selected RAG eval cases.
+type RAGEvalRunRequest struct {
+	CaseIDs []string `json:"case_ids,omitempty"`
 }
 
 // KnowledgeBaseHealthResponse documents KB runtime health.

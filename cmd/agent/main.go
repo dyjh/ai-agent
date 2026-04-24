@@ -30,6 +30,7 @@ func main() {
 	root.AddCommand(skillsCommand(&serverURL))
 	root.AddCommand(mcpCommand(&serverURL))
 	root.AddCommand(kbCommand(&serverURL))
+	root.AddCommand(ragCommand(&serverURL))
 	root.AddCommand(runsCommand(&serverURL))
 	root.AddCommand(codeCommand(&serverURL))
 	root.AddCommand(gitCommand(&serverURL))
@@ -355,6 +356,139 @@ func kbCommand(serverURL *string) *cobra.Command {
 			})
 		},
 	})
+	sourcesCmd := &cobra.Command{Use: "sources", Short: "Manage KB sources"}
+	sourcesCmd.AddCommand(&cobra.Command{
+		Use:   "list [kb_id]",
+		Short: "List KB sources",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printRequest(http.MethodGet, fmt.Sprintf("%s/v1/kbs/%s/sources", *serverURL, args[0]), nil)
+		},
+	})
+	sourcesCmd.AddCommand(&cobra.Command{
+		Use:   "add-folder [kb_id] [path]",
+		Short: "Register a local folder source",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/kbs/%s/sources", *serverURL, args[0]), map[string]any{
+				"type":      "local_folder",
+				"name":      filepathBase(args[1]),
+				"root_path": args[1],
+			})
+		},
+	})
+	sourcesCmd.AddCommand(&cobra.Command{
+		Use:   "add-url [kb_id] [url]",
+		Short: "Register a URL source",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/kbs/%s/sources", *serverURL, args[0]), map[string]any{
+				"type": "url",
+				"name": args[1],
+				"uri":  args[1],
+			})
+		},
+	})
+	sourcesCmd.AddCommand(&cobra.Command{
+		Use:   "remove [kb_id] [source_id]",
+		Short: "Remove a KB source",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printRequest(http.MethodDelete, fmt.Sprintf("%s/v1/kbs/%s/sources/%s", *serverURL, args[0], args[1]), nil)
+		},
+	})
+	cmd.AddCommand(sourcesCmd)
+	cmd.AddCommand(&cobra.Command{
+		Use:   "sync [kb_id] [source_id]",
+		Short: "Sync a KB source",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/kbs/%s/sources/%s/sync", *serverURL, args[0], args[1]), map[string]any{})
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "jobs [kb_id]",
+		Short: "List KB index jobs",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printRequest(http.MethodGet, fmt.Sprintf("%s/v1/kbs/%s/index-jobs", *serverURL, args[0]), nil)
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "job [kb_id] [job_id]",
+		Short: "Get one KB index job",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printRequest(http.MethodGet, fmt.Sprintf("%s/v1/kbs/%s/index-jobs/%s", *serverURL, args[0], args[1]), nil)
+		},
+	})
+	retrieveCmd := &cobra.Command{
+		Use:   "retrieve [kb_id] [query]",
+		Short: "Retrieve KB chunks with citations",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(c *cobra.Command, args []string) error {
+			mode, _ := c.Flags().GetString("mode")
+			rerank, _ := c.Flags().GetBool("rerank")
+			return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/kbs/%s/retrieve", *serverURL, args[0]), map[string]any{
+				"query":  args[1],
+				"mode":   mode,
+				"top_k":  5,
+				"rerank": rerank,
+			})
+		},
+	}
+	retrieveCmd.Flags().String("mode", "hybrid", "retrieval mode: vector, keyword, hybrid")
+	retrieveCmd.Flags().Bool("rerank", true, "apply local heuristic rerank")
+	cmd.AddCommand(retrieveCmd)
+	answerCmd := &cobra.Command{
+		Use:   "answer [kb_id] [query]",
+		Short: "Answer from KB with citations",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(c *cobra.Command, args []string) error {
+			mode, _ := c.Flags().GetString("mode")
+			return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/kbs/%s/answer", *serverURL, args[0]), map[string]any{
+				"query":             args[1],
+				"mode":              mode,
+				"top_k":             5,
+				"require_citations": mode != "normal",
+				"rerank":            true,
+			})
+		},
+	}
+	answerCmd.Flags().String("mode", "kb_only", "answer mode: normal, kb_only, no_citation_no_answer")
+	cmd.AddCommand(answerCmd)
+	return cmd
+}
+
+func ragCommand(serverURL *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "rag",
+		Short: "Run RAG reliability tools",
+	}
+	evalCmd := &cobra.Command{Use: "eval", Short: "Manage RAG evals"}
+	evalCmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List RAG eval cases",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return printRequest(http.MethodGet, *serverURL+"/v1/rag/evals", nil)
+		},
+	})
+	evalCmd.AddCommand(&cobra.Command{
+		Use:   "run",
+		Short: "Run RAG eval cases",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return printJSONRequest(http.MethodPost, *serverURL+"/v1/rag/evals/run", map[string]any{})
+		},
+	})
+	evalCmd.AddCommand(&cobra.Command{
+		Use:   "report [run_id]",
+		Short: "Read a RAG eval report",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printRequest(http.MethodGet, fmt.Sprintf("%s/v1/rag/evals/runs/%s", *serverURL, args[0]), nil)
+		},
+	})
+	cmd.AddCommand(evalCmd)
 	return cmd
 }
 

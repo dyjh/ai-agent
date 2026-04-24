@@ -217,6 +217,48 @@ func (p HeuristicPlanner) Plan(_ context.Context, input PlanInput) (Plan, error)
 			CodePlan:     newCodePlan(CodeTaskSearch, workspace, input.UserMessage, []CodePlanStep{{Tool: "code.search_text", Purpose: "搜索相关代码", Input: proposal.Input}}),
 			Reason:       "matched code search intent",
 		}, nil
+	case wantsKBAnswer(normalized):
+		mode := "normal"
+		requireCitations := false
+		if strings.Contains(normalized, "只根据知识库") || strings.Contains(normalized, "kb_only") {
+			mode = "kb_only"
+			requireCitations = true
+		}
+		if strings.Contains(normalized, "无引用不回答") || strings.Contains(normalized, "没有引用不要回答") || strings.Contains(normalized, "no_citation_no_answer") {
+			mode = "no_citation_no_answer"
+			requireCitations = true
+		}
+		if strings.Contains(normalized, "引用") || strings.Contains(normalized, "citation") || strings.Contains(normalized, "来源") {
+			requireCitations = true
+		}
+		proposal := p.Adapter.NewProposal("kb.answer", map[string]any{
+			"kb_id":             extractKBID(input.UserMessage),
+			"query":             input.UserMessage,
+			"mode":              mode,
+			"top_k":             5,
+			"require_citations": requireCitations,
+			"rerank":            true,
+		}, "基于知识库证据回答并返回引用", []string{"kb.read"})
+		return Plan{
+			Decision:     PlanDecisionTool,
+			Preamble:     "我会先检索知识库证据，再基于引用回答。",
+			ToolProposal: &proposal,
+			Reason:       "matched KB answer intent",
+		}, nil
+	case wantsKBRetrieve(normalized):
+		proposal := p.Adapter.NewProposal("kb.retrieve", map[string]any{
+			"kb_id":  extractKBID(input.UserMessage),
+			"query":  input.UserMessage,
+			"mode":   "hybrid",
+			"top_k":  5,
+			"rerank": true,
+		}, "检索知识库并返回引用证据", []string{"kb.read"})
+		return Plan{
+			Decision:     PlanDecisionTool,
+			Preamble:     "我会使用 hybrid retrieval 检索知识库证据。",
+			ToolProposal: &proposal,
+			Reason:       "matched KB retrieval intent",
+		}, nil
 	case wantsCodeWork(normalized):
 		proposal := p.Adapter.NewProposal("code.inspect_project", map[string]any{
 			"path": workspace,
@@ -643,6 +685,17 @@ func wantsCodeRead(normalized string) bool {
 	return containsAny(normalized, []string{"读取文件", "read file", "查看文件", "打开文件"})
 }
 
+func wantsKBAnswer(normalized string) bool {
+	return containsAny(normalized, []string{
+		"只根据知识库", "知识库回答", "基于知识库", "引用来源", "给出引用", "citation", "citations",
+		"kb_only", "no_citation_no_answer", "无引用不回答", "没有引用不要回答",
+	})
+}
+
+func wantsKBRetrieve(normalized string) bool {
+	return containsAny(normalized, []string{"检索知识库", "搜索知识库", "knowledge base search", "kb.retrieve", "hybrid retrieval"})
+}
+
 func wantsPatchValidate(normalized string) bool {
 	return containsAny(normalized, []string{"validate patch", "patch validate", "验证 patch", "校验 patch", "dry-run patch"})
 }
@@ -877,6 +930,23 @@ func extractWorkspace(value string) string {
 		}
 	}
 	return "."
+}
+
+func extractKBID(value string) string {
+	fields := strings.Fields(value)
+	for idx, field := range fields {
+		lower := strings.ToLower(strings.Trim(field, "`'\"，,。;；:"))
+		if (lower == "kb" || lower == "kb_id" || lower == "kbid" || lower == "知识库") && idx+1 < len(fields) {
+			return strings.Trim(fields[idx+1], "`'\"，,。;；")
+		}
+		if strings.HasPrefix(lower, "kb_id=") {
+			return strings.TrimPrefix(lower, "kb_id=")
+		}
+		if strings.HasPrefix(lower, "kb_id:") {
+			return strings.TrimPrefix(lower, "kb_id:")
+		}
+	}
+	return ""
 }
 
 func scopedWorkspacePath(workspace, path string) string {

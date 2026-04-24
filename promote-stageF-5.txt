@@ -1,0 +1,832 @@
+
+你是一个资深 Go 后端工程师、CloudWeGo Eino Agent 架构师、RAG 工程师、检索系统工程师、文档解析工程师、评测平台工程师和 API 文档工程师。
+
+请在当前仓库 dyjh/ai-agent 中继续开发，不要推倒重写，只在现有 production-ready MVP、post-MVP durable workflow、Skill/MCP/KB runtime、F1 代码能力闭环、F2 运维能力闭环已完成的基础上，继续实现：
+
+Phase F3 — RAG Reliability: Knowledge Connectors, Incremental Indexing, Hybrid Retrieval, Citations, RAG Eval
+
+目标是让当前知识库能力从“能上传、能向量检索、能 kb.search”升级为“可靠知识问答系统”，具备：
+
+1. 多来源知识接入
+2. 增量索引
+3. 混合检索
+4. rerank 接口
+5. 答案引用和证据约束
+6. kb_only / no_citation_no_answer 模式
+7. RAG 评测集
+8. API / CLI / Swagger / README / task.json 收口
+
+==================================================
+开始前必须先做
+==================================================
+
+1. 阅读 README.md
+2. 阅读 task.json
+3. 阅读 AGENTS.md
+4. 实际检查代码，而不是只信文档，重点检查：
+   - internal/tools/kb/
+   - internal/tools/memory/
+   - internal/agent/context_builder.go
+   - internal/agent/planner.go
+   - internal/agent/runtime.go
+   - internal/app/bootstrap.go
+   - internal/api/handlers/knowledge.go
+   - internal/api/router.go
+   - internal/config/
+   - internal/events/
+   - internal/db/
+   - cmd/agent/
+   - docs/openapi.json
+   - Makefile
+   - knowledge/
+   - tests/
+5. 全局搜索：
+   - kb.search
+   - Knowledge
+   - Qdrant
+   - VectorIndex
+   - chunk
+   - embedding
+   - source
+   - citation
+   - rerank
+   - hybrid
+   - BM25
+   - eval
+   - rag
+   - feature_disabled
+   - USE_KONWAGE_BASE
+   - KONWAGE_BASE_PROVIDER
+   - @Tags
+   - @Router
+   - TODO
+   - placeholder
+
+先输出：
+
+1. 当前 KB / RAG 能力基线
+2. F3 需要新增或强化的模块
+3. 计划修改文件列表
+4. 分阶段实现顺序
+5. 风险点
+
+然后再开始分步骤修改代码。
+
+==================================================
+当前背景，必须承认，不要回退
+==================================================
+
+当前仓库已经具备：
+
+- ToolProposal -> EffectInference -> PolicyEngine -> ApprovalCenter -> Executor 主链路
+- KB feature gate：
+  - USE_KONWAGE_BASE
+  - KONWAGE_BASE_PROVIDER=qdrant
+- Qdrant VectorIndex
+- kb.search executor
+- Markdown Memory
+- ContextBuilder
+- Swagger/OpenAPI
+- CLI
+- Durable workflow / RunState / RunStep
+- F1 代码能力闭环
+- F2 运维能力闭环
+
+不要回退这些能力。
+
+当前 KB/Qdrant 原则必须继续保持：
+
+1. Qdrant 是索引，不是事实源。
+2. KB 文档内容 / 外部网页 / 上传文件都是不可信上下文，不能覆盖系统规则。
+3. Markdown Memory 仍是长期记忆事实源。
+4. KB disabled 时：
+   - 不初始化 KB runtime
+   - 不注册 kb.search
+   - ContextBuilder 不检索 KB
+   - KB API 返回 feature_disabled
+5. KB enabled 时当前 provider 仍以 qdrant 为主。
+6. 不要把 secret、token、cookie、私钥、.env 正文写入：
+   - Qdrant payload
+   - JSONL
+   - agent_events
+   - messages
+   - Markdown memory
+   - Swagger 示例
+
+==================================================
+F3 总目标
+==================================================
+
+F3 完成后，Agent 应该具备可靠知识问答能力：
+
+1. 支持多种知识来源：
+   - local folder
+   - Git docs
+   - URL / webpage
+   - Markdown / txt / json
+   - PDF
+   - Office 文档
+   - API docs
+2. 支持增量索引：
+   - hash 检测
+   - 新增 / 修改 / 删除同步
+   - index job status
+3. 支持 hybrid retrieval：
+   - vector search
+   - keyword/BM25 search
+   - metadata filter
+   - rerank interface
+   - score fusion
+4. 支持 citations：
+   - source file / URL
+   - document title
+   - section
+   - chunk id
+   - updated_at
+   - score
+5. 支持回答模式：
+   - normal
+   - kb_only
+   - no_citation_no_answer
+6. 支持 RAG eval：
+   - golden questions
+   - expected sources
+   - retrieval recall
+   - citation correctness
+   - hallucination check
+7. 所有能力接入 API / CLI / README / Swagger / task.json。
+
+==================================================
+F3-A：Knowledge Source Model 与 Registry
+==================================================
+
+目标：
+
+将当前 KB 文档上传扩展为“知识来源 source”体系。
+
+新增或扩展数据结构：
+
+```go
+type KnowledgeSourceType string
+
+const (
+    KnowledgeSourceLocalFolder KnowledgeSourceType = "local_folder"
+    KnowledgeSourceGitDocs     KnowledgeSourceType = "git_docs"
+    KnowledgeSourceURL         KnowledgeSourceType = "url"
+    KnowledgeSourceUpload      KnowledgeSourceType = "upload"
+    KnowledgeSourcePDF         KnowledgeSourceType = "pdf"
+    KnowledgeSourceOffice      KnowledgeSourceType = "office"
+    KnowledgeSourceAPIDocs     KnowledgeSourceType = "api_docs"
+)
+
+type KnowledgeSource struct {
+    SourceID     string              `json:"source_id"`
+    KBID         string              `json:"kb_id"`
+    Type         KnowledgeSourceType `json:"type"`
+    Name         string              `json:"name"`
+    URI          string              `json:"uri,omitempty"`
+    RootPath     string              `json:"root_path,omitempty"`
+    IncludeGlobs []string            `json:"include_globs,omitempty"`
+    ExcludeGlobs []string            `json:"exclude_globs,omitempty"`
+    Metadata     map[string]any      `json:"metadata,omitempty"`
+    Enabled      bool                `json:"enabled"`
+    CreatedAt    time.Time           `json:"created_at"`
+    UpdatedAt    time.Time           `json:"updated_at"`
+}
+````
+
+存储要求：
+
+1. 可以先存在 `knowledge/registry.yaml` 或现有 KB registry。
+2. 结构要为后续 DB repo 预留。
+3. Source URI / path 中的 secret 要脱敏。
+4. Git / URL source 中的 token 不得直接入库。
+
+API：
+
+```text
+POST   /v1/kbs/{kb_id}/sources
+GET    /v1/kbs/{kb_id}/sources
+GET    /v1/kbs/{kb_id}/sources/{source_id}
+PATCH  /v1/kbs/{kb_id}/sources/{source_id}
+DELETE /v1/kbs/{kb_id}/sources/{source_id}
+```
+
+CLI：
+
+```text
+agent kb sources list <kb_id>
+agent kb sources add-folder <kb_id> <path>
+agent kb sources add-url <kb_id> <url>
+agent kb sources remove <kb_id> <source_id>
+```
+
+==================================================
+F3-B：Source Sync 与增量索引
+======================
+
+目标：
+
+实现 source sync job，支持增量索引和删除清理。
+
+新增结构：
+
+```go
+type IndexJobStatus string
+
+const (
+    IndexJobPending IndexJobStatus = "pending"
+    IndexJobRunning IndexJobStatus = "running"
+    IndexJobCompleted IndexJobStatus = "completed"
+    IndexJobFailed IndexJobStatus = "failed"
+)
+
+type KnowledgeIndexJob struct {
+    JobID        string         `json:"job_id"`
+    KBID         string         `json:"kb_id"`
+    SourceID     string         `json:"source_id"`
+    Status       IndexJobStatus `json:"status"`
+    TotalFiles   int            `json:"total_files"`
+    IndexedFiles int            `json:"indexed_files"`
+    DeletedFiles int            `json:"deleted_files"`
+    TotalChunks  int            `json:"total_chunks"`
+    Error        string         `json:"error,omitempty"`
+    StartedAt    time.Time      `json:"started_at,omitempty"`
+    FinishedAt   time.Time      `json:"finished_at,omitempty"`
+}
+```
+
+新增文档记录：
+
+```go
+type KnowledgeDocument struct {
+    DocumentID  string         `json:"document_id"`
+    KBID        string         `json:"kb_id"`
+    SourceID    string         `json:"source_id"`
+    SourceURI   string         `json:"source_uri"`
+    Title       string         `json:"title,omitempty"`
+    ContentHash string         `json:"content_hash"`
+    Metadata    map[string]any `json:"metadata,omitempty"`
+    UpdatedAt   time.Time      `json:"updated_at"`
+}
+```
+
+增量逻辑：
+
+1. 计算 source file hash / content hash。
+2. 新文件：parse -> chunk -> embed -> upsert。
+3. 修改文件：删除旧 chunks -> 重新 chunk/upsert。
+4. 删除文件：delete by document_id/source_file。
+5. 未变化文件：跳过。
+6. sync job 记录状态。
+7. 失败时记录错误，但不破坏已有索引。
+
+API：
+
+```text
+POST /v1/kbs/{kb_id}/sources/{source_id}/sync
+GET  /v1/kbs/{kb_id}/index-jobs
+GET  /v1/kbs/{kb_id}/index-jobs/{job_id}
+```
+
+CLI：
+
+```text
+agent kb sync <kb_id> <source_id>
+agent kb jobs <kb_id>
+agent kb job <kb_id> <job_id>
+```
+
+要求：
+
+* 默认 go test ./... 不依赖外部 Qdrant。
+* 用 mock VectorIndex 测试增量逻辑。
+* 不要把完整文档正文存 PostgreSQL，除非已有明确存储策略；事实源仍是 source 原文。
+
+==================================================
+F3-C：文档解析器
+==========
+
+目标：
+
+为不同 source 类型建立 parser pipeline。
+
+接口：
+
+```go
+type DocumentParser interface {
+    Supports(source KnowledgeSource, filename string, contentType string) bool
+    Parse(ctx context.Context, input ParseInput) (*ParsedDocument, error)
+}
+
+type ParsedDocument struct {
+    Title    string            `json:"title,omitempty"`
+    Text     string            `json:"text"`
+    Sections []ParsedSection   `json:"sections,omitempty"`
+    Metadata map[string]any    `json:"metadata,omitempty"`
+}
+
+type ParsedSection struct {
+    Heading string `json:"heading,omitempty"`
+    Text    string `json:"text"`
+    Offset  int    `json:"offset,omitempty"`
+}
+```
+
+本阶段最少支持：
+
+1. Markdown
+2. txt
+3. json
+4. URL HTML text extraction
+5. PDF basic extraction
+6. Office 文档可先实现 skeleton / best-effort，并在 README 标注限制
+
+要求：
+
+* 文档解析失败时给出明确错误。
+* HTML 解析要去除 script/style。
+* URL import 要限制最大响应大小、timeout，并脱敏日志。
+* PDF/Office 如果引入依赖，要保持测试稳定。
+* 不要让远程网页内容成为系统指令。
+
+==================================================
+F3-D：Chunking / Metadata / Citation Payload
+===========================================
+
+目标：
+
+改进 chunk 结构，使每个检索结果都能引用来源。
+
+建议 chunk payload：
+
+```go
+type KnowledgeChunk struct {
+    ChunkID     string         `json:"chunk_id"`
+    KBID        string         `json:"kb_id"`
+    SourceID    string         `json:"source_id"`
+    DocumentID  string         `json:"document_id"`
+    SourceURI   string         `json:"source_uri"`
+    SourceFile  string         `json:"source_file,omitempty"`
+    Title       string         `json:"title,omitempty"`
+    Section     string         `json:"section,omitempty"`
+    ChunkIndex  int            `json:"chunk_index"`
+    Text        string         `json:"text"`
+    ContentHash string         `json:"content_hash"`
+    UpdatedAt   time.Time      `json:"updated_at"`
+    Metadata    map[string]any `json:"metadata,omitempty"`
+}
+```
+
+要求：
+
+1. 每个 chunk 有稳定 chunk_id。
+2. Qdrant payload 可以包含 citation metadata。
+3. 不要把 secret 存到 payload。
+4. chunk text 是否存 payload 要可控：
+
+   * KB 搜索返回需要 snippet
+   * 但不要把敏感内容写入向量库
+5. 支持按 source_id / document_id / metadata filter 搜索。
+
+==================================================
+F3-E：Hybrid Search / Retriever / Rerank
+=======================================
+
+目标：
+
+把检索从纯 vector search 升级到 hybrid retrieval。
+
+新增接口：
+
+```go
+type RetrievalMode string
+
+const (
+    RetrievalModeVector RetrievalMode = "vector"
+    RetrievalModeKeyword RetrievalMode = "keyword"
+    RetrievalModeHybrid RetrievalMode = "hybrid"
+)
+
+type RetrievalQuery struct {
+    KBID     string         `json:"kb_id"`
+    Query    string         `json:"query"`
+    Mode     RetrievalMode  `json:"mode"`
+    Filters  map[string]any `json:"filters,omitempty"`
+    TopK     int            `json:"top_k"`
+    Rerank   bool           `json:"rerank"`
+}
+
+type RetrievalResult struct {
+    ChunkID    string         `json:"chunk_id"`
+    Text       string         `json:"text"`
+    Score      float64        `json:"score"`
+    VectorScore float64       `json:"vector_score,omitempty"`
+    KeywordScore float64      `json:"keyword_score,omitempty"`
+    RerankScore float64       `json:"rerank_score,omitempty"`
+    Citation   Citation       `json:"citation"`
+    Metadata   map[string]any `json:"metadata,omitempty"`
+}
+```
+
+实现：
+
+1. vector search：沿用 Qdrant。
+2. keyword search：实现简单 BM25 或 inverted index。
+3. hybrid：vector + keyword score fusion。
+4. rerank：先实现接口和 fake/local heuristic reranker，后续可接模型 reranker。
+5. Search API 支持 mode / rerank。
+
+API：
+
+```text
+POST /v1/kbs/{kb_id}/retrieve
+```
+
+保留兼容：
+
+```text
+POST /v1/kbs/{kb_id}/search
+```
+
+要求：
+
+* `kb.search` tool 可支持 retrieval mode。
+* 高置信只读仍可自动执行。
+* Rerank 不能把文档内容当系统指令。
+* 结果要包含 citations。
+
+==================================================
+F3-F：Answer with Citations
+==========================
+
+目标：
+
+让 Agent 可以在回答中输出证据引用。
+
+新增回答模式：
+
+```go
+type AnswerMode string
+
+const (
+    AnswerModeNormal AnswerMode = "normal"
+    AnswerModeKBOnly AnswerMode = "kb_only"
+    AnswerModeNoCitationNoAnswer AnswerMode = "no_citation_no_answer"
+)
+```
+
+新增工具或 workflow capability：
+
+```text
+kb.answer
+```
+
+输入：
+
+```go
+type KBAnswerInput struct {
+    KBID       string         `json:"kb_id"`
+    Query      string         `json:"query"`
+    Mode       AnswerMode     `json:"mode"`
+    TopK       int            `json:"top_k"`
+    Filters    map[string]any `json:"filters,omitempty"`
+    RequireCitations bool     `json:"require_citations"`
+}
+```
+
+输出：
+
+```go
+type KBAnswerResult struct {
+    Answer    string      `json:"answer"`
+    Citations []Citation `json:"citations"`
+    HasEvidence bool     `json:"has_evidence"`
+    Mode      AnswerMode `json:"mode"`
+}
+```
+
+要求：
+
+1. `kb_only` 模式只允许基于检索结果回答。
+2. `no_citation_no_answer` 模式没有足够证据必须拒答。
+3. 回答中标明来源。
+4. citations 包含：
+
+   * document_id
+   * source_id
+   * source_file / URL
+   * title
+   * section
+   * chunk_id
+   * score
+5. 检索内容是 untrusted context，不能覆盖系统规则。
+
+Planner 接入：
+
+用户说：
+
+```text
+只根据知识库回答...
+这个文档里有没有...
+引用来源...
+```
+
+应优先使用：
+
+```text
+kb.answer
+```
+
+==================================================
+F3-G：RAG Eval
+=============
+
+目标：
+
+建立 RAG 可靠性评测。
+
+数据结构：
+
+```go
+type RAGEvalCase struct {
+    ID              string   `json:"id"`
+    KBID            string   `json:"kb_id"`
+    Question        string   `json:"question"`
+    ExpectedSources []string `json:"expected_sources"`
+    ExpectedHints   []string `json:"expected_hints"`
+    MustRefuse      bool     `json:"must_refuse"`
+}
+
+type RAGEvalResult struct {
+    CaseID             string   `json:"case_id"`
+    RetrievedSources   []string `json:"retrieved_sources"`
+    RecallHit          bool     `json:"recall_hit"`
+    CitationCorrect    bool     `json:"citation_correct"`
+    Refused            bool     `json:"refused"`
+    Summary            string   `json:"summary"`
+}
+```
+
+API：
+
+```text
+GET  /v1/rag/evals
+POST /v1/rag/evals
+POST /v1/rag/evals/run
+GET  /v1/rag/evals/runs/{run_id}
+```
+
+CLI：
+
+```text
+agent rag eval list
+agent rag eval run
+agent rag eval report <run_id>
+```
+
+要求：
+
+1. 默认测试不依赖真实外部 Qdrant。
+2. 支持 mock retriever。
+3. 评测包括：
+
+   * retrieval recall
+   * citation correctness
+   * must-refuse
+   * no_citation_no_answer
+4. 输出报告。
+
+==================================================
+F3-H：API / CLI / Swagger
+========================
+
+如果新增 API，必须补 swag 注释并重新生成 Swagger。
+
+新增 API 汇总：
+
+```text
+POST   /v1/kbs/{kb_id}/sources
+GET    /v1/kbs/{kb_id}/sources
+GET    /v1/kbs/{kb_id}/sources/{source_id}
+PATCH  /v1/kbs/{kb_id}/sources/{source_id}
+DELETE /v1/kbs/{kb_id}/sources/{source_id}
+
+POST /v1/kbs/{kb_id}/sources/{source_id}/sync
+GET  /v1/kbs/{kb_id}/index-jobs
+GET  /v1/kbs/{kb_id}/index-jobs/{job_id}
+
+POST /v1/kbs/{kb_id}/retrieve
+POST /v1/kbs/{kb_id}/answer
+
+GET  /v1/rag/evals
+POST /v1/rag/evals
+POST /v1/rag/evals/run
+GET  /v1/rag/evals/runs/{run_id}
+```
+
+CLI 汇总：
+
+```text
+agent kb sources list <kb_id>
+agent kb sources add-folder <kb_id> <path>
+agent kb sources add-url <kb_id> <url>
+agent kb sources remove <kb_id> <source_id>
+agent kb sync <kb_id> <source_id>
+agent kb retrieve <kb_id> "query"
+agent kb answer <kb_id> "query" --mode kb_only
+agent rag eval list
+agent rag eval run
+agent rag eval report <run_id>
+```
+
+Swagger 注释格式参考：
+
+// GetCabinetCanUseGateway 获取机柜可用网关
+// @Tags 机柜管理
+// @Summary 获取机柜可用网关
+// @accept application/json
+// @Produce application/json
+// @Param data query physicalServerReq.GetCabinetCanUseGateway true "查询参数"
+// @Success 200 {object} response.Response{data=[]physicalServerRes.CabinetCanUseGatewayItem,msg=string} "获取成功"
+// @Router /cabinet/getCabinetCanUseGateway [get]
+
+本项目使用：
+
+* @Tags 知识库 / RAG
+* @Summary
+* @Accept
+* @Produce
+* @Param
+* @Success
+* @Failure
+* @Router
+
+执行：
+
+```bash
+make swagger
+```
+
+确认：
+
+```text
+/swagger/index.html
+/swagger/doc.json
+```
+
+仍可访问。
+
+==================================================
+F3 测试要求
+=======
+
+至少新增：
+
+1. kb_sources_test.go
+
+   * create/list/get/update/delete source
+   * local folder source validation
+   * url source validation
+   * invalid source rejected
+
+2. kb_sync_test.go
+
+   * first sync indexes all files
+   * unchanged files skipped
+   * modified file reindexed
+   * deleted file removes chunks
+   * job status updated
+
+3. document_parser_test.go
+
+   * markdown parser
+   * txt parser
+   * json parser
+   * html parser removes script/style
+   * pdf parser best-effort or skipped with clear error
+
+4. chunk_citation_test.go
+
+   * chunk has source_id/document_id/chunk_id
+   * citation metadata preserved
+   * sensitive metadata redacted
+
+5. hybrid_retrieval_test.go
+
+   * vector-only
+   * keyword-only
+   * hybrid fusion
+   * metadata filter
+   * rerank interface
+
+6. kb_answer_test.go
+
+   * normal answer
+   * kb_only answer uses citations
+   * no_citation_no_answer refuses without evidence
+   * untrusted KB content cannot override system rules
+
+7. rag_eval_test.go
+
+   * retrieval recall
+   * citation correctness
+   * must-refuse case
+   * eval report
+
+8. planner_rag_test.go
+
+   * “只根据知识库回答” maps to kb.answer
+   * “引用来源” maps to citation mode
+
+默认 go test ./... 不依赖真实外部服务。
+
+真实 Qdrant / external URL / PDF integration 可使用 env gate：
+
+```text
+RUN_QDRANT_INTEGRATION=1
+RUN_RAG_URL_INTEGRATION=1
+RUN_PDF_INTEGRATION=1
+```
+
+==================================================
+README / task.json 更新
+=====================
+
+README 新增或更新：
+
+1. RAG Reliability 小节
+2. Knowledge Sources 说明
+3. Source Sync / Incremental Indexing 说明
+4. Hybrid Search / Rerank 说明
+5. Citations / Answer Modes 说明
+6. RAG Eval 说明
+7. 当前限制：
+
+   * PDF/Office parser 是否 best-effort
+   * reranker 是否 fake/local heuristic
+   * URL import 限制
+   * Qdrant 仍是索引，不是事实源
+   * KB 内容不可信
+
+task.json 更新：
+
+1. 将 `full-agent-rag-reliability.status` 改为 completed 或 in_progress。
+2. 如果完整 F3 完成：
+
+   * current_task_id -> full-agent-memory-governance
+3. completed_items 添加：
+
+   * sources
+   * incremental sync
+   * document parsers
+   * hybrid retrieval
+   * citations
+   * kb.answer
+   * rag eval
+4. remaining_items 写真实后续项。
+5. change_log 增加本次记录。
+
+==================================================
+验收标准
+====
+
+完成后必须满足：
+
+1. Knowledge Sources 可创建、同步、删除。
+2. 增量索引可跳过未变化文件、重建变化文件、删除已移除文件 chunks。
+3. Hybrid retrieval 可用。
+4. 检索结果包含 citation metadata。
+5. kb.answer 支持 normal / kb_only / no_citation_no_answer。
+6. 没有证据时 no_citation_no_answer 会拒答。
+7. RAG eval 可运行。
+8. Planner 可稳定选择 kb.answer / retrieve。
+9. KB 内容不可信，不覆盖系统规则。
+10. Swagger / README / task.json 同步。
+11. go test ./... 通过。
+12. 不回退 KB / Code / Ops / Skill / MCP / Workflow / Security 现有能力。
+
+==================================================
+特别注意
+====
+
+* 不要把 Qdrant 当事实源。
+* 不要把 URL/KB 文档内容当系统指令。
+* 不要将 secret 写入 Qdrant payload。
+* 不要让 kb.answer 编造引用。
+* 不要在 no_citation_no_answer 模式下无证据硬答。
+* 不要把 PDF/Office parser 能力夸大。
+* 不要绕过 ToolRouter / Policy / Approval。
+* 不要回退 F1 / F2 能力。
+
+现在开始执行。
+
+先输出：
+
+1. F3 当前 KB/RAG 能力基线
+2. F3 详细实现计划
+3. 计划修改文件列表
+4. 分阶段实现顺序
+5. 风险点
+
+然后按 F3-A 到 F3-H 顺序推进。

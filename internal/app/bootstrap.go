@@ -317,12 +317,53 @@ func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb
 					"kb_id":   map[string]any{"type": "string"},
 					"query":   map[string]any{"type": "string"},
 					"limit":   map[string]any{"type": "integer"},
+					"mode":    map[string]any{"type": "string"},
+					"rerank":  map[string]any{"type": "boolean"},
 					"filters": map[string]any{"type": "object"},
 				},
 				"required": []string{"query"},
 			},
 			DefaultEffects: []string{"kb.read"},
 		}, &kb.SearchExecutor{Service: knowledge})
+		registry.Register(core.ToolSpec{
+			ID:          "kb.retrieve",
+			Provider:    "local",
+			Name:        "kb.retrieve",
+			Description: "Retrieve local knowledge chunks with hybrid search, rerank and citations",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"kb_id":   map[string]any{"type": "string"},
+					"query":   map[string]any{"type": "string"},
+					"top_k":   map[string]any{"type": "integer"},
+					"mode":    map[string]any{"type": "string"},
+					"rerank":  map[string]any{"type": "boolean"},
+					"filters": map[string]any{"type": "object"},
+				},
+				"required": []string{"query"},
+			},
+			DefaultEffects: []string{"kb.read"},
+		}, &kb.RetrieveExecutor{Service: knowledge})
+		registry.Register(core.ToolSpec{
+			ID:          "kb.answer",
+			Provider:    "local",
+			Name:        "kb.answer",
+			Description: "Answer using local knowledge base evidence and citations",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"kb_id":             map[string]any{"type": "string"},
+					"query":             map[string]any{"type": "string"},
+					"top_k":             map[string]any{"type": "integer"},
+					"mode":              map[string]any{"type": "string"},
+					"require_citations": map[string]any{"type": "boolean"},
+					"rerank":            map[string]any{"type": "boolean"},
+					"filters":           map[string]any{"type": "object"},
+				},
+				"required": []string{"query"},
+			},
+			DefaultEffects: []string{"kb.read"},
+		}, &kb.AnswerExecutor{Service: knowledge})
 	}
 	registry.Register(core.ToolSpec{
 		ID:          "skill.run",

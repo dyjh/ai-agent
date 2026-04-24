@@ -198,7 +198,7 @@ QDRANT_API_KEY=
 - 当前 runtime KB provider 只支持 `qdrant`，非法 provider 会启动失败
 - `vector.backend=memory` 仍保留给 memory index、本地 smoke 和单元测试使用
 
-Qdrant 只作为向量索引，不是事实源。长期记忆事实源仍然是 `memory/*.md`，知识库事实源仍然是上传的 KB 文档内容。
+Qdrant 只作为向量索引，不是事实源。长期记忆事实源仍然是 `memory/*.md`，知识库事实源仍然是上传文件、本地目录、URL 等外部 source 原文。
 
 ## 启动 PostgreSQL 和 Qdrant
 
@@ -407,6 +407,34 @@ curl http://127.0.0.1:8765/v1/kbs/health
 ```
 
 当前 `kb.search` 已接入真实 ToolRegistry executor，并通过 `ToolRouter -> EffectInference -> PolicyEngine -> Executor` 链路执行。该工具默认 effects 为 `kb.read`，高置信只读查询会自动执行。
+
+## RAG Reliability
+
+当前知识库已扩展为 source + incremental indexing + hybrid retrieval 的可靠问答路径：
+
+- Knowledge Sources：`local_folder`、`git_docs`、`url`、`upload`、`pdf`、`office`、`api_docs` 类型模型；当前同步实现覆盖本地目录 / Git docs 目录 / API docs 目录和 URL，上传仍保留原有 `/documents/upload` 路径
+- Source Sync：`POST /v1/kbs/{kb_id}/sources/{source_id}/sync` 会按 document hash 做增量索引，未变化文件跳过，修改文件重建 chunks，删除文件清理旧 chunks
+- Document Parsers：内置 Markdown、txt、json、HTML text extraction、PDF best-effort；Office parser 当前返回明确 unsupported，后续可接外部解析器
+- Hybrid Retrieval：`POST /v1/kbs/{kb_id}/retrieve` 支持 `vector` / `keyword` / `hybrid`，metadata filter、本地 BM25-like keyword search、score fusion 和 local heuristic rerank
+- Citations：retrieval 和 answer 结果包含 `source_id`、`document_id`、`source_file` / URL、title、section、chunk_id、updated_at、score
+- Answer Modes：`POST /v1/kbs/{kb_id}/answer` 支持 `normal`、`kb_only`、`no_citation_no_answer`；需要引用时无强证据会拒答
+- RAG Eval：`/v1/rag/evals` 支持 golden case、expected sources、must-refuse、eval run report
+
+CLI 示例：
+
+```bash
+agent kb sources list <kb_id>
+agent kb sources add-folder <kb_id> ./docs
+agent kb sources add-url <kb_id> https://example.com/docs
+agent kb sync <kb_id> <source_id>
+agent kb retrieve <kb_id> "query" --mode hybrid
+agent kb answer <kb_id> "query" --mode kb_only
+agent rag eval list
+agent rag eval run
+agent rag eval report <run_id>
+```
+
+KB 文档、URL 和外部 source 内容始终作为不可信上下文处理，不能覆盖系统规则；source URI、metadata 和 Qdrant payload 会避免写入 token、cookie、private key 等敏感信息。
 
 ## Memory Markdown 说明
 
@@ -712,8 +740,8 @@ CLI 对应子命令为：
 - F0 治理与当前状态对齐：README、task.json、Swagger/OpenAPI 与代码状态保持一致
 - F1 代码能力闭环：已完成代码搜索/读取、patch proposal/apply、Git workflow、测试执行和失败修复循环
 - F2 运维能力闭环：已完成 local / SSH / Docker / Kubernetes host profile、runbook、rollback plan
-- F3 RAG 可靠性增强：当前下一阶段，知识库 connectors、增量索引、hybrid search、rerank、citations、RAG eval
-- F4 长期记忆治理：记忆分类、候选审批、查看/编辑/删除、敏感信息防写入
+- F3 RAG 可靠性增强：已完成 source registry、增量同步、document parser、hybrid retrieval、rerank、citations、kb.answer、RAG eval
+- F4 长期记忆治理：当前下一阶段，记忆分类、候选审批、查看/编辑/删除、敏感信息防写入
 - F5 安全策略与 Secret Guard：统一 secret scanning、策略解释、危险命令更细粒度结构分析
 - F6 评测与回放系统：run replay、golden tasks、安全回归、工具链路回放
 - F7 Web UI / TUI：本地审批中心、run timeline、memory/KB/code/ops 可视化
@@ -731,7 +759,8 @@ go test ./...
 - shell parser
 - markdown memory
 - code workspace read/search/project inspection, schema-driven CodePlan, test runner, failure parsing, fix loop state carry/max-iteration stop, unified diff proposal preview, patch validation/dry-run/apply rollback metadata, Git summary/commit pre-check tools, and patch approval behavior
-- qdrant store / vector factory / kb.search tool
+- qdrant store / vector factory / kb.search/kb.retrieve/kb.answer tools
+- KB source CRUD、增量 sync、document parser、citation metadata、hybrid retrieval/rerank、kb.answer、RAG eval、planner RAG mapping
 - config validation / KB feature gate / Swagger docs
 - skill manifest / runner / policy
 - mcp config / transport / policy / call_tool / API
@@ -755,6 +784,9 @@ RUN_K8S_INTEGRATION=1 go test ./...
 ## 当前 MVP 限制和后续 TODO
 
 - Runtime KB provider 当前只支持 `qdrant`；`memory` 向量索引用于本地 memory index、测试和开发辅助
+- RAG source registry / index job / eval case 当前为进程内管理；后续可按本地单用户模式落盘，但仍不能把全文正文或 secret 写入 PostgreSQL
+- URL source 当前同步单个网页，带 timeout 和最大响应大小限制；PDF parser 是无依赖 best-effort，Office parser 仅返回明确 unsupported
+- Hybrid reranker 当前是本地启发式，不是模型 reranker；Qdrant 仍只作为向量索引，不是知识事实源
 - 当前 step loop 已覆盖本地单用户场景下的可恢复多步任务，但仍不是无限自动规划的通用 graph 平台
 - PostgreSQL 可用时 run/step 可持久化；无数据库 fallback 仍只提供进程内内存 run state
 - Skill Runtime 已支持 zip 安装、manifest permissions 校验，以及 Linux namespace/chroot 优先的 stronger runner；但 seccomp、cgroup、host allowlist 和更完整 rootfs 封装仍待后续阶段补齐

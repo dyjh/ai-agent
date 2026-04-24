@@ -60,12 +60,12 @@ func (e *EffectInferrer) Infer(_ context.Context, proposal core.ToolProposal) (c
 		return e.inferCodeTest(proposal), nil
 	case "code.parse_test_failure":
 		return readOnlyCodeInference("test failure parsing is read-only"), nil
-	case "kb.search":
+	case "kb.search", "kb.retrieve", "kb.answer":
 		return core.EffectInferenceResult{
 			Effects:       []string{"kb.read"},
 			RiskLevel:     "read",
 			Confidence:    0.95,
-			ReasonSummary: "read-only knowledge search",
+			ReasonSummary: "read-only knowledge retrieval",
 		}, nil
 	case "memory.search":
 		return core.EffectInferenceResult{

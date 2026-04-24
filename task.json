@@ -1,16 +1,16 @@
 {
   "project": "local-agent",
-  "source": "promote-stageF-4",
-  "last_updated": "2026-04-24T22:30:00+08:00",
+  "source": "promote-stageF-5",
+  "last_updated": "2026-04-24T23:45:00+08:00",
   "overall_status": "post_mvp_full_agent_in_progress",
-  "current_task_id": "full-agent-rag-reliability",
-  "current_task_title": "Phase F3: RAG Reliability",
+  "current_task_id": "full-agent-memory-governance",
+  "current_task_title": "Phase F4: Memory Governance",
   "summary": {
-    "headline": "MVP 主链路保持稳定，F1 代码能力闭环和 F2 运维能力闭环已完成，下一阶段进入 RAG 可靠性增强。",
+    "headline": "MVP 主链路保持稳定，F1 代码能力、F2 运维能力和 F3 RAG 可靠性增强已完成，下一阶段进入长期记忆治理。",
     "progress": {
-      "completed": 18,
+      "completed": 19,
       "in_progress": 1,
-      "pending": 4,
+      "pending": 3,
       "total": 23
     },
     "verified": [
@@ -31,7 +31,8 @@
       "2026-04-24 已完成 Phase F1-C/F1-D：新增 code.run_tests / code.parse_test_failure / code.fix_test_failure_loop 最小闭环、Git workflow tools、patch validate/dry-run、planner/CLI 代码入口和对应测试。",
       "2026-04-24 已完成 Phase F1-E 首轮硬化：新增 schema-driven CodePlan 持久化、fix loop 状态接口、审批后 apply_patch -> rerun tests、增强 unified diff parser/hash/rollback metadata、git.diff_summary / git.commit_message_proposal 和对应测试，并确认 go test ./... 通过。",
       "2026-04-24 继续完成 F1-E 硬化：code.propose_patch 支持 unified diff preview，fix loop 可携带 test/patch 状态并处理 approval rejected/max iterations，Planner 正确传递 CLI workspace hint，git.commit 增加 status/staged diff/message pre-check，并补充回归测试。",
-      "2026-04-24 已完成 Phase F2：新增 HostProfile API/CLI、Local/SSH/Docker/K8s 结构化 Ops tools、Runbook plan/execute、Rollback Plan、Ops planner mapping、Swagger/OpenAPI 更新和 mock-based 回归测试，并确认 go test ./... 通过。"
+      "2026-04-24 已完成 Phase F2：新增 HostProfile API/CLI、Local/SSH/Docker/K8s 结构化 Ops tools、Runbook plan/execute、Rollback Plan、Ops planner mapping、Swagger/OpenAPI 更新和 mock-based 回归测试，并确认 go test ./... 通过。",
+      "2026-04-24 已完成 Phase F3：新增 Knowledge Source registry、source sync 增量索引、Markdown/txt/json/html/PDF best-effort parser、hybrid retrieval/rerank/citations、kb.retrieve/kb.answer、RAG eval、API/CLI/Swagger/README 更新和回归测试，并确认 go test ./... 通过。"
     ],
     "unfinished_overview": [
       "当前 step loop 已覆盖本地单用户可恢复多步任务，但仍不是无限自动规划的通用 graph 平台。",
@@ -40,6 +41,7 @@
       "MCP runtime 已有 stdio/http compatibility profile 和默认 conformance matrix，但 SSE、流式结果、capability negotiation 和真实外部 server 集成矩阵仍属于后续 backlog。",
       "Code Workspace 已覆盖读/搜/项目检测、结构化 CodePlan、测试执行、失败解析、Git workflow summary、patch propose/validate/dry-run 和审批后 patch apply；自动修复循环已有有界状态接口和状态携带能力，但自动 patch 质量仍依赖 planner/model。",
       "Ops Capability 已覆盖本地/SSH/Docker/K8s 结构化排查、写操作审批、runbook 和 rollback plan；真实 SSH/Docker/K8s 集成测试仍需要显式环境 gate，部分 rollback 只能 best-effort。",
+      "RAG Reliability 已覆盖 source、增量同步、hybrid retrieval、citation answer 和 eval；source registry/index job/eval case 当前仍为进程内管理，URL/PDF/Office/模型 rerank 仍需后续生产化增强。",
       "更复杂的 graph/branch/parallel workflow 仍属于后续 backlog。"
     ]
   },
@@ -434,7 +436,26 @@
     {
       "id": "full-agent-rag-reliability",
       "title": "Phase F3: RAG Reliability",
-      "status": "in_progress",
+      "status": "completed",
+      "completed_items": [
+        "新增 KnowledgeSource / KnowledgeIndexJob / KnowledgeDocument / KnowledgeChunk / Citation / Retrieval / Answer / RAG Eval 领域结构。",
+        "实现 KB source registry，支持 local_folder / git_docs / url / upload / pdf / office / api_docs 类型建模，source URI 和 metadata 敏感字段脱敏。",
+        "实现 source sync 增量索引：新增文件 chunk/embed/upsert，未变化文件跳过，修改文件删除旧 chunks 后重建，删除文件清理旧索引。",
+        "实现 Markdown、txt、json、HTML text extraction、PDF best-effort parser；Office parser 当前返回明确 unsupported。",
+        "增强 chunk payload 和 Qdrant sanitize allowlist，保留 citation metadata 且避免 token/cookie/private key 等敏感字段进入 payload。",
+        "实现 kb.retrieve 和 API retrieve，支持 vector / keyword / hybrid 模式、metadata filter、BM25-like keyword search、score fusion 和 local heuristic rerank。",
+        "实现 kb.answer 和 API answer，支持 normal / kb_only / no_citation_no_answer；需要引用时无强证据会拒答，KB 内容作为不可信上下文处理。",
+        "实现 RAG eval case/run/report，覆盖 expected sources、citation correctness 和 must-refuse 场景。",
+        "扩展 Planner 对“只根据知识库回答 / 引用来源 / hybrid retrieval”等请求映射到 kb.answer/kb.retrieve。",
+        "新增 Knowledge Sources、sync jobs、retrieve、answer、RAG eval HTTP API 和 CLI 命令，并重新生成 Swagger/OpenAPI。",
+        "补充 RAG reliability 回归测试，覆盖 source CRUD、增量同步、parser、citation metadata、hybrid retrieval、answer modes、eval report 和 planner mapping，并确认 go test ./... 通过。"
+      ],
+      "remaining_items": [
+        "source registry / index job / eval case 当前为进程内管理，后续可按本地单用户模式落盘，但仍不能存储全文正文或 secret。",
+        "URL source 当前同步单个网页；站点 crawl、sitemap、API docs schema discovery 和 Git remote clone/pull 仍待后续增强。",
+        "PDF parser 是无依赖 best-effort，Office parser 当前仅 skeleton/unsupported；生产级解析可接外部 parser 并增加 env-gated integration tests。",
+        "rerank 当前为 local heuristic，后续可接模型 reranker；RAG eval hallucination check 仍是规则化 smoke，不是 LLM judge。"
+      ],
       "deliverables": [
         "Knowledge connectors",
         "Incremental indexing",
@@ -444,7 +465,7 @@
     {
       "id": "full-agent-memory-governance",
       "title": "Phase F4: Memory Governance",
-      "status": "pending",
+      "status": "in_progress",
       "deliverables": [
         "Memory classification",
         "Memory review/edit/delete",
@@ -572,6 +593,11 @@
       "at": "2026-04-24T22:30:00+08:00",
       "task_id": "full-agent-ops-capability",
       "summary": "完成 F1 finalization 并实现 F2：HostProfile API/CLI、Local/SSH/Docker/K8s 结构化运维工具、Runbook dry-run/execute、Rollback Plan、Ops Policy/Planner 映射、Swagger/OpenAPI 更新和 mock-based 回归测试。"
+    },
+    {
+      "at": "2026-04-24T23:45:00+08:00",
+      "task_id": "full-agent-rag-reliability",
+      "summary": "完成 F3：Knowledge Sources、source sync 增量索引、parser pipeline、hybrid retrieval/rerank/citations、kb.answer、RAG eval、Planner/API/CLI/Swagger/README 更新和回归测试。"
     }
   ]
 }
