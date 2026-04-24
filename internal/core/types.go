@@ -171,6 +171,7 @@ type AgentRunStepRecord struct {
 	StepIndex      int            `json:"step_index"`
 	StepType       string         `json:"step_type"`
 	Status         string         `json:"status"`
+	CodePlanJSON   map[string]any `json:"code_plan_json,omitempty"`
 	ProposalJSON   map[string]any `json:"proposal_json,omitempty"`
 	InferenceJSON  map[string]any `json:"inference_json,omitempty"`
 	PolicyJSON     map[string]any `json:"policy_json,omitempty"`

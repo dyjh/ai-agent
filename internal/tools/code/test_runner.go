@@ -34,7 +34,7 @@ type ParseTestFailureExecutor struct {
 	Workspace Workspace
 }
 
-// FixTestFailureLoopExecutor provides a bounded first-step test repair loop.
+// FixTestFailureLoopExecutor provides a bounded workflow-level repair loop state.
 type FixTestFailureLoopExecutor struct {
 	Workspace             Workspace
 	DefaultTimeoutSeconds int
@@ -187,6 +187,10 @@ func (e *FixTestFailureLoopExecutor) Execute(ctx context.Context, input map[stri
 	if maxIterations > e.defaultMaxIterations() {
 		maxIterations = e.defaultMaxIterations()
 	}
+	failureContextMax := tools.GetInt(input, "failure_context_max", 3)
+	if failureContextMax <= 0 {
+		failureContextMax = 3
+	}
 	testInput := map[string]any{
 		"workspace":         stringValue(input, "workspace"),
 		"command":           stringValue(input, "test_command"),
@@ -206,11 +210,14 @@ func (e *FixTestFailureLoopExecutor) Execute(ctx context.Context, input map[stri
 	passed, _ := runResult.Output["passed"].(bool)
 	if passed {
 		return &core.ToolResult{Output: map[string]any{
-			"iterations":         1,
-			"final_passed":       true,
-			"applied_patches":    []string{},
-			"remaining_failures": []map[string]any{},
-			"summary":            "tests passed; no repair needed",
+			"iterations":       1,
+			"final_passed":     true,
+			"test_runs":        []map[string]any{runResult.Output},
+			"failures":         []map[string]any{},
+			"proposed_patches": []map[string]any{},
+			"applied_patches":  []map[string]any{},
+			"stopped_reason":   "tests_passed",
+			"summary":          "tests passed after 1 iteration; no repair patch needed",
 		}}, nil
 	}
 	parseResult, err := (&ParseTestFailureExecutor{Workspace: e.Workspace}).Execute(ctx, map[string]any{
@@ -224,14 +231,30 @@ func (e *FixTestFailureLoopExecutor) Execute(ctx context.Context, input map[stri
 		return nil, err
 	}
 	failures, _ := parseResult.Output["failures"].([]map[string]any)
+	if len(failures) > failureContextMax {
+		failures = failures[:failureContextMax]
+	}
+	nextProposal := map[string]any{
+		"tool": "code.propose_patch",
+		"input": map[string]any{
+			"summary": fmt.Sprintf("Repair failing tests from %s", fmt.Sprint(runResult.Output["command"])),
+		},
+		"requires_approval_before_apply": true,
+	}
 	return &core.ToolResult{Output: map[string]any{
 		"iterations":         1,
 		"final_passed":       false,
-		"applied_patches":    []string{},
+		"test_runs":          []map[string]any{runResult.Output},
+		"failures":           failures,
+		"proposed_patches":   []map[string]any{},
+		"applied_patches":    []map[string]any{},
 		"remaining_failures": failures,
-		"summary":            "tests failed; generate a code.propose_patch proposal and pause for approval before applying changes",
+		"stopped_reason":     "waiting_for_patch_proposal",
+		"summary":            fmt.Sprintf("tests failed after 1/%d iteration(s); generate a code.propose_patch proposal, request approval for code.apply_patch, then rerun tests", maxIterations),
 		"next_tool":          "code.propose_patch",
+		"next_proposal":      nextProposal,
 		"stop_on_approval":   boolValue(input, "stop_on_approval", true),
+		"auto_rerun_tests":   boolValue(input, "auto_rerun_tests", true),
 		"max_iterations":     maxIterations,
 		"last_test_result":   runResult.Output,
 		"last_parse_result":  parseResult.Output,

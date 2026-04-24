@@ -1,12 +1,12 @@
 {
   "project": "local-agent",
-  "source": "promote-stageF-1",
-  "last_updated": "2026-04-24T19:30:00+08:00",
+  "source": "promote-stageF-2",
+  "last_updated": "2026-04-24T20:30:00+08:00",
   "overall_status": "post_mvp_full_agent_in_progress",
   "current_task_id": "full-agent-code-capability",
-  "current_task_title": "Phase F1: Code Capability Loop (F1-C/F1-D)",
+  "current_task_title": "Phase F1: Code Capability Loop (F1-E hardening)",
   "summary": {
-    "headline": "MVP 主链路保持稳定，已完成 F0 状态治理，并开始推进全能型本地 Agent 的代码能力闭环。",
+    "headline": "MVP 主链路保持稳定，已完成 F0 状态治理，并继续推进全能型 Agent 的 F1 代码能力闭环硬化。",
     "progress": {
       "completed": 16,
       "in_progress": 1,
@@ -28,14 +28,15 @@
       "2026-04-24 已完成 Post-MVP Phase C3：MCP dialect / compatibility profile、transport decode 兼容层、结构化 MCP error code、conformance matrix 测试、README/task.json 收口，并再次确认 go test ./... 通过。",
       "2026-04-24 已完成 Phase F0：README/task.json 对齐全能型 Agent 路线图，确认 Swagger/OpenAPI 与 router 现有 HTTP 路由保持一致。",
       "2026-04-24 已完成 Phase F1-A/F1-B 首轮：补齐 code.list_files / search_text / search_symbol / inspect_project / detect_language / detect_test_command / explain_diff，强化 code.propose_patch / code.apply_patch 的 diff preview、hash guard、敏感路径审批和失败回滚，并确认 go test ./... 通过。",
-      "2026-04-24 已完成 Phase F1-C/F1-D：新增 code.run_tests / code.parse_test_failure / code.fix_test_failure_loop 最小闭环、Git workflow tools、patch validate/dry-run、planner/CLI 代码入口和对应测试。"
+      "2026-04-24 已完成 Phase F1-C/F1-D：新增 code.run_tests / code.parse_test_failure / code.fix_test_failure_loop 最小闭环、Git workflow tools、patch validate/dry-run、planner/CLI 代码入口和对应测试。",
+      "2026-04-24 已完成 Phase F1-E 首轮硬化：新增 schema-driven CodePlan 持久化、fix loop 状态接口、审批后 apply_patch -> rerun tests、增强 unified diff parser/hash/rollback metadata、git.diff_summary / git.commit_message_proposal 和对应测试，并确认 go test ./... 通过。"
     ],
     "unfinished_overview": [
       "当前 step loop 已覆盖本地单用户可恢复多步任务，但仍不是无限自动规划的通用 graph 平台。",
       "无 PostgreSQL 时仍回退到内存仓储，run/step 无法跨进程恢复。",
       "当前 LinuxIsolatedRunner 已提供 namespace/chroot 优先的 stronger path，但 seccomp、cgroup、host allowlist、bind mount rootfs 和动态依赖自动封装仍属于 post-MVP backlog。",
       "MCP runtime 已有 stdio/http compatibility profile 和默认 conformance matrix，但 SSE、流式结果、capability negotiation 和真实外部 server 集成矩阵仍属于后续 backlog。",
-      "Code Workspace 已覆盖读/搜/项目检测、测试执行、失败解析、Git workflow、patch validate/dry-run 和审批后 patch apply；自动修复循环当前仍是保守的一轮框架。",
+      "Code Workspace 已覆盖读/搜/项目检测、结构化 CodePlan、测试执行、失败解析、Git workflow summary、patch validate/dry-run 和审批后 patch apply；自动修复循环已有有界状态接口，但自动 patch 质量仍依赖 planner/model。",
       "更复杂的 graph/branch/parallel workflow 仍属于后续 backlog。"
     ]
   },
@@ -372,19 +373,26 @@
         "新增 code.fix_test_failure_loop 最小闭环：运行测试、解析失败并输出下一步 code.propose_patch 指引，不自动写入。",
         "新增 git.status / git.diff / git.log / git.branch 只读工具，以及 git.add / git.commit / git.restore / git.clean 审批工具；git.clean 标记为 danger。",
         "新增 code.validate_patch / code.dry_run_patch，支持 full-file replacement 和基础 unified diff hunk conflict 检测、expected_sha256 mismatch 和敏感路径提示。",
-        "增强 planner 对代码任务、测试任务、patch validation 和 Git 只读任务的 tool-first 选择，并补充 agent code / agent git CLI 入口。"
+        "增强 planner 对代码任务、测试任务、patch validation 和 Git 只读任务的 tool-first 选择，并补充 agent code / agent git CLI 入口。",
+        "新增 schema-driven CodePlan / CodePlanStep，Planner 在代码任务中输出结构化计划，RunState 和 plan step 持久化 CodePlan 以便 replay。",
+        "升级 code.fix_test_failure_loop 输出协议，包含 iterations、test_runs、failures、proposed/applied patch 摘要、stopped_reason、next_proposal、max_iterations 和 auto_rerun_tests；patch 仍必须独立审批。",
+        "增强 workflow planner：code.apply_patch 审批恢复并执行后，会继续发起 code.run_tests；测试失败后仍通过 code.parse_test_failure 解析下一轮上下文。",
+        "增强 unified diff parser，支持 old/new path、operation、hunk range、hunk line count validation、hunk-level conflict 信息、path escape 防护、expected_sha256_by_path、diff statistics 和 rollback snapshot metadata。",
+        "新增 git.diff_summary 和 git.commit_message_proposal 只读工具，并补充 agent git diff-summary / commit-message、agent code fix-tests / patch dry-run / patch apply CLI 入口。",
+        "补充 code plan、fix loop、patch unified diff/hash/rollback/path escape 和 git summary 回归测试，并确认 go test ./... 通过。"
       ],
       "remaining_items": [
-        "将 code.fix_test_failure_loop 从保守的一轮框架升级为 model-driven 多轮修复、审批后 resume 继续测试和更完整的 max iteration 状态机。",
-        "继续增强 unified diff parser，补 partial apply、更多 conflict 场景、rollback snapshot API 和更高保真的 git apply 兼容性。",
-        "当前 planner 已能 tool-first 进入代码工具，但仍是启发式入口；后续应接入更稳定的 Eino planner/schema-driven code workflow。",
+        "继续接入更强的 model-driven patch 生成，让 planner/model 基于失败上下文生成更高质量 code.propose_patch；当前不保证所有测试失败可自动修好。",
+        "继续增强 patch engine，补完整 git apply 兼容性、更复杂 rename/delete 语义和交互式 conflict resolution。",
+        "当前 CodePlan 已落入启发式 planner；后续可接入 Eino graph / LLM planner，使 CodePlan step selection 更稳定。",
         "可继续补充直接 code/git HTTP API、diff viewer 或 TUI，但不能绕过 ToolRouter / Policy / Approval。"
       ],
       "deliverables": [
         "Code workspace read/search/project inspection tools",
-        "Patch proposal / validation / approval / apply 基线",
-        "Code test runner / failure parser / minimal repair loop",
-        "Git workflow read/write tools",
+        "Schema-driven CodePlan and workflow step persistence",
+        "Patch proposal / validation / approval / apply hardening",
+        "Code test runner / failure parser / bounded repair loop state",
+        "Git workflow read/write tools and read-only summary tools",
         "敏感路径审批、patch snapshot、test loop 和 git policy 测试"
       ]
     },
@@ -524,6 +532,11 @@
       "at": "2026-04-24T19:30:00+08:00",
       "task_id": "full-agent-code-capability",
       "summary": "完成 F1-C/F1-D：code.run_tests、code.parse_test_failure、最小 fix loop、Git workflow tools、patch validate/dry-run、planner/CLI 入口、README/task.json 更新和测试覆盖。"
+    },
+    {
+      "at": "2026-04-24T20:30:00+08:00",
+      "task_id": "full-agent-code-capability",
+      "summary": "完成 F1-E 首轮硬化：schema-driven CodePlan、fix loop 状态接口、apply_patch 审批恢复后 rerun tests、增强 unified diff/hash/rollback metadata、git diff summary/commit message proposal、README/task.json 更新和测试覆盖。"
     }
   ]
 }

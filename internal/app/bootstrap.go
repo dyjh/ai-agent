@@ -364,6 +364,8 @@ func registerGitTools(registry *toolscore.Registry, cfg config.Config) {
 	}{
 		{name: "status", description: "Show git working tree status", effects: readEffects},
 		{name: "diff", description: "Show git diff", effects: readEffects},
+		{name: "diff_summary", description: "Summarize git diff without modifying the repository", effects: readEffects},
+		{name: "commit_message_proposal", description: "Propose a commit message from staged diff without committing", effects: readEffects},
 		{name: "log", description: "Show recent git commits", effects: readEffects},
 		{name: "branch", description: "Show current git branch", effects: readEffects},
 		{name: "add", description: "Stage paths in git", effects: writeEffects},
@@ -378,7 +380,7 @@ func registerGitTools(registry *toolscore.Registry, cfg config.Config) {
 			Provider:       "local",
 			Name:           toolName,
 			Description:    operation.description,
-			InputSchema:    map[string]any{"workspace": "string", "paths": "array", "message": "string", "limit": "number"},
+			InputSchema:    map[string]any{"workspace": "string", "paths": "array", "message": "string", "limit": "number", "staged": "boolean"},
 			DefaultEffects: append([]string(nil), operation.effects...),
 		}, &gittools.Executor{
 			Root:           cfg.Owner.DefaultWorkspace,

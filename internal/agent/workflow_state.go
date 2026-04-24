@@ -78,6 +78,7 @@ type RunStep struct {
 	Index      int                         `json:"index"`
 	Type       RunStepType                 `json:"type"`
 	Status     RunStepStatus               `json:"status"`
+	CodePlan   *CodePlan                   `json:"code_plan,omitempty"`
 	Proposal   *core.ToolProposal          `json:"proposal,omitempty"`
 	Inference  *core.EffectInferenceResult `json:"inference,omitempty"`
 	Policy     *core.PolicyDecision        `json:"policy,omitempty"`
@@ -381,6 +382,7 @@ func cloneRunState(state RunState) RunState {
 
 func cloneRunStep(step RunStep) RunStep {
 	cp := step
+	cp.CodePlan = cloneCodePlan(step.CodePlan)
 	if step.Proposal != nil {
 		proposal := cloneProposal(*step.Proposal)
 		cp.Proposal = &proposal
@@ -444,6 +446,7 @@ func sanitizeRunState(state RunState) RunState {
 		if cp.Plan.ToolProposal != nil {
 			cp.Plan.ToolProposal.Input = security.RedactMap(cp.Plan.ToolProposal.Input)
 		}
+		sanitizeCodePlan(cp.Plan.CodePlan)
 	}
 	if cp.Proposal != nil {
 		cp.Proposal.Input = security.RedactMap(cp.Proposal.Input)
@@ -463,6 +466,9 @@ func sanitizeRunStep(step RunStep) RunStep {
 	cp := cloneRunStep(step)
 	cp.Summary = security.RedactString(cp.Summary)
 	cp.Error = security.RedactString(cp.Error)
+	if cp.CodePlan != nil {
+		sanitizeCodePlan(cp.CodePlan)
+	}
 	if cp.Proposal != nil {
 		cp.Proposal.Input = security.RedactMap(cp.Proposal.Input)
 	}
@@ -479,6 +485,17 @@ func sanitizeRunStep(step RunStep) RunStep {
 		cp.Approval.Reason = security.RedactString(cp.Approval.Reason)
 	}
 	return cp
+}
+
+func sanitizeCodePlan(plan *CodePlan) {
+	if plan == nil {
+		return
+	}
+	plan.Goal = security.RedactString(plan.Goal)
+	for idx := range plan.Steps {
+		plan.Steps[idx].Purpose = security.RedactString(plan.Steps[idx].Purpose)
+		plan.Steps[idx].Input = security.RedactMap(plan.Steps[idx].Input)
+	}
 }
 
 func toRunRecord(state RunState) core.AgentRunRecord {
@@ -530,6 +547,7 @@ func toRunStepRecord(step RunStep) core.AgentRunStepRecord {
 		StepIndex:      step.Index,
 		StepType:       string(step.Type),
 		Status:         string(step.Status),
+		CodePlanJSON:   marshalToMap(sanitized.CodePlan),
 		ProposalJSON:   marshalToMap(sanitized.Proposal),
 		InferenceJSON:  marshalToMap(sanitized.Inference),
 		PolicyJSON:     marshalToMap(sanitized.Policy),
@@ -563,6 +581,13 @@ func runStepFromRecord(record core.AgentRunStepRecord) (RunStep, error) {
 			return RunStep{}, err
 		}
 		step.Proposal = &proposal
+	}
+	if len(record.CodePlanJSON) > 0 {
+		var codePlan CodePlan
+		if err := unmarshalFromMap(record.CodePlanJSON, &codePlan); err != nil {
+			return RunStep{}, err
+		}
+		step.CodePlan = &codePlan
 	}
 	if len(record.InferenceJSON) > 0 {
 		var inference core.EffectInferenceResult

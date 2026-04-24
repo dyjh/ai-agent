@@ -100,6 +100,10 @@ func (p *postgresRuns) DeleteRun(ctx context.Context, runID string) error {
 }
 
 func (p *postgresRunSteps) UpsertStep(ctx context.Context, step core.AgentRunStepRecord) error {
+	codePlanJSON, err := json.Marshal(step.CodePlanJSON)
+	if err != nil {
+		return err
+	}
 	proposalJSON, err := json.Marshal(step.ProposalJSON)
 	if err != nil {
 		return err
@@ -124,12 +128,13 @@ func (p *postgresRunSteps) UpsertStep(ctx context.Context, step core.AgentRunSte
 	_, err = p.pool.Exec(ctx, `
 		INSERT INTO agent_run_steps (
 			step_id, run_id, step_index, step_type, status,
-			proposal_json, inference_json, policy_json, approval_json, tool_result_json,
+			code_plan_json, proposal_json, inference_json, policy_json, approval_json, tool_result_json,
 			summary, error, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		ON CONFLICT (step_id) DO UPDATE
 		SET status = EXCLUDED.status,
+			code_plan_json = EXCLUDED.code_plan_json,
 			proposal_json = EXCLUDED.proposal_json,
 			inference_json = EXCLUDED.inference_json,
 			policy_json = EXCLUDED.policy_json,
@@ -139,7 +144,7 @@ func (p *postgresRunSteps) UpsertStep(ctx context.Context, step core.AgentRunSte
 			error = EXCLUDED.error,
 			updated_at = EXCLUDED.updated_at
 	`, step.StepID, step.RunID, step.StepIndex, step.StepType, step.Status,
-		proposalJSON, inferenceJSON, policyJSON, approvalJSON, resultJSON,
+		codePlanJSON, proposalJSON, inferenceJSON, policyJSON, approvalJSON, resultJSON,
 		step.Summary, step.Error, step.CreatedAt, step.UpdatedAt)
 	return err
 }
@@ -147,7 +152,7 @@ func (p *postgresRunSteps) UpsertStep(ctx context.Context, step core.AgentRunSte
 func (p *postgresRunSteps) ListStepsByRun(ctx context.Context, runID string) ([]core.AgentRunStepRecord, error) {
 	rows, err := p.pool.Query(ctx, `
 		SELECT step_id, run_id, step_index, step_type, status,
-		       proposal_json, inference_json, policy_json, approval_json, tool_result_json,
+		       code_plan_json, proposal_json, inference_json, policy_json, approval_json, tool_result_json,
 		       summary, error, created_at, updated_at
 		FROM agent_run_steps
 		WHERE run_id = $1
@@ -161,16 +166,19 @@ func (p *postgresRunSteps) ListStepsByRun(ctx context.Context, runID string) ([]
 	var items []core.AgentRunStepRecord
 	for rows.Next() {
 		var (
-			item                                    core.AgentRunStepRecord
-			proposalJSON, inferenceJSON, policyJSON []byte
-			approvalJSON, resultJSON                []byte
+			item                                                  core.AgentRunStepRecord
+			codePlanJSON, proposalJSON, inferenceJSON, policyJSON []byte
+			approvalJSON, resultJSON                              []byte
 		)
 		if err := rows.Scan(
 			&item.StepID, &item.RunID, &item.StepIndex, &item.StepType, &item.Status,
-			&proposalJSON, &inferenceJSON, &policyJSON, &approvalJSON, &resultJSON,
+			&codePlanJSON, &proposalJSON, &inferenceJSON, &policyJSON, &approvalJSON, &resultJSON,
 			&item.Summary, &item.Error, &item.CreatedAt, &item.UpdatedAt,
 		); err != nil {
 			return nil, err
+		}
+		if len(codePlanJSON) > 0 {
+			_ = json.Unmarshal(codePlanJSON, &item.CodePlanJSON)
 		}
 		if len(proposalJSON) > 0 {
 			_ = json.Unmarshal(proposalJSON, &item.ProposalJSON)

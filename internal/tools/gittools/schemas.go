@@ -7,4 +7,5 @@ type ToolInput struct {
 	Message   string   `json:"message,omitempty"`
 	Args      []string `json:"args,omitempty"`
 	Limit     int      `json:"limit,omitempty"`
+	Staged    bool     `json:"staged,omitempty"`
 }

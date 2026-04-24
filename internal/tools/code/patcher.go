@@ -71,7 +71,7 @@ func (e *ProposePatchExecutor) Execute(_ context.Context, input map[string]any) 
 // Execute implements code.apply_patch.
 func (e *ApplyPatchExecutor) Execute(_ context.Context, input map[string]any) (*core.ToolResult, error) {
 	if diff, _ := input["diff"].(string); strings.TrimSpace(diff) != "" {
-		prepared, err := prepareUnifiedDiffPatch(e.Workspace, diff)
+		prepared, err := prepareUnifiedDiffPatch(e.Workspace, input, diff)
 		if err != nil {
 			return nil, err
 		}
@@ -118,6 +118,7 @@ func (e *ApplyPatchExecutor) Execute(_ context.Context, input map[string]any) (*
 
 func patchAppliedResult(prepared []preparedPatchFile) *core.ToolResult {
 	changed := make([]map[string]any, 0, len(prepared))
+	rollbackFiles := make([]map[string]any, 0, len(prepared))
 	for _, file := range prepared {
 		changed = append(changed, map[string]any{
 			"path":       file.Path,
@@ -126,11 +127,13 @@ func patchAppliedResult(prepared []preparedPatchFile) *core.ToolResult {
 			"old_size":   len(file.OldContent),
 			"new_size":   len(file.NewContent),
 		})
+		rollbackFiles = append(rollbackFiles, rollbackSnapshotForFile(file.Path, file.OldContent, file.NewContent, file.ExistedBefore, file.Mode))
 	}
 	return &core.ToolResult{
 		Output: map[string]any{
-			"changed_files": changed,
-			"status":        "applied",
+			"changed_files":     changed,
+			"rollback_snapshot": rollbackSnapshot(rollbackFiles),
+			"status":            "applied",
 		},
 	}
 }
@@ -148,6 +151,7 @@ type preparedPatchFile struct {
 	NewContent    []byte
 	Mode          os.FileMode
 	ExistedBefore bool
+	Delete        bool
 }
 
 func parsePatchFiles(input map[string]any) ([]patchFile, error) {
@@ -243,6 +247,14 @@ func readPatchTarget(path string) ([]byte, bool, os.FileMode, error) {
 func applyPreparedPatch(files []preparedPatchFile) error {
 	applied := make([]preparedPatchFile, 0, len(files))
 	for _, file := range files {
+		if file.Delete {
+			if err := os.Remove(file.AbsPath); err != nil && !os.IsNotExist(err) {
+				rollbackPatch(applied)
+				return err
+			}
+			applied = append(applied, file)
+			continue
+		}
 		if err := os.MkdirAll(filepath.Dir(file.AbsPath), 0o755); err != nil {
 			rollbackPatch(applied)
 			return err
@@ -288,6 +300,39 @@ func rollbackPatch(files []preparedPatchFile) {
 		}
 		_ = os.WriteFile(file.AbsPath, file.OldContent, file.Mode)
 	}
+}
+
+func rollbackSnapshot(files []map[string]any) map[string]any {
+	var seed strings.Builder
+	for _, file := range files {
+		seed.WriteString(fmt.Sprint(file["path"]))
+		seed.WriteString(":")
+		seed.WriteString(fmt.Sprint(file["old_sha256"]))
+		seed.WriteString(":")
+		seed.WriteString(fmt.Sprint(file["new_sha256"]))
+		seed.WriteString("\n")
+	}
+	return map[string]any{
+		"snapshot_id": sha256Hex([]byte(seed.String())),
+		"files":       files,
+	}
+}
+
+func rollbackSnapshotForFile(path string, oldContent, newContent []byte, existedBefore bool, mode os.FileMode) map[string]any {
+	item := map[string]any{
+		"path":           path,
+		"old_sha256":     sha256Hex(oldContent),
+		"old_size":       len(oldContent),
+		"existed_before": existedBefore,
+	}
+	if newContent != nil {
+		item["new_sha256"] = sha256Hex(newContent)
+		item["new_size"] = len(newContent)
+	}
+	if mode != 0 {
+		item["mode"] = fmt.Sprintf("%#o", mode.Perm())
+	}
+	return item
 }
 
 func unifiedDiff(path, oldContent, newContent string) string {

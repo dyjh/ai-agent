@@ -25,6 +25,8 @@ func TestGitToolsPolicyAndSnapshot(t *testing.T) {
 	}
 	registerGitTestTool("git.status", "status")
 	registerGitTestTool("git.diff", "diff")
+	registerGitTestTool("git.diff_summary", "diff_summary")
+	registerGitTestTool("git.commit_message_proposal", "commit_message_proposal")
 	registerGitTestTool("git.log", "log")
 	registerGitTestTool("git.add", "add")
 	registerGitTestTool("git.commit", "commit")
@@ -68,6 +70,32 @@ func TestGitToolsPolicyAndSnapshot(t *testing.T) {
 	add.Approval.InputSnapshot["paths"] = []any{"other.txt"}
 	if _, err := router.ExecuteApproved(context.Background(), add.Approval.ID); err != nil {
 		t.Fatalf("ExecuteApproved(git.add) error = %v", err)
+	}
+
+	diffSummary, err := router.Propose(context.Background(), "run_git", "conv_git", core.ToolProposal{
+		ID: "git_diff_summary", Tool: "git.diff_summary", Input: map[string]any{"workspace": "."},
+	})
+	if err != nil {
+		t.Fatalf("git.diff_summary Propose() error = %v", err)
+	}
+	if diffSummary.Approval != nil || diffSummary.Result == nil {
+		t.Fatalf("git.diff_summary should auto execute, outcome=%+v", diffSummary)
+	}
+	if diffSummary.Result.Output["read_only"] != true {
+		t.Fatalf("git.diff_summary read_only = %v", diffSummary.Result.Output["read_only"])
+	}
+
+	message, err := router.Propose(context.Background(), "run_git", "conv_git", core.ToolProposal{
+		ID: "git_commit_message", Tool: "git.commit_message_proposal", Input: map[string]any{"workspace": "."},
+	})
+	if err != nil {
+		t.Fatalf("git.commit_message_proposal Propose() error = %v", err)
+	}
+	if message.Approval != nil || message.Result == nil {
+		t.Fatalf("git.commit_message_proposal should auto execute, outcome=%+v", message)
+	}
+	if message.Result.Output["message"] == "" {
+		t.Fatalf("commit message proposal is empty")
 	}
 
 	clean, err := router.Propose(context.Background(), "run_git", "conv_git", core.ToolProposal{

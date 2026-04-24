@@ -382,6 +382,7 @@ func (r *Runtime) continueWorkflow(ctx context.Context, state *RunState, sink Ev
 			if plan.Reason != "" {
 				step.Summary = plan.Reason
 			}
+			step.CodePlan = cloneCodePlan(plan.CodePlan)
 			if plan.ToolProposal != nil {
 				proposal := cloneProposal(*plan.ToolProposal)
 				step.Proposal = &proposal

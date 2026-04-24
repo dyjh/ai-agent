@@ -459,6 +459,14 @@ func codeCommand(serverURL *string) *cobra.Command {
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
+		Use:   "fix-tests [workspace]",
+		Short: "Run the bounded test repair loop through code.fix_test_failure_loop",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请修复测试失败并进入有界修复循环，workspace: %s", args[0]))
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
 		Use:   "diff [workspace]",
 		Short: "Show git diff through the agent workflow",
 		Args:  cobra.ExactArgs(1),
@@ -476,6 +484,22 @@ func codeCommand(serverURL *string) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			return askWorkflow(*serverURL, fmt.Sprintf("请验证 patch 文件 `%s`，只做 dry-run，不要应用。", args[0]))
+		},
+	})
+	patchCmd.AddCommand(&cobra.Command{
+		Use:   "dry-run [patch_file]",
+		Short: "Dry-run a patch file through code.validate_patch",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请 dry-run patch 文件 `%s`，不要应用。", args[0]))
+		},
+	})
+	patchCmd.AddCommand(&cobra.Command{
+		Use:   "apply [patch_file]",
+		Short: "Request approval to apply a patch file through code.apply_patch",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请应用 patch 文件 `%s`，必须先请求审批。", args[0]))
 		},
 	})
 	cmd.AddCommand(patchCmd)
@@ -501,6 +525,22 @@ func gitCommand(serverURL *string) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			return askWorkflow(*serverURL, fmt.Sprintf("请查看 git diff，workspace: %s", args[0]))
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "diff-summary [workspace]",
+		Short: "Run git.diff_summary through the workflow",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请总结 git diff，workspace: %s", args[0]))
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "commit-message [workspace]",
+		Short: "Propose a commit message without committing",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请生成 commit message 建议但不要提交，workspace: %s", args[0]))
 		},
 	})
 	return cmd

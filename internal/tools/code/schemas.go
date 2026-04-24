@@ -44,12 +44,43 @@ type PatchFileInput struct {
 
 // PatchInput is the input snapshot for code.propose_patch and code.apply_patch.
 type PatchInput struct {
-	Path           string           `json:"path,omitempty"`
-	Content        string           `json:"content,omitempty"`
-	ExpectedSHA256 string           `json:"expected_sha256,omitempty"`
-	Files          []PatchFileInput `json:"files,omitempty"`
-	Diff           string           `json:"diff,omitempty"`
-	Summary        string           `json:"summary,omitempty"`
+	Path           string            `json:"path,omitempty"`
+	Content        string            `json:"content,omitempty"`
+	ExpectedSHA256 string            `json:"expected_sha256,omitempty"`
+	ExpectedByPath map[string]string `json:"expected_sha256_by_path,omitempty"`
+	Files          []PatchFileInput  `json:"files,omitempty"`
+	Diff           string            `json:"diff,omitempty"`
+	Summary        string            `json:"summary,omitempty"`
+}
+
+// UnifiedDiff is a parsed unified diff preview.
+type UnifiedDiff struct {
+	Files []DiffFile `json:"files"`
+}
+
+// DiffFile describes one file section in a unified diff.
+type DiffFile struct {
+	OldPath   string     `json:"old_path"`
+	NewPath   string     `json:"new_path"`
+	Path      string     `json:"path"`
+	Operation string     `json:"operation"`
+	Hunks     []DiffHunk `json:"hunks"`
+}
+
+// DiffHunk describes one unified diff hunk with source and target ranges.
+type DiffHunk struct {
+	OldStart int        `json:"old_start"`
+	OldCount int        `json:"old_count"`
+	NewStart int        `json:"new_start"`
+	NewCount int        `json:"new_count"`
+	Section  string     `json:"section,omitempty"`
+	Lines    []DiffLine `json:"lines"`
+}
+
+// DiffLine describes one line in a diff hunk.
+type DiffLine struct {
+	Kind string `json:"kind"` // context | add | delete
+	Text string `json:"text"`
 }
 
 // ExplainDiffInput is the input snapshot for code.explain_diff.
@@ -81,8 +112,11 @@ type ParseTestFailureInput struct {
 
 // FixLoopInput is the input snapshot for code.fix_test_failure_loop.
 type FixLoopInput struct {
-	Workspace      string `json:"workspace,omitempty"`
-	TestCommand    string `json:"test_command,omitempty"`
-	MaxIterations  int    `json:"max_iterations,omitempty"`
-	StopOnApproval bool   `json:"stop_on_approval,omitempty"`
+	Workspace         string `json:"workspace,omitempty"`
+	TestCommand       string `json:"test_command,omitempty"`
+	MaxIterations     int    `json:"max_iterations,omitempty"`
+	StopOnApproval    bool   `json:"stop_on_approval,omitempty"`
+	AutoRerunTests    bool   `json:"auto_rerun_tests,omitempty"`
+	FailureContextMax int    `json:"failure_context_max,omitempty"`
+	TestNamePattern   string `json:"test_name_pattern,omitempty"`
 }

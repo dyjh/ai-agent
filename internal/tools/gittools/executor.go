@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,6 +39,13 @@ func (e *Executor) Execute(ctx context.Context, input map[string]any) (*core.Too
 	paths, err := e.resolvePaths(workspace, input)
 	if err != nil {
 		return nil, err
+	}
+	switch e.Operation {
+	case "diff_summary":
+		staged, _ := input["staged"].(bool)
+		return e.executeDiffSummary(ctx, workspace, paths, staged)
+	case "commit_message_proposal":
+		return e.executeCommitMessageProposal(ctx, workspace, paths)
 	}
 	args, err := e.gitArgs(input, paths)
 	if err != nil {
@@ -104,6 +112,10 @@ func (e *Executor) gitArgs(input map[string]any, paths []string) ([]string, erro
 		return []string{"log", "--oneline", "-n", fmt.Sprint(limit)}, nil
 	case "branch":
 		return []string{"branch", "--show-current"}, nil
+	case "diff_summary":
+		return appendPathspec([]string{"diff", "--stat"}, paths), nil
+	case "commit_message_proposal":
+		return []string{"status", "--short"}, nil
 	case "add":
 		if len(paths) == 0 {
 			return nil, errors.New("git.add requires at least one path")
@@ -125,6 +137,191 @@ func (e *Executor) gitArgs(input map[string]any, paths []string) ([]string, erro
 	default:
 		return nil, fmt.Errorf("unsupported git operation: %s", e.Operation)
 	}
+}
+
+func (e *Executor) executeDiffSummary(ctx context.Context, workspace string, paths []string, staged bool) (*core.ToolResult, error) {
+	startedAt := time.Now().UTC()
+	base := []string{"diff"}
+	if staged {
+		base = append(base, "--cached")
+	}
+	stat, err := e.runGit(ctx, workspace, appendPathspec(append([]string(nil), append(base, "--stat")...), paths))
+	if err != nil {
+		return nil, err
+	}
+	numstat, err := e.runGit(ctx, workspace, appendPathspec(append([]string(nil), append(base, "--numstat")...), paths))
+	if err != nil {
+		return nil, err
+	}
+	nameStatus, err := e.runGit(ctx, workspace, appendPathspec(append([]string(nil), append(base, "--name-status")...), paths))
+	if err != nil {
+		return nil, err
+	}
+	files, additions, deletions := parseNumstat(numstat.Stdout)
+	output := map[string]any{
+		"workspace":     filepath.ToSlash(workspace),
+		"operation":     e.Operation,
+		"staged":        staged,
+		"paths":         paths,
+		"file_count":    len(files),
+		"changed_files": files,
+		"additions":     additions,
+		"deletions":     deletions,
+		"stat":          stat.Stdout,
+		"name_status":   parseNameStatus(nameStatus.Stdout),
+		"summary":       fmt.Sprintf("%d file(s) changed, +%d/-%d", len(files), additions, deletions),
+		"truncated":     stat.Truncated || numstat.Truncated || nameStatus.Truncated,
+		"duration_ms":   time.Since(startedAt).Milliseconds(),
+		"read_only":     true,
+		"commit_scoped": staged,
+	}
+	return &core.ToolResult{Output: output, StartedAt: startedAt, FinishedAt: time.Now().UTC()}, nil
+}
+
+func (e *Executor) executeCommitMessageProposal(ctx context.Context, workspace string, paths []string) (*core.ToolResult, error) {
+	startedAt := time.Now().UTC()
+	status, err := e.runGit(ctx, workspace, []string{"status", "--short"})
+	if err != nil {
+		return nil, err
+	}
+	staged, err := e.runGit(ctx, workspace, appendPathspec([]string{"diff", "--cached", "--numstat"}, paths))
+	if err != nil {
+		return nil, err
+	}
+	files, additions, deletions := parseNumstat(staged.Stdout)
+	message := proposeCommitMessage(files, additions, deletions)
+	output := map[string]any{
+		"workspace":         filepath.ToSlash(workspace),
+		"operation":         e.Operation,
+		"paths":             paths,
+		"status":            status.Stdout,
+		"staged_file_count": len(files),
+		"staged_files":      files,
+		"additions":         additions,
+		"deletions":         deletions,
+		"message":           message,
+		"summary":           "commit message proposal only; no commit was created",
+		"pre_commit_checks": map[string]any{
+			"git_status_checked":      true,
+			"staged_diff_checked":     true,
+			"commit_message_nonempty": strings.TrimSpace(message) != "",
+		},
+		"warnings":    commitProposalWarnings(files),
+		"read_only":   true,
+		"truncated":   status.Truncated || staged.Truncated,
+		"duration_ms": time.Since(startedAt).Milliseconds(),
+	}
+	return &core.ToolResult{Output: output, StartedAt: startedAt, FinishedAt: time.Now().UTC()}, nil
+}
+
+type gitCapture struct {
+	Stdout    string
+	Stderr    string
+	ExitCode  int
+	Truncated bool
+}
+
+func (e *Executor) runGit(ctx context.Context, workspace string, args []string) (gitCapture, error) {
+	timeout := e.timeoutSeconds()
+	runCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(runCtx, "git", args...)
+	cmd.Dir = workspace
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	runErr := cmd.Run()
+	stdoutText, stdoutTruncated := truncateBytes(security.RedactString(stdout.String()), e.maxOutputBytes())
+	stderrText, stderrTruncated := truncateBytes(security.RedactString(stderr.String()), e.maxOutputBytes())
+	exitCode := processExitCode(runErr)
+	if runCtx.Err() == context.DeadlineExceeded {
+		exitCode = -1
+	}
+	capture := gitCapture{
+		Stdout:    stdoutText,
+		Stderr:    stderrText,
+		ExitCode:  exitCode,
+		Truncated: stdoutTruncated || stderrTruncated,
+	}
+	if runErr != nil {
+		return capture, fmt.Errorf("git %s failed: %s", strings.Join(args, " "), firstNonEmpty(stderrText, runErr.Error()))
+	}
+	return capture, nil
+}
+
+func parseNumstat(output string) ([]string, int, int) {
+	var files []string
+	additions := 0
+	deletions := 0
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+		if fields[0] != "-" {
+			if n, err := strconv.Atoi(fields[0]); err == nil {
+				additions += n
+			}
+		}
+		if fields[1] != "-" {
+			if n, err := strconv.Atoi(fields[1]); err == nil {
+				deletions += n
+			}
+		}
+		files = append(files, filepath.ToSlash(strings.Join(fields[2:], " ")))
+	}
+	return files, additions, deletions
+}
+
+func parseNameStatus(output string) []map[string]any {
+	var items []map[string]any
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		items = append(items, map[string]any{
+			"status": fields[0],
+			"path":   filepath.ToSlash(strings.Join(fields[1:], " ")),
+		})
+	}
+	return items
+}
+
+func proposeCommitMessage(files []string, additions, deletions int) string {
+	if len(files) == 0 {
+		return "chore: no staged changes"
+	}
+	verb := "update"
+	if additions > 0 && deletions == 0 {
+		verb = "add"
+	}
+	if deletions > additions && additions == 0 {
+		verb = "remove"
+	}
+	scope := "workspace"
+	if len(files) == 1 {
+		scope = filepath.Base(files[0])
+	}
+	return fmt.Sprintf("chore: %s %s", verb, scope)
+}
+
+func commitProposalWarnings(files []string) []string {
+	if len(files) == 0 {
+		return []string{"no staged diff detected; stage files with git.add before git.commit"}
+	}
+	return nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func appendPathspec(args []string, paths []string) []string {

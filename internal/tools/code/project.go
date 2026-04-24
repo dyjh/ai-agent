@@ -98,6 +98,31 @@ func (e *ExplainDiffExecutor) Execute(_ context.Context, input map[string]any) (
 			},
 		}, nil
 	}
+	if parsed, err := ParseUnifiedDiff(diff); err == nil {
+		added, removed := diffStats(diff)
+		paths := make([]string, 0, len(parsed.Files))
+		fileSummaries := make([]map[string]any, 0, len(parsed.Files))
+		for _, file := range parsed.Files {
+			paths = append(paths, file.Path)
+			fileSummaries = append(fileSummaries, map[string]any{
+				"path":      file.Path,
+				"old_path":  file.OldPath,
+				"new_path":  file.NewPath,
+				"operation": file.Operation,
+				"hunks":     len(file.Hunks),
+			})
+		}
+		sort.Strings(paths)
+		return &core.ToolResult{
+			Output: map[string]any{
+				"changed_files":  paths,
+				"file_count":     len(parsed.Files),
+				"added_lines":    added,
+				"removed_lines":  removed,
+				"file_summaries": fileSummaries,
+			},
+		}, nil
+	}
 	added, removed := diffStats(diff)
 	return &core.ToolResult{
 		Output: map[string]any{

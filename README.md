@@ -71,15 +71,16 @@ ToolProposal -> EffectInference -> PolicyEngine -> ApprovalCenter -> Executor
 - `code.detect_test_command`：检测可能的测试命令，不执行测试
 - `code.run_tests`：在工作区内运行 allowlisted 测试命令，支持自动检测、timeout、输出限长和脱敏
 - `code.parse_test_failure`：把 Go / pytest / Node / Rust 的常见失败输出解析为结构化失败信息
-- `code.fix_test_failure_loop`：运行测试、解析失败，并输出下一步 `code.propose_patch` 修复动作；不会自动写文件
+- `code.fix_test_failure_loop`：运行测试、解析失败，并输出有界修复循环状态、失败上下文和下一步 `code.propose_patch` 指引；不会自动写文件
 - `code.propose_patch`：生成单文件或多文件 full-file replacement 的 diff preview、文件 hash 和 changed files，不写文件
-- `code.validate_patch` / `code.dry_run_patch`：校验 full-file replacement 或 unified diff，检测 hash mismatch、hunk conflict 和敏感路径
-- `code.apply_patch`：审批后应用 full-file replacement 或已校验的 unified diff，支持 `expected_sha256` 基线校验和失败回滚
+- `code.validate_patch` / `code.dry_run_patch`：校验 full-file replacement 或 unified diff，检测 hash mismatch、hunk-level conflict、路径逃逸、敏感路径，并返回 diff statistics / rollback metadata
+- `code.apply_patch`：审批后应用 full-file replacement 或已校验的 unified diff，支持 `expected_sha256` 基线校验、原子写入、失败回滚和 rollback snapshot metadata
 - `code.explain_diff`：总结 diff 或 patch payload，不写文件
 
 已注册的 git tools：
 
 - `git.status` / `git.diff` / `git.log` / `git.branch`：固定子命令，只读且高置信时可自动执行
+- `git.diff_summary` / `git.commit_message_proposal`：只读生成 diff 摘要和 commit message 建议，不 stage、不 commit、不 push
 - `git.add` / `git.commit` / `git.restore`：会改变仓库或工作区状态，必须审批
 - `git.clean`：删除未跟踪文件，标记为 `danger`，必须强审批；当前不提供 push/reset-hard 自动路径
 
@@ -97,9 +98,11 @@ ToolProposal -> EffectInference -> PolicyEngine -> ApprovalCenter -> Executor
 
 当前边界：
 
-- patch 系统已支持 full-file replacement 和基础 unified diff validation/dry-run，但还不是完整 `git apply` 兼容解析器
-- 已支持 patch 预览、hash guard、hunk conflict 检测、原子写入和失败回滚；更复杂的 partial apply、交互式 conflict resolution 和 rollback snapshot API 仍待后续扩展
-- `code.fix_test_failure_loop` 当前是最小闭环框架：它会运行测试并解析失败，生成下一步 patch proposal 指引；真正修复仍依赖 planner/model 生成 patch，且 patch apply 必须审批
+- patch 系统已支持 full-file replacement 和常见 unified diff parser，包括 old/new path、hunk range、hunk context conflict、diff statistics、path escape guard、expected hash guard、dry-run 和 rollback metadata；但还不是完整 `git apply` 兼容解析器
+- 已支持 patch 预览、hash guard、hunk conflict 检测、原子写入和失败回滚；交互式 conflict resolution、更复杂 rename 语义和完整 git apply 兼容性仍待后续扩展
+- Planner 已能为代码任务生成结构化 `CodePlan`，并把 CodePlan 存入 run state / plan step；每个 step 仍必须转成 ToolProposal 后走统一安全链路
+- `code.fix_test_failure_loop` 当前提供多轮修复循环状态接口、max iteration 限制、失败上下文和下一步 patch proposal 指引；真正 patch 内容仍依赖 planner/model 生成，且 `code.apply_patch` 必须审批
+- `code.apply_patch` 审批恢复后，workflow 可继续 rerun tests 并解析下一轮失败；拒绝审批会停止当前 run，不会写文件
 - 自动修复质量取决于模型和上下文，不保证所有测试失败都能自动修好
 
 ## 安装步骤
@@ -194,10 +197,15 @@ go run ./cmd/agent code inspect .
 go run ./cmd/agent code search . "ToolRouter"
 go run ./cmd/agent code read . internal/app/bootstrap.go
 go run ./cmd/agent code test .
+go run ./cmd/agent code fix-tests .
 go run ./cmd/agent code diff .
 go run ./cmd/agent code patch validate change.diff
+go run ./cmd/agent code patch dry-run change.diff
+go run ./cmd/agent code patch apply change.diff
 go run ./cmd/agent git status .
 go run ./cmd/agent git diff .
+go run ./cmd/agent git diff-summary .
+go run ./cmd/agent git commit-message .
 ```
 
 ## Swagger / OpenAPI
@@ -560,7 +568,7 @@ tools:
 - `Start(ctx, input)`：处理新用户消息，构建上下文、进入 step-based plan loop，并在每个工具步骤都走 effect/policy/approval/executor 链路
 - `Resume(ctx, run_id, approval_id, approved)`：处理审批恢复，不重新规划已审批 step，也不替换 tool input
 
-运行状态由 `RunState` 和 `RunStep` 记录。`RunState` 记录当前状态、step 游标和审批关联；`RunStep` 记录 `build_context / plan / continue / propose_tool / infer_effect / decide_policy / request_approval / execute_tool / summarize / finalize` 等步骤历史。
+运行状态由 `RunState` 和 `RunStep` 记录。`RunState` 记录当前状态、step 游标、审批关联和最近的 planner 输出；`RunStep` 记录 `build_context / plan / continue / propose_tool / infer_effect / decide_policy / request_approval / execute_tool / summarize / finalize` 等步骤历史。代码任务的 plan step 会额外保存结构化 `CodePlan`，用于 replay 和后续 workflow 分析。
 
 核心状态包括：
 
@@ -582,6 +590,7 @@ tools:
 
 - tool 结果返回后，planner 可以输出 `continue / stop / answer / tool`
 - 每个新 tool proposal 都会重新经过 `ToolRouter -> EffectInference -> PolicyEngine -> ApprovalCenter -> Executor`
+- 对代码任务，planner 可以先产出 `CodePlan`，再逐步转换为 `code.*` 或 `git.*` ToolProposal；CodePlan 本身不执行外部动作
 - 默认 `MaxWorkflowSteps=6`，超过上限会安全终止并把 run 标记为 failed
 
 RunStateStore 当前是可插拔的：
@@ -653,7 +662,7 @@ go test ./...
 - effect inference
 - shell parser
 - markdown memory
-- code workspace read/search/project inspection, test runner, failure parsing, patch validation/dry-run, Git workflow tools, and patch approval behavior
+- code workspace read/search/project inspection, schema-driven CodePlan, test runner, failure parsing, fix loop state, patch validation/dry-run/apply rollback metadata, Git summary tools, and patch approval behavior
 - qdrant store / vector factory / kb.search tool
 - config validation / KB feature gate / Swagger docs
 - skill manifest / runner / policy
@@ -678,7 +687,7 @@ RUN_POSTGRES_INTEGRATION=1 go test ./...
 - PostgreSQL 可用时 run/step 可持久化；无数据库 fallback 仍只提供进程内内存 run state
 - Skill Runtime 已支持 zip 安装、manifest permissions 校验，以及 Linux namespace/chroot 优先的 stronger runner；但 seccomp、cgroup、host allowlist 和更完整 rootfs 封装仍待后续阶段补齐
 - MCP runtime 已支持 stdio/http、dialect compatibility profile 和 conformance matrix；SSE、流式结果、capability negotiation 和更高保真外部 server 集成矩阵仍待后续扩展
-- Code Workspace 已支持读/搜/项目检测、测试执行、失败解析、Git workflow、patch validation/dry-run 和审批后 patch apply；自动修复循环当前仍是保守的一轮框架，不做自动写入或自动 push
+- Code Workspace 已支持读/搜/项目检测、结构化 CodePlan、测试执行、失败解析、Git workflow summary、patch validation/dry-run 和审批后 patch apply；自动修复循环已有有界状态接口和审批恢复后 rerun tests，但仍不保证自动修好所有失败，不做自动写入或自动 push
 - CLI 已走 HTTP API，但仍是轻量控制台，不包含富交互 TUI
 
 ## 任务清单

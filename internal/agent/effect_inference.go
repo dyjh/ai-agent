@@ -122,7 +122,7 @@ func (e *EffectInferrer) Infer(_ context.Context, proposal core.ToolProposal) (c
 			Confidence:       0.99,
 			ReasonSummary:    "patch application modifies workspace files",
 		}, nil
-	case "git.status", "git.diff", "git.log", "git.branch":
+	case "git.status", "git.diff", "git.log", "git.branch", "git.diff_summary", "git.commit_message_proposal":
 		return core.EffectInferenceResult{
 			Effects:       []string{"read", "git.read"},
 			RiskLevel:     "read",
@@ -302,6 +302,29 @@ func proposalPathInputs(input map[string]any) []string {
 				paths = append(paths, path)
 			}
 		}
+	}
+	if diff, ok := input["diff"].(string); ok && diff != "" {
+		paths = append(paths, diffPathInputs(diff)...)
+	}
+	return paths
+}
+
+func diffPathInputs(diff string) []string {
+	var paths []string
+	for _, line := range strings.Split(diff, "\n") {
+		if !strings.HasPrefix(line, "+++ ") && !strings.HasPrefix(line, "--- ") {
+			continue
+		}
+		path := strings.TrimSpace(line[4:])
+		if idx := strings.IndexAny(path, "\t "); idx >= 0 {
+			path = path[:idx]
+		}
+		if path == "/dev/null" || path == "" {
+			continue
+		}
+		path = strings.TrimPrefix(path, "a/")
+		path = strings.TrimPrefix(path, "b/")
+		paths = append(paths, path)
 	}
 	return paths
 }

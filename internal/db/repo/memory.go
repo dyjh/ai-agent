@@ -230,6 +230,7 @@ func cloneRunRecord(record core.AgentRunRecord) core.AgentRunRecord {
 
 func cloneStepRecord(record core.AgentRunStepRecord) core.AgentRunStepRecord {
 	cp := record
+	cp.CodePlanJSON = core.CloneMap(record.CodePlanJSON)
 	cp.ProposalJSON = core.CloneMap(record.ProposalJSON)
 	cp.InferenceJSON = core.CloneMap(record.InferenceJSON)
 	cp.PolicyJSON = core.CloneMap(record.PolicyJSON)
