@@ -3,6 +3,7 @@ package agent
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,13 +28,13 @@ func NewApprovalCenter() *ApprovalCenter {
 
 // Create stores a new approval request with an immutable input snapshot.
 func (a *ApprovalCenter) Create(runID, conversationID string, proposal core.ToolProposal, inference core.EffectInferenceResult, decision core.PolicyDecision) (*core.ApprovalRecord, error) {
-	snapshot := core.CloneMap(proposal.Input)
+	snapshot := normalizedApprovalInput(proposal)
 	hash, err := core.HashMap(snapshot)
 	if err != nil {
 		return nil, err
 	}
 	storedProposal := proposal
-	storedProposal.Input = core.CloneMap(proposal.Input)
+	storedProposal.Input = core.CloneMap(snapshot)
 	record := core.ApprovalRecord{
 		ID:             ids.New("apr"),
 		RunID:          runID,
@@ -53,6 +54,79 @@ func (a *ApprovalCenter) Create(runID, conversationID string, proposal core.Tool
 	a.approvals[record.ID] = record
 
 	return cloneApproval(record), nil
+}
+
+func normalizedApprovalInput(proposal core.ToolProposal) map[string]any {
+	snapshot := core.CloneMap(proposal.Input)
+	if !strings.HasPrefix(proposal.Tool, "git.") {
+		return snapshot
+	}
+	operation := strings.TrimPrefix(proposal.Tool, "git.")
+	args := gitApprovalArgs(operation, snapshot)
+	if len(args) > 0 {
+		anyArgs := make([]any, 0, len(args))
+		for _, arg := range args {
+			anyArgs = append(anyArgs, arg)
+		}
+		snapshot["args"] = anyArgs
+		snapshot["command"] = "git " + strings.Join(args, " ")
+	}
+	if _, ok := snapshot["workspace"]; !ok {
+		snapshot["workspace"] = "."
+	}
+	return snapshot
+}
+
+func gitApprovalArgs(operation string, input map[string]any) []string {
+	paths := approvalStringSlice(input["paths"])
+	switch operation {
+	case "status":
+		return appendApprovalPathspec([]string{"status", "--short", "--branch"}, paths)
+	case "diff":
+		return appendApprovalPathspec([]string{"diff"}, paths)
+	case "log":
+		return []string{"log", "--oneline", "-n", "20"}
+	case "branch":
+		return []string{"branch", "--show-current"}
+	case "add":
+		return appendApprovalPathspec([]string{"add"}, paths)
+	case "commit":
+		message, _ := input["message"].(string)
+		return []string{"commit", "-m", message}
+	case "restore":
+		return appendApprovalPathspec([]string{"restore"}, paths)
+	case "clean":
+		return appendApprovalPathspec([]string{"clean", "-fd"}, paths)
+	default:
+		return nil
+	}
+}
+
+func appendApprovalPathspec(args []string, paths []string) []string {
+	if len(paths) == 0 {
+		return args
+	}
+	out := append([]string(nil), args...)
+	out = append(out, "--")
+	out = append(out, paths...)
+	return out
+}
+
+func approvalStringSlice(raw any) []string {
+	switch typed := raw.(type) {
+	case []string:
+		return append([]string(nil), typed...)
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if value, ok := item.(string); ok {
+				out = append(out, value)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 // Get returns an approval record by ID.
@@ -167,6 +241,21 @@ func approvalSummary(proposal core.ToolProposal, inference core.EffectInferenceR
 		if files, ok := proposal.Input["files"].([]any); ok && len(files) > 0 {
 			return fmt.Sprintf("准备修改 %d 个工作区文件。", len(files))
 		}
+	case "code.run_tests":
+		if command, ok := proposal.Input["command"].(string); ok && command != "" {
+			return fmt.Sprintf("准备运行测试命令 `%s`，风险等级为 %s。", command, inference.RiskLevel)
+		}
+		return fmt.Sprintf("准备运行检测到的测试命令，风险等级为 %s。", inference.RiskLevel)
+	case "git.add", "git.restore", "git.clean":
+		if paths, ok := proposal.Input["paths"].([]any); ok && len(paths) > 0 {
+			return fmt.Sprintf("准备执行 `%s`，影响 %d 个路径，风险等级为 %s。", proposal.Tool, len(paths), inference.RiskLevel)
+		}
+		return fmt.Sprintf("准备执行 `%s`，风险等级为 %s。", proposal.Tool, inference.RiskLevel)
+	case "git.commit":
+		if message, ok := proposal.Input["message"].(string); ok && message != "" {
+			return fmt.Sprintf("准备创建本地 commit：`%s`。", message)
+		}
+		return fmt.Sprintf("准备创建本地 commit，风险等级为 %s。", inference.RiskLevel)
 	case "memory.patch":
 		if path, ok := proposal.Input["path"].(string); ok {
 			return fmt.Sprintf("准备修改 Markdown memory `%s`。", path)

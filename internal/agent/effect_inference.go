@@ -50,6 +50,10 @@ func (e *EffectInferrer) Infer(_ context.Context, proposal core.ToolProposal) (c
 		return e.inferCodeRead(proposal), nil
 	case "code.inspect_project", "code.detect_language", "code.detect_test_command":
 		return readOnlyCodeInference("read-only project inspection"), nil
+	case "code.run_tests", "code.fix_test_failure_loop":
+		return e.inferCodeTest(proposal), nil
+	case "code.parse_test_failure":
+		return readOnlyCodeInference("test failure parsing is read-only"), nil
 	case "kb.search":
 		return core.EffectInferenceResult{
 			Effects:       []string{"kb.read"},
@@ -81,6 +85,23 @@ func (e *EffectInferrer) Infer(_ context.Context, proposal core.ToolProposal) (c
 			Confidence:    0.9,
 			ReasonSummary: "proposal-only patch tool",
 		}, nil
+	case "code.validate_patch", "code.dry_run_patch":
+		if e.proposalTouchesSensitivePath(proposal) {
+			return core.EffectInferenceResult{
+				Effects:          []string{"sensitive_read", "code.plan"},
+				RiskLevel:        "sensitive",
+				Sensitive:        true,
+				ApprovalRequired: true,
+				Confidence:       0.95,
+				ReasonSummary:    "patch validation reads a sensitive path",
+			}, nil
+		}
+		return core.EffectInferenceResult{
+			Effects:       []string{"read", "code.plan"},
+			RiskLevel:     "read",
+			Confidence:    0.95,
+			ReasonSummary: "patch validation is read-only",
+		}, nil
 	case "code.explain_diff":
 		return readOnlyCodeInference("diff explanation is read-only"), nil
 	case "code.apply_patch":
@@ -100,6 +121,37 @@ func (e *EffectInferrer) Infer(_ context.Context, proposal core.ToolProposal) (c
 			ApprovalRequired: true,
 			Confidence:       0.99,
 			ReasonSummary:    "patch application modifies workspace files",
+		}, nil
+	case "git.status", "git.diff", "git.log", "git.branch":
+		return core.EffectInferenceResult{
+			Effects:       []string{"read", "git.read"},
+			RiskLevel:     "read",
+			Confidence:    0.95,
+			ReasonSummary: "read-only git command",
+		}, nil
+	case "git.add", "git.commit":
+		return core.EffectInferenceResult{
+			Effects:          []string{"git.write", "fs.write"},
+			RiskLevel:        "write",
+			ApprovalRequired: true,
+			Confidence:       0.99,
+			ReasonSummary:    "git command mutates repository state",
+		}, nil
+	case "git.restore":
+		return core.EffectInferenceResult{
+			Effects:          []string{"git.write", "fs.write", "code.modify"},
+			RiskLevel:        "write",
+			ApprovalRequired: true,
+			Confidence:       0.99,
+			ReasonSummary:    "git restore modifies workspace files",
+		}, nil
+	case "git.clean":
+		return core.EffectInferenceResult{
+			Effects:          []string{"fs.delete", "dangerous"},
+			RiskLevel:        "danger",
+			ApprovalRequired: true,
+			Confidence:       0.99,
+			ReasonSummary:    "git clean deletes untracked files",
 		}, nil
 	case "memory.patch":
 		return core.EffectInferenceResult{
@@ -138,6 +190,75 @@ func (e *EffectInferrer) inferCodeRead(proposal core.ToolProposal) core.EffectIn
 	return readOnlyCodeInference("read-only code workspace tool")
 }
 
+func (e *EffectInferrer) inferCodeTest(proposal core.ToolProposal) core.EffectInferenceResult {
+	command, _ := proposal.Input["command"].(string)
+	if command == "" {
+		command, _ = proposal.Input["test_command"].(string)
+	}
+	if command == "" && (inputBool(proposal.Input, "use_detected") || proposal.Tool == "code.fix_test_failure_loop") {
+		return core.EffectInferenceResult{
+			Effects:       []string{"code.test", "process.read", "fs.read"},
+			RiskLevel:     "read",
+			Confidence:    0.9,
+			ReasonSummary: "detected test command runs under code test allowlist",
+		}
+	}
+	if command == "" {
+		return core.EffectInferenceResult{
+			Effects:          []string{"unknown.effect"},
+			RiskLevel:        "unknown",
+			ApprovalRequired: true,
+			Confidence:       0.3,
+			ReasonSummary:    "test command is not specified",
+		}
+	}
+	structure := shell.ParseStructure(command)
+	if structure.HasWriteRedirect || strings.Contains(command, "&&") || strings.Contains(command, ";") {
+		return core.EffectInferenceResult{
+			Effects:          []string{"unknown.effect", "fs.write"},
+			RiskLevel:        "unknown",
+			ApprovalRequired: true,
+			Confidence:       0.5,
+			ReasonSummary:    "test command contains shell control or redirect syntax",
+		}
+	}
+	if len(structure.Segments) == 0 {
+		return core.EffectInferenceResult{
+			Effects:          []string{"unknown.effect"},
+			RiskLevel:        "unknown",
+			ApprovalRequired: true,
+			Confidence:       0.3,
+			ReasonSummary:    "empty test command",
+		}
+	}
+	first := structure.Segments[0].Name
+	args := structure.Segments[0].Args
+	if testCommandHasInstallOrMutation(first, args) {
+		return core.EffectInferenceResult{
+			Effects:          []string{"code.test", "package.install", "fs.write", "unknown.effect"},
+			RiskLevel:        "write",
+			ApprovalRequired: true,
+			Confidence:       0.8,
+			ReasonSummary:    "test command appears to install dependencies or mutate project files",
+		}
+	}
+	if isRecognizedTestCommand(first, args) {
+		return core.EffectInferenceResult{
+			Effects:       []string{"code.test", "process.read", "fs.read"},
+			RiskLevel:     "read",
+			Confidence:    0.9,
+			ReasonSummary: "recognized read-only test command",
+		}
+	}
+	return core.EffectInferenceResult{
+		Effects:          []string{"unknown.effect", "code.test"},
+		RiskLevel:        "unknown",
+		ApprovalRequired: true,
+		Confidence:       0.45,
+		ReasonSummary:    "test command is not in the code test allowlist",
+	}
+}
+
 func readOnlyCodeInference(reason string) core.EffectInferenceResult {
 	return core.EffectInferenceResult{
 		Effects:       []string{"read", "code.read"},
@@ -161,6 +282,9 @@ func proposalPathInputs(input map[string]any) []string {
 	if path, ok := input["path"].(string); ok && path != "" {
 		paths = append(paths, path)
 	}
+	if path, ok := input["workspace"].(string); ok && path != "" {
+		paths = append(paths, path)
+	}
 	if files, ok := input["files"].([]any); ok {
 		for _, item := range files {
 			file, ok := item.(map[string]any)
@@ -180,6 +304,48 @@ func proposalPathInputs(input map[string]any) []string {
 		}
 	}
 	return paths
+}
+
+func isRecognizedTestCommand(command string, args []string) bool {
+	switch command {
+	case "go":
+		return len(args) > 0 && args[0] == "test"
+	case "npm", "pnpm", "yarn":
+		return len(args) > 0 && (args[0] == "test" || (len(args) > 1 && args[0] == "run" && args[1] == "test"))
+	case "pytest":
+		return true
+	case "python", "python3":
+		return len(args) >= 2 && args[0] == "-m" && args[1] == "pytest"
+	case "cargo":
+		return len(args) > 0 && args[0] == "test"
+	case "make":
+		return len(args) > 0 && args[0] == "test"
+	default:
+		return false
+	}
+}
+
+func testCommandHasInstallOrMutation(command string, args []string) bool {
+	all := append([]string{command}, args...)
+	for i, item := range all {
+		switch item {
+		case "install", "add", "upgrade", "remove", "update":
+			return true
+		case "get":
+			if i > 0 && all[i-1] == "go" {
+				return true
+			}
+		case "tidy":
+			if i > 1 && all[i-2] == "go" && all[i-1] == "mod" {
+				return true
+			}
+		case "generate":
+			if i > 0 && all[i-1] == "go" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func inputBool(input map[string]any, key string) bool {

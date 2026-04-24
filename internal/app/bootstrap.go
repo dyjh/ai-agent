@@ -16,6 +16,7 @@ import (
 	"local-agent/internal/events"
 	toolscore "local-agent/internal/tools"
 	"local-agent/internal/tools/code"
+	"local-agent/internal/tools/gittools"
 	"local-agent/internal/tools/kb"
 	"local-agent/internal/tools/mcp"
 	memstore "local-agent/internal/tools/memory"
@@ -227,9 +228,25 @@ func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb
 		Provider:       "local",
 		Name:           "code.apply_patch",
 		Description:    "Apply a patch inside the workspace",
-		InputSchema:    map[string]any{"path": "string", "content": "string", "files": "array", "expected_sha256": "string"},
+		InputSchema:    map[string]any{"path": "string", "content": "string", "files": "array", "diff": "string", "expected_sha256": "string"},
 		DefaultEffects: []string{"fs.write", "code.modify"},
 	}, &code.ApplyPatchExecutor{Workspace: workspace})
+	registry.Register(core.ToolSpec{
+		ID:             "code.validate_patch",
+		Provider:       "local",
+		Name:           "code.validate_patch",
+		Description:    "Validate a patch without modifying files",
+		InputSchema:    map[string]any{"path": "string", "content": "string", "files": "array", "diff": "string", "expected_sha256": "string"},
+		DefaultEffects: []string{"read", "code.plan"},
+	}, &code.ValidatePatchExecutor{Workspace: workspace})
+	registry.Register(core.ToolSpec{
+		ID:             "code.dry_run_patch",
+		Provider:       "local",
+		Name:           "code.dry_run_patch",
+		Description:    "Dry-run a patch without modifying files",
+		InputSchema:    map[string]any{"path": "string", "content": "string", "files": "array", "diff": "string", "expected_sha256": "string"},
+		DefaultEffects: []string{"read", "code.plan"},
+	}, &code.DryRunPatchExecutor{Workspace: workspace})
 	registry.Register(core.ToolSpec{
 		ID:             "code.explain_diff",
 		Provider:       "local",
@@ -238,6 +255,32 @@ func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb
 		InputSchema:    map[string]any{"diff": "string", "files": "array"},
 		DefaultEffects: []string{"read", "code.plan"},
 	}, &code.ExplainDiffExecutor{})
+	registry.Register(core.ToolSpec{
+		ID:             "code.run_tests",
+		Provider:       "local",
+		Name:           "code.run_tests",
+		Description:    "Run an allowlisted test command inside the workspace",
+		InputSchema:    map[string]any{"workspace": "string", "command": "string", "args": "array", "timeout_seconds": "number", "max_output_bytes": "number", "use_detected": "boolean", "test_name_pattern": "string"},
+		DefaultEffects: []string{"code.test", "process.read", "fs.read"},
+	}, &code.RunTestsExecutor{Workspace: workspace, DefaultTimeoutSeconds: cfg.Shell.DefaultTimeoutSeconds, MaxOutputBytes: int64(cfg.Shell.MaxOutputChars)})
+	registry.Register(core.ToolSpec{
+		ID:             "code.parse_test_failure",
+		Provider:       "local",
+		Name:           "code.parse_test_failure",
+		Description:    "Parse test output into structured failure information",
+		InputSchema:    map[string]any{"workspace": "string", "command": "string", "stdout": "string", "stderr": "string", "exit_code": "number", "language": "string"},
+		DefaultEffects: []string{"read", "code.plan"},
+	}, &code.ParseTestFailureExecutor{Workspace: workspace})
+	registry.Register(core.ToolSpec{
+		ID:             "code.fix_test_failure_loop",
+		Provider:       "local",
+		Name:           "code.fix_test_failure_loop",
+		Description:    "Run tests and prepare the next repair-loop action without applying code changes",
+		InputSchema:    map[string]any{"workspace": "string", "test_command": "string", "max_iterations": "number", "stop_on_approval": "boolean"},
+		DefaultEffects: []string{"code.test", "process.read", "fs.read", "code.plan"},
+	}, &code.FixTestFailureLoopExecutor{Workspace: workspace, DefaultTimeoutSeconds: cfg.Shell.DefaultTimeoutSeconds, MaxOutputBytes: int64(cfg.Shell.MaxOutputChars), MaxIterations: 3})
+
+	registerGitTools(registry, cfg)
 	registry.Register(core.ToolSpec{
 		ID:             "memory.search",
 		Provider:       "local",
@@ -309,6 +352,41 @@ func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb
 	}, &mcp.CallToolExecutor{Client: mcpManager})
 
 	return registry
+}
+
+func registerGitTools(registry *toolscore.Registry, cfg config.Config) {
+	readEffects := []string{"read", "git.read"}
+	writeEffects := []string{"git.write", "fs.write"}
+	operations := []struct {
+		name        string
+		description string
+		effects     []string
+	}{
+		{name: "status", description: "Show git working tree status", effects: readEffects},
+		{name: "diff", description: "Show git diff", effects: readEffects},
+		{name: "log", description: "Show recent git commits", effects: readEffects},
+		{name: "branch", description: "Show current git branch", effects: readEffects},
+		{name: "add", description: "Stage paths in git", effects: writeEffects},
+		{name: "commit", description: "Create a local git commit", effects: writeEffects},
+		{name: "restore", description: "Restore paths from git", effects: []string{"git.write", "fs.write", "code.modify"}},
+		{name: "clean", description: "Remove untracked files with git clean", effects: []string{"fs.delete", "dangerous"}},
+	}
+	for _, operation := range operations {
+		toolName := "git." + operation.name
+		registry.Register(core.ToolSpec{
+			ID:             toolName,
+			Provider:       "local",
+			Name:           toolName,
+			Description:    operation.description,
+			InputSchema:    map[string]any{"workspace": "string", "paths": "array", "message": "string", "limit": "number"},
+			DefaultEffects: append([]string(nil), operation.effects...),
+		}, &gittools.Executor{
+			Root:           cfg.Owner.DefaultWorkspace,
+			Operation:      operation.name,
+			TimeoutSeconds: cfg.Shell.DefaultTimeoutSeconds,
+			MaxOutputBytes: int64(cfg.Shell.MaxOutputChars),
+		})
+	}
 }
 
 func resolveConfigPath(path string) string {

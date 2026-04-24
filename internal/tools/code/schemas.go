@@ -48,6 +48,7 @@ type PatchInput struct {
 	Content        string           `json:"content,omitempty"`
 	ExpectedSHA256 string           `json:"expected_sha256,omitempty"`
 	Files          []PatchFileInput `json:"files,omitempty"`
+	Diff           string           `json:"diff,omitempty"`
 	Summary        string           `json:"summary,omitempty"`
 }
 
@@ -55,4 +56,33 @@ type PatchInput struct {
 type ExplainDiffInput struct {
 	Diff  string           `json:"diff,omitempty"`
 	Files []PatchFileInput `json:"files,omitempty"`
+}
+
+// RunTestsInput is the input snapshot for code.run_tests.
+type RunTestsInput struct {
+	Workspace       string   `json:"workspace,omitempty"`
+	Command         string   `json:"command,omitempty"`
+	Args            []string `json:"args,omitempty"`
+	TimeoutSeconds  int      `json:"timeout_seconds,omitempty"`
+	MaxOutputBytes  int64    `json:"max_output_bytes,omitempty"`
+	UseDetected     bool     `json:"use_detected,omitempty"`
+	TestNamePattern string   `json:"test_name_pattern,omitempty"`
+}
+
+// ParseTestFailureInput is the input snapshot for code.parse_test_failure.
+type ParseTestFailureInput struct {
+	Workspace string `json:"workspace,omitempty"`
+	Command   string `json:"command"`
+	Stdout    string `json:"stdout"`
+	Stderr    string `json:"stderr"`
+	ExitCode  int    `json:"exit_code"`
+	Language  string `json:"language,omitempty"`
+}
+
+// FixLoopInput is the input snapshot for code.fix_test_failure_loop.
+type FixLoopInput struct {
+	Workspace      string `json:"workspace,omitempty"`
+	TestCommand    string `json:"test_command,omitempty"`
+	MaxIterations  int    `json:"max_iterations,omitempty"`
+	StopOnApproval bool   `json:"stop_on_approval,omitempty"`
 }

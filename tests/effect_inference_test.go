@@ -85,6 +85,28 @@ func TestEffectInference(t *testing.T) {
 			wantEffect: "unknown.effect",
 			wantRisk:   "unknown",
 		},
+		{
+			name: "code run tests read",
+			proposal: core.ToolProposal{
+				Tool: "code.run_tests",
+				Input: map[string]any{
+					"command": "go test ./...",
+				},
+			},
+			wantEffect: "code.test",
+			wantRisk:   "read",
+		},
+		{
+			name: "git clean danger",
+			proposal: core.ToolProposal{
+				Tool: "git.clean",
+				Input: map[string]any{
+					"workspace": ".",
+				},
+			},
+			wantEffect: "fs.delete",
+			wantRisk:   "danger",
+		},
 	}
 
 	for _, tc := range testCases {

@@ -31,6 +31,8 @@ func main() {
 	root.AddCommand(mcpCommand(&serverURL))
 	root.AddCommand(kbCommand(&serverURL))
 	root.AddCommand(runsCommand(&serverURL))
+	root.AddCommand(codeCommand(&serverURL))
+	root.AddCommand(gitCommand(&serverURL))
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
@@ -419,6 +421,91 @@ func runsCommand(serverURL *string) *cobra.Command {
 	return cmd
 }
 
+func codeCommand(serverURL *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "code",
+		Short: "Use code tools through the agent workflow",
+	}
+	cmd.AddCommand(&cobra.Command{
+		Use:   "inspect [workspace]",
+		Short: "Inspect a workspace through code.inspect_project",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请检查项目结构和测试命令，workspace: %s", args[0]))
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "search [workspace] [query]",
+		Short: "Search code through code.search_text",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请在 workspace %s 搜索代码 `%s`", args[0], args[1]))
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "read [workspace] [path]",
+		Short: "Read a file through code.read_file",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请读取文件 `%s`，workspace: %s", args[1], args[0]))
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "test [workspace]",
+		Short: "Run detected tests through code.run_tests",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请检测并运行测试，workspace: %s", args[0]))
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "diff [workspace]",
+		Short: "Show git diff through the agent workflow",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请查看 git diff，workspace: %s", args[0]))
+		},
+	})
+	patchCmd := &cobra.Command{
+		Use:   "patch",
+		Short: "Patch utilities routed through the agent workflow",
+	}
+	patchCmd.AddCommand(&cobra.Command{
+		Use:   "validate [patch_file]",
+		Short: "Ask the agent to validate a patch file",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请验证 patch 文件 `%s`，只做 dry-run，不要应用。", args[0]))
+		},
+	})
+	cmd.AddCommand(patchCmd)
+	return cmd
+}
+
+func gitCommand(serverURL *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "git",
+		Short: "Use git tools through the agent workflow",
+	}
+	cmd.AddCommand(&cobra.Command{
+		Use:   "status [workspace]",
+		Short: "Run git.status through the workflow",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请查看 git status，workspace: %s", args[0]))
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "diff [workspace]",
+		Short: "Run git.diff through the workflow",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return askWorkflow(*serverURL, fmt.Sprintf("请查看 git diff，workspace: %s", args[0]))
+		},
+	})
+	return cmd
+}
+
 func createConversation(serverURL, title string) (string, error) {
 	respBody, err := doJSONRequest(http.MethodPost, serverURL+"/v1/conversations", map[string]any{"title": title})
 	if err != nil {
@@ -431,6 +518,16 @@ func createConversation(serverURL, title string) (string, error) {
 		return "", err
 	}
 	return payload.ID, nil
+}
+
+func askWorkflow(serverURL, message string) error {
+	convID, err := createConversation(serverURL, "")
+	if err != nil {
+		return err
+	}
+	return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/conversations/%s/messages", serverURL, convID), map[string]any{
+		"content": message,
+	})
 }
 
 func printJSONRequest(method, url string, body any) error {

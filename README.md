@@ -69,9 +69,19 @@ ToolProposal -> EffectInference -> PolicyEngine -> ApprovalCenter -> Executor
 - `code.inspect_project`：检测语言、配置文件、测试命令和构建命令
 - `code.detect_language`：检测工作区主要语言
 - `code.detect_test_command`：检测可能的测试命令，不执行测试
+- `code.run_tests`：在工作区内运行 allowlisted 测试命令，支持自动检测、timeout、输出限长和脱敏
+- `code.parse_test_failure`：把 Go / pytest / Node / Rust 的常见失败输出解析为结构化失败信息
+- `code.fix_test_failure_loop`：运行测试、解析失败，并输出下一步 `code.propose_patch` 修复动作；不会自动写文件
 - `code.propose_patch`：生成单文件或多文件 full-file replacement 的 diff preview、文件 hash 和 changed files，不写文件
-- `code.apply_patch`：审批后应用单文件或多文件 full-file replacement，支持 `expected_sha256` 基线校验和失败回滚
+- `code.validate_patch` / `code.dry_run_patch`：校验 full-file replacement 或 unified diff，检测 hash mismatch、hunk conflict 和敏感路径
+- `code.apply_patch`：审批后应用 full-file replacement 或已校验的 unified diff，支持 `expected_sha256` 基线校验和失败回滚
 - `code.explain_diff`：总结 diff 或 patch payload，不写文件
+
+已注册的 git tools：
+
+- `git.status` / `git.diff` / `git.log` / `git.branch`：固定子命令，只读且高置信时可自动执行
+- `git.add` / `git.commit` / `git.restore`：会改变仓库或工作区状态，必须审批
+- `git.clean`：删除未跟踪文件，标记为 `danger`，必须强审批；当前不提供 push/reset-hard 自动路径
 
 安全规则：
 
@@ -80,14 +90,17 @@ ToolProposal -> EffectInference -> PolicyEngine -> ApprovalCenter -> Executor
 - 搜索默认跳过敏感文件；只有显式 `include_sensitive=true` 时才允许进入敏感读取审批
 - `code.propose_patch` 不修改文件；如果目标是敏感路径，也需要审批
 - `code.apply_patch` 一律是 `fs.write + code.modify`，必须审批
+- `code.run_tests` 只接受 `go test`、`npm/pnpm/yarn test`、`pytest`、`cargo test`、`make test` 等受控测试命令；包含 install、redirect 或 shell control 的命令会进入审批或被拒绝
+- Git 写入类工具的审批快照包含 workspace、paths、message 和固定 git args；审批后只执行该 snapshot，不会自动 push
 - 审批绑定具体 patch 输入快照；执行时只使用 `approval.input_snapshot`，并继续校验 `snapshot_hash`
 - `code.apply_patch` 的 `expected_sha256` 用于防止审批后目标文件基线漂移
 
 当前边界：
 
-- patch 形态是受控的 full-file replacement，不是完整 `git apply` 兼容解析器
-- 已支持 patch 预览、hash guard、原子写入和失败回滚；更复杂的 conflict resolution、rollback snapshot API、Git workflow 和测试修复循环仍在后续 F1 backlog
-- `code.detect_test_command` 只检测命令，不运行测试；测试执行工具和失败修复循环尚未接入
+- patch 系统已支持 full-file replacement 和基础 unified diff validation/dry-run，但还不是完整 `git apply` 兼容解析器
+- 已支持 patch 预览、hash guard、hunk conflict 检测、原子写入和失败回滚；更复杂的 partial apply、交互式 conflict resolution 和 rollback snapshot API 仍待后续扩展
+- `code.fix_test_failure_loop` 当前是最小闭环框架：它会运行测试并解析失败，生成下一步 patch proposal 指引；真正修复仍依赖 planner/model 生成 patch，且 patch apply 必须审批
+- 自动修复质量取决于模型和上下文，不保证所有测试失败都能自动修好
 
 ## 安装步骤
 
@@ -177,6 +190,14 @@ go run ./cmd/agent runs get run_xxx
 go run ./cmd/agent runs steps run_xxx
 go run ./cmd/agent runs resume run_xxx --approval apr_xxx --approved=true
 go run ./cmd/agent runs cancel run_xxx
+go run ./cmd/agent code inspect .
+go run ./cmd/agent code search . "ToolRouter"
+go run ./cmd/agent code read . internal/app/bootstrap.go
+go run ./cmd/agent code test .
+go run ./cmd/agent code diff .
+go run ./cmd/agent code patch validate change.diff
+go run ./cmd/agent git status .
+go run ./cmd/agent git diff .
 ```
 
 ## Swagger / OpenAPI
@@ -632,7 +653,7 @@ go test ./...
 - effect inference
 - shell parser
 - markdown memory
-- code workspace read/search/project inspection and patch approval behavior
+- code workspace read/search/project inspection, test runner, failure parsing, patch validation/dry-run, Git workflow tools, and patch approval behavior
 - qdrant store / vector factory / kb.search tool
 - config validation / KB feature gate / Swagger docs
 - skill manifest / runner / policy
@@ -657,7 +678,7 @@ RUN_POSTGRES_INTEGRATION=1 go test ./...
 - PostgreSQL 可用时 run/step 可持久化；无数据库 fallback 仍只提供进程内内存 run state
 - Skill Runtime 已支持 zip 安装、manifest permissions 校验，以及 Linux namespace/chroot 优先的 stronger runner；但 seccomp、cgroup、host allowlist 和更完整 rootfs 封装仍待后续阶段补齐
 - MCP runtime 已支持 stdio/http、dialect compatibility profile 和 conformance matrix；SSE、流式结果、capability negotiation 和更高保真外部 server 集成矩阵仍待后续扩展
-- Code Workspace 已支持读/搜/项目检测和审批后 patch apply；Git workflow、测试执行、失败解析和自动修复循环仍待 F1 后续子阶段补齐
+- Code Workspace 已支持读/搜/项目检测、测试执行、失败解析、Git workflow、patch validation/dry-run 和审批后 patch apply；自动修复循环当前仍是保守的一轮框架，不做自动写入或自动 push
 - CLI 已走 HTTP API，但仍是轻量控制台，不包含富交互 TUI
 
 ## 任务清单

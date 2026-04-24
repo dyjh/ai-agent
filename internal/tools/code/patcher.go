@@ -70,6 +70,16 @@ func (e *ProposePatchExecutor) Execute(_ context.Context, input map[string]any) 
 
 // Execute implements code.apply_patch.
 func (e *ApplyPatchExecutor) Execute(_ context.Context, input map[string]any) (*core.ToolResult, error) {
+	if diff, _ := input["diff"].(string); strings.TrimSpace(diff) != "" {
+		prepared, err := prepareUnifiedDiffPatch(e.Workspace, diff)
+		if err != nil {
+			return nil, err
+		}
+		if err := applyPreparedPatch(prepared); err != nil {
+			return nil, err
+		}
+		return patchAppliedResult(prepared), nil
+	}
 	files, err := parsePatchFiles(input)
 	if err != nil {
 		return nil, err
@@ -103,6 +113,10 @@ func (e *ApplyPatchExecutor) Execute(_ context.Context, input map[string]any) (*
 	if err := applyPreparedPatch(prepared); err != nil {
 		return nil, err
 	}
+	return patchAppliedResult(prepared), nil
+}
+
+func patchAppliedResult(prepared []preparedPatchFile) *core.ToolResult {
 	changed := make([]map[string]any, 0, len(prepared))
 	for _, file := range prepared {
 		changed = append(changed, map[string]any{
@@ -118,7 +132,7 @@ func (e *ApplyPatchExecutor) Execute(_ context.Context, input map[string]any) (*
 			"changed_files": changed,
 			"status":        "applied",
 		},
-	}, nil
+	}
 }
 
 type patchFile struct {
