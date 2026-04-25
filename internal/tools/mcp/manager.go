@@ -225,6 +225,9 @@ func (m *Manager) UpdateServer(id string, input ServerInput) (core.MCPServer, er
 	if input.URL != "" {
 		merged.URL = input.URL
 	}
+	if input.MessageURL != "" {
+		merged.MessageURL = input.MessageURL
+	}
 	if input.Headers != nil {
 		merged.Headers = input.Headers
 	}
@@ -432,13 +435,19 @@ func (m *Manager) transportFor(ctx context.Context, serverID string) (MCPTranspo
 	if transport != nil {
 		return transport, nil
 	}
-	if server.Transport == TransportHTTP {
+	if server.Transport == TransportHTTP || server.Transport == TransportSSE {
 		m.mu.RLock()
 		network := m.network
 		m.mu.RUnlock()
 		decision := security.ValidateNetworkURL(network, server.URL, http.MethodPost, server.Compatibility.MaxPayloadBytes)
 		if !decision.Allowed {
 			return nil, fmt.Errorf("network policy denied MCP HTTP endpoint: %s", decision.Reason)
+		}
+		if server.MessageURL != "" {
+			decision = security.ValidateNetworkURL(network, server.MessageURL, http.MethodPost, server.Compatibility.MaxPayloadBytes)
+			if !decision.Allowed {
+				return nil, fmt.Errorf("network policy denied MCP HTTP message endpoint: %s", decision.Reason)
+			}
 		}
 	}
 
@@ -451,6 +460,7 @@ func (m *Manager) transportFor(ctx context.Context, serverID string) (MCPTranspo
 		Args:           append([]string(nil), server.Args...),
 		Cwd:            server.Cwd,
 		URL:            server.URL,
+		MessageURL:     server.MessageURL,
 		Headers:        copyStringMap(server.Headers),
 		Env:            copyStringMap(server.Environment),
 		TimeoutSeconds: server.TimeoutSeconds,
@@ -515,13 +525,19 @@ func normalizeServer(input ServerInput, defaultTimeout int, allowGeneratedID boo
 		if command == "" {
 			return core.MCPServer{}, fmt.Errorf("mcp stdio server %s command is required", id)
 		}
-	case TransportHTTP:
+	case TransportHTTP, TransportSSE:
 		if targetURL == "" {
 			return core.MCPServer{}, fmt.Errorf("mcp http server %s url is required", id)
 		}
 		parsed, err := url.ParseRequestURI(targetURL)
 		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 			return core.MCPServer{}, fmt.Errorf("mcp http server %s url is invalid", id)
+		}
+		if input.MessageURL != "" {
+			parsed, err = url.ParseRequestURI(strings.TrimSpace(os.ExpandEnv(input.MessageURL)))
+			if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+				return core.MCPServer{}, fmt.Errorf("mcp http server %s message_url is invalid", id)
+			}
 		}
 	default:
 		return core.MCPServer{}, fmt.Errorf("unsupported mcp transport for server %s: %s", id, transport)
@@ -550,6 +566,7 @@ func normalizeServer(input ServerInput, defaultTimeout int, allowGeneratedID boo
 		Args:           expandStrings(input.Args),
 		Cwd:            strings.TrimSpace(os.ExpandEnv(input.Cwd)),
 		URL:            targetURL,
+		MessageURL:     strings.TrimSpace(os.ExpandEnv(input.MessageURL)),
 		Headers:        expandStringMap(input.Headers),
 		Enabled:        enabled,
 		Environment:    expandStringMap(input.Env),
@@ -782,6 +799,7 @@ func serverToInput(server core.MCPServer) ServerInput {
 		Args:           append([]string(nil), server.Args...),
 		Cwd:            server.Cwd,
 		URL:            server.URL,
+		MessageURL:     server.MessageURL,
 		Headers:        copyStringMap(server.Headers),
 		Enabled:        &enabled,
 		Env:            copyStringMap(server.Environment),
@@ -988,6 +1006,8 @@ func (DefaultTransportFactory) NewTransport(cfg TransportConfig) (MCPTransport, 
 		return NewStdioTransport(cfg), nil
 	case TransportHTTP:
 		return NewHTTPTransport(cfg), nil
+	case TransportSSE:
+		return NewSSETransport(cfg), nil
 	default:
 		return nil, fmt.Errorf("unsupported mcp transport: %s", cfg.Transport)
 	}

@@ -63,6 +63,12 @@ type rpcRequest struct {
 	Params  any    `json:"params,omitempty"`
 }
 
+type rpcNotification struct {
+	JSONRPC string `json:"jsonrpc"`
+	Method  string `json:"method"`
+	Params  any    `json:"params,omitempty"`
+}
+
 type rpcResponse struct {
 	JSONRPC string          `json:"jsonrpc,omitempty"`
 	ID      string          `json:"id,omitempty"`
@@ -90,6 +96,29 @@ func newRPCRequest(method string, params any) rpcRequest {
 		Method:  method,
 		Params:  params,
 	}
+}
+
+func newRPCNotification(method string, params any) rpcNotification {
+	return rpcNotification{
+		JSONRPC: "2.0",
+		Method:  method,
+		Params:  params,
+	}
+}
+
+func newInitializeRequest() rpcRequest {
+	return newRPCRequest("initialize", map[string]any{
+		"protocolVersion": "2024-11-05",
+		"capabilities":    map[string]any{},
+		"clientInfo": map[string]any{
+			"name":    "local-agent",
+			"version": "0.1.0",
+		},
+	})
+}
+
+func newInitializedNotification() rpcNotification {
+	return newRPCNotification("notifications/initialized", map[string]any{})
 }
 
 func decodeRPCResponse(data []byte, expectedID string, profile core.MCPCompatibilityProfile) (json.RawMessage, error) {

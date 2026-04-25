@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -60,13 +61,15 @@ func NewStdioTransport(cfg TransportConfig) *StdioTransport {
 // Start launches the configured MCP child process.
 func (t *StdioTransport) Start(ctx context.Context) error {
 	t.stateMu.Lock()
-	defer t.stateMu.Unlock()
 	if t.cmd != nil {
+		t.stateMu.Unlock()
 		return nil
 	}
 	if t.command == "" {
+		t.stateMu.Unlock()
 		return fmt.Errorf("mcp stdio command is required")
 	}
+	t.stateMu.Unlock()
 
 	cmd := exec.CommandContext(ctx, t.command, t.args...)
 	if t.cwd != "" {
@@ -92,9 +95,17 @@ func (t *StdioTransport) Start(ctx context.Context) error {
 	}
 	go io.Copy(io.Discard, stderr)
 
+	t.stateMu.Lock()
 	t.cmd = cmd
 	t.stdin = stdin
 	t.stdout = bufio.NewReader(stdoutPipe)
+	t.stateMu.Unlock()
+	if err := t.initialize(ctx); err != nil {
+		t.stateMu.Lock()
+		_ = t.closeLocked()
+		t.stateMu.Unlock()
+		return err
+	}
 	return nil
 }
 
@@ -123,6 +134,10 @@ func (t *StdioTransport) CallTool(ctx context.Context, name string, input map[st
 func (t *StdioTransport) Close(_ context.Context) error {
 	t.stateMu.Lock()
 	defer t.stateMu.Unlock()
+	return t.closeLocked()
+}
+
+func (t *StdioTransport) closeLocked() error {
 	if t.stdin != nil {
 		_ = t.stdin.Close()
 	}
@@ -134,6 +149,55 @@ func (t *StdioTransport) Close(_ context.Context) error {
 	t.stdin = nil
 	t.stdout = nil
 	return nil
+}
+
+func (t *StdioTransport) initialize(ctx context.Context) error {
+	_, err := t.request(ctx, newInitializeRequest())
+	if err != nil {
+		var mcpErr *MCPError
+		if errors.As(err, &mcpErr) && mcpErr.Code == MCPErrorServerError {
+			return nil
+		}
+		return fmt.Errorf("initialize mcp stdio server: %w", err)
+	}
+	return t.notify(ctx, newInitializedNotification())
+}
+
+func (t *StdioTransport) notify(ctx context.Context, notification rpcNotification) error {
+	t.rpcMu.Lock()
+	defer t.rpcMu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(t.profile.TimeoutSeconds)*time.Second)
+	defer cancel()
+
+	t.stateMu.RLock()
+	stdin := t.stdin
+	cmd := t.cmd
+	t.stateMu.RUnlock()
+	if stdin == nil || cmd == nil {
+		return fmt.Errorf("mcp stdio transport is not started")
+	}
+
+	raw, err := json.Marshal(notification)
+	if err != nil {
+		return err
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := stdin.Write(append(raw, '\n'))
+		done <- err
+	}()
+	select {
+	case <-ctx.Done():
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		return newMCPError(MCPErrorTimeout, "mcp stdio notification timed out", ctx.Err())
+	case err := <-done:
+		if err != nil {
+			return fmt.Errorf("write mcp stdio notification: %w", err)
+		}
+		return nil
+	}
 }
 
 func (t *StdioTransport) request(ctx context.Context, request rpcRequest) ([]byte, error) {
@@ -159,31 +223,57 @@ func (t *StdioTransport) request(ctx context.Context, request rpcRequest) ([]byt
 		return nil, fmt.Errorf("write mcp stdio request: %w", err)
 	}
 
-	type response struct {
-		line []byte
-		err  error
-	}
-	done := make(chan response, 1)
-	go func() {
-		line, err := stdout.ReadBytes('\n')
-		done <- response{line: bytes.TrimSpace(line), err: err}
-	}()
+	for {
+		type response struct {
+			line []byte
+			err  error
+		}
+		done := make(chan response, 1)
+		go func() {
+			line, err := stdout.ReadBytes('\n')
+			done <- response{line: bytes.TrimSpace(line), err: err}
+		}()
 
-	select {
-	case <-ctx.Done():
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
+		select {
+		case <-ctx.Done():
+			if cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+			return nil, newMCPError(MCPErrorTimeout, "mcp stdio request timed out", ctx.Err())
+		case out := <-done:
+			if out.err != nil {
+				return nil, newMCPError(MCPErrorTransportFailure, "read mcp stdio response", out.err)
+			}
+			if int64(len(out.line)) > t.profile.MaxPayloadBytes {
+				return nil, newMCPError(MCPErrorInvalidResponse, fmt.Sprintf("mcp stdio response exceeds %d bytes", t.profile.MaxPayloadBytes), nil)
+			}
+			if len(out.line) == 0 {
+				continue
+			}
+			if !stdioFrameMatchesRequest(out.line, request.ID, t.profile) {
+				continue
+			}
+			return decodeRPCResponse(out.line, request.ID, t.profile)
 		}
-		return nil, newMCPError(MCPErrorTimeout, "mcp stdio request timed out", ctx.Err())
-	case out := <-done:
-		if out.err != nil {
-			return nil, newMCPError(MCPErrorTransportFailure, "read mcp stdio response", out.err)
-		}
-		if int64(len(out.line)) > t.profile.MaxPayloadBytes {
-			return nil, newMCPError(MCPErrorInvalidResponse, fmt.Sprintf("mcp stdio response exceeds %d bytes", t.profile.MaxPayloadBytes), nil)
-		}
-		return decodeRPCResponse(out.line, request.ID, t.profile)
 	}
+}
+
+func stdioFrameMatchesRequest(line []byte, expectedID string, profile core.MCPCompatibilityProfile) bool {
+	frame, err := selectResponseFrame(line, profile)
+	if err != nil {
+		return true
+	}
+	var response rpcResponse
+	if err := json.Unmarshal(frame, &response); err != nil {
+		return true
+	}
+	if response.ID == "" && len(response.Result) == 0 && response.Error == nil {
+		return false
+	}
+	if profile.StrictIDMatching && expectedID != "" && response.ID != "" && response.ID != expectedID {
+		return false
+	}
+	return true
 }
 
 func envPairs(input map[string]string) []string {

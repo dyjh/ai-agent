@@ -298,6 +298,7 @@ type MCPServer struct {
 	Args           []string                `json:"args,omitempty" yaml:"args,omitempty"`
 	Cwd            string                  `json:"cwd,omitempty" yaml:"cwd,omitempty"`
 	URL            string                  `json:"url,omitempty" yaml:"url,omitempty"`
+	MessageURL     string                  `json:"message_url,omitempty" yaml:"message_url,omitempty"`
 	Headers        map[string]string       `json:"headers,omitempty" yaml:"headers,omitempty"`
 	Enabled        bool                    `json:"enabled" yaml:"enabled"`
 	Environment    map[string]string       `json:"environment,omitempty" yaml:"env,omitempty"`

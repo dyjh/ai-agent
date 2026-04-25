@@ -12,6 +12,8 @@ const (
 	TransportStdio = "stdio"
 	// TransportHTTP calls an MCP endpoint over HTTP.
 	TransportHTTP = "http"
+	// TransportSSE connects to an MCP SSE endpoint and sends JSON-RPC requests to its message endpoint.
+	TransportSSE = "sse"
 
 	ApprovalAuto    = "auto"
 	ApprovalRequire = "require"
@@ -33,6 +35,7 @@ type ServerInput struct {
 	Args           []string           `json:"args,omitempty" yaml:"args,omitempty"`
 	Cwd            string             `json:"cwd,omitempty" yaml:"cwd,omitempty"`
 	URL            string             `json:"url,omitempty" yaml:"url,omitempty"`
+	MessageURL     string             `json:"message_url,omitempty" yaml:"message_url,omitempty"`
 	Headers        map[string]string  `json:"headers,omitempty" yaml:"headers,omitempty"`
 	Enabled        *bool              `json:"enabled,omitempty" yaml:"enabled,omitempty"`
 	Env            map[string]string  `json:"environment,omitempty" yaml:"env,omitempty"`
@@ -117,6 +120,7 @@ type TransportConfig struct {
 	Args           []string
 	Cwd            string
 	URL            string
+	MessageURL     string
 	Headers        map[string]string
 	Env            map[string]string
 	TimeoutSeconds int

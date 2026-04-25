@@ -44,6 +44,12 @@ servers:
     enabled: false
     transport: http
     url: http://localhost:3002/mcp
+  - id: codegen-sse
+    name: codegen-sse
+    enabled: true
+    transport: sse
+    url: http://localhost:8085/sse
+    message_url: http://localhost:8085/message
 `)
 	writeFile(t, policiesPath, `
 tools:
@@ -59,8 +65,8 @@ tools:
 	}
 
 	servers := manager.ListServers()
-	if len(servers) != 3 {
-		t.Fatalf("server count = %d, want 3", len(servers))
+	if len(servers) != 4 {
+		t.Fatalf("server count = %d, want 4", len(servers))
 	}
 	httpServer, err := manager.GetServer("local-http-tools")
 	if err != nil {
@@ -87,6 +93,13 @@ tools:
 	}
 	if stdioServer.Command != "node" || stdioServer.Args[0] != "./index.js" {
 		t.Fatalf("stdio server not parsed: %+v", stdioServer)
+	}
+	sseServer, err := manager.GetServer("codegen-sse")
+	if err != nil {
+		t.Fatalf("GetServer(codegen-sse) error = %v", err)
+	}
+	if sseServer.Transport != mcp.TransportSSE || sseServer.MessageURL != "http://localhost:8085/message" {
+		t.Fatalf("sse server not parsed: %+v", sseServer)
 	}
 
 	if _, err := manager.PolicyProfile("disabled", "anything"); err == nil {

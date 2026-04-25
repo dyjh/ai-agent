@@ -1,0 +1,133 @@
+{
+  "schema_version": "1.0",
+  "updated_at": "2026-04-25",
+  "bugs": [
+    {
+      "id": "BUG-2026-04-25-planner-live-tool-routing",
+      "title": "Natural-language planner fails to route several read-only ops/code requests to structured ToolProposal",
+      "status": "open",
+      "severity": "high",
+      "area": "agent.planner",
+      "summary": "Live tests exposed that the deterministic planner does not recognize several common Chinese phrases for read-only local ops and code workspace tasks. The underlying tools, router, effect inference, policy engine, and executors work; the failure is before routing, at natural-language intent mapping.",
+      "current_state": {
+        "planner_fix": "withdrawn at user request",
+        "mcp_http_sse": "working in live smoke test",
+        "mcp_stdio_chrome_devtools": "working in live smoke test",
+        "capability_layer": "targeted smoke test passes",
+        "planner_layer": "targeted regression test fails and captures the open issue"
+      },
+      "not_a_bug_in": [
+        "MCP HTTP SSE transport",
+        "MCP stdio chrome-devtools transport",
+        "Tool Router",
+        "Effect Inference",
+        "Policy Engine",
+        "Approval Center",
+        "ops.local.system_info executor",
+        "code.search_text executor"
+      ],
+      "symptoms": [
+        {
+          "input": "请获取这台本地机器的系统概况",
+          "expected_tool_proposal": {
+            "tool": "ops.local.system_info",
+            "input": {}
+          },
+          "actual_behavior": "Planner returns decision=answer with reason=no deterministic tool match, so no structured ToolProposal is routed or executed.",
+          "impact": "Read-only local system overview request is answered as text instead of executing the approved local ops tool."
+        },
+        {
+          "input": "请定位包含 `最小静态站点` 的文件，workspace: /www/wwwroot/test",
+          "expected_tool_proposal": {
+            "tool": "code.search_text",
+            "input": {
+              "path": "/www/wwwroot/test",
+              "query": "最小静态站点",
+              "limit": 50
+            }
+          },
+          "actual_behavior": "Planner maps the request to code.inspect_project because wantsCodeWork matches workspace before any search intent is recognized.",
+          "impact": "The agent inspects the project but never performs the requested text search."
+        },
+        {
+          "input": "请打开 workspace: /www/wwwroot/test 中的 `index.html` 并确认页面标题",
+          "expected_tool_proposal": {
+            "tool": "code.read_file",
+            "input": {
+              "path": "/www/wwwroot/test/index.html",
+              "max_bytes": 200000
+            }
+          },
+          "actual_behavior": "Planner maps the request to code.inspect_project because the read-file detector only recognizes phrases such as 读取文件/查看文件/打开文件, not this workspace phrasing.",
+          "impact": "A concrete file-read request can be downgraded to generic project inspection."
+        }
+      ],
+      "root_cause": {
+        "file": "internal/agent/planner.go",
+        "details": [
+          "wantsLocalOps recognizes 系统信息 but not 系统概况 or 本地机器的系统概况.",
+          "wantsCodeSearch recognizes 搜索代码/查找代码/search code/search_text/grep, but not 定位包含 ... 的文件.",
+          "wantsCodeRead recognizes 读取文件/read file/查看文件/打开文件, but misses workspace-form phrases such as 打开 workspace: ... 中的 `file`.",
+          "wantsCodeWork includes workspace as a broad generic trigger, so unmatched code-search/read phrases are routed to code.inspect_project instead of the more specific code tools."
+        ]
+      },
+      "reproduction": {
+        "targeted_tests_added": "tests/targeted_live_regression_test.go",
+        "commands": [
+          {
+            "command": "go test ./tests -run 'TestTargetedCapabilitySmokeOpsAndCodeSearch' -count=1",
+            "current_result": "pass",
+            "meaning": "Direct Router/Policy/Executor capability for ops.local.system_info and code.search_text works."
+          },
+          {
+            "command": "go test ./tests -run 'TestTargetedPlannerMapsLiveRegressionPhrases' -count=1",
+            "current_result": "fail",
+            "meaning": "Planner still fails to map the live-regression phrases after the automatic fix was withdrawn."
+          }
+        ],
+        "observed_failures": [
+          "ops_system_overview: Plan() produced no tool proposal, decision=answer reason=no deterministic tool match",
+          "code_locate_containing_text: tool=code.inspect_project, want code.search_text",
+          "code_open_workspace_file: tool=code.inspect_project, want code.read_file"
+        ]
+      },
+      "live_test_history": [
+        {
+          "phase": "before temporary planner fix",
+          "result": "global live tests failed 2/8",
+          "failed_cases": [
+            "live-004-ops: ops.local.system_info was not executed",
+            "live-005-code: code.search_text was not executed"
+          ]
+        },
+        {
+          "phase": "after temporary planner fix",
+          "result": "global live tests passed 8/8",
+          "note": "This verified the suspected fix, but the planner code change was then withdrawn at user request. The generated report may still show this historical passing run."
+        },
+        {
+          "phase": "current code state",
+          "result": "planner bug remains open",
+          "note": "Capability smoke still passes; planner regression intentionally fails and should be treated as the active bug signal."
+        }
+      ],
+      "suggested_fix_when_approved": [
+        "Add specific intent coverage for 系统概况/机器概况/system overview and map it to ops.local.system_info.",
+        "Recognize locate/find/search phrases combined with 包含 and 文件 as code.search_text.",
+        "Recognize workspace file-open phrasing as code.read_file and preserve workspace scoping.",
+        "Keep these checks before the broad wantsCodeWork(workspace) fallback.",
+        "Keep targeted regression tests so the natural-language planner cannot silently regress again."
+      ],
+      "verification_plan_when_fixed": [
+        "go test ./tests -run 'TestTargeted' -count=1",
+        "go test ./...",
+        "bash global_tests/run_global_tests.sh"
+      ],
+      "constraints": [
+        "Do not commit code.",
+        "Do not treat MCP live success as proof of planner correctness.",
+        "Do not let ordinary LLM text execute tools directly; the fix must still produce structured ToolProposal objects."
+      ]
+    }
+  ]
+}

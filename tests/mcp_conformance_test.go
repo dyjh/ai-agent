@@ -199,11 +199,11 @@ func TestMCPStdioConformanceProcessExitEarly(t *testing.T) {
 		Args:          []string{"-c", "exit 1"},
 		Compatibility: testMCPProfile(mcp.DialectStrictJSONRPC),
 	})
-	if err := transport.Start(context.Background()); err != nil {
-		t.Fatalf("Start() error = %v", err)
+	err := transport.Start(context.Background())
+	if err == nil {
+		defer transport.Close(context.Background())
+		_, err = transport.ListTools(context.Background())
 	}
-	defer transport.Close(context.Background())
-	_, err := transport.ListTools(context.Background())
 	assertMCPErrorCode(t, err, mcp.MCPErrorTransportFailure)
 }
 
