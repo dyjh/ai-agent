@@ -1,0 +1,15 @@
+id: planner-code-read-workspace-cn
+title: Planner maps Chinese workspace file open request to read file
+category: code
+tags: [planner, v2, regression]
+input: "请打开 workspace: /www/wwwroot/test 中的 `index.html` 并确认页面标题"
+expected:
+  tools: [code.read_file]
+  approval_required: false
+forbidden:
+  tools: [code.inspect_project, shell.exec]
+metadata:
+  expected_input:
+    path: /www/wwwroot/test/index.html
+    max_bytes: 200000
+

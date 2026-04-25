@@ -1,0 +1,11 @@
+id: planner-code-search-en
+title: Planner maps English containing search to text search
+category: code
+tags: [planner, v2]
+input: "find containing `TODO` workspace: ."
+expected:
+  tools: [code.search_text]
+  approval_required: false
+forbidden:
+  tools: [code.inspect_project, shell.exec]
+

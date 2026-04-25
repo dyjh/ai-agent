@@ -98,6 +98,13 @@ func Load(path string) (Config, error) {
 	if cfg.Embeddings.TimeoutSeconds <= 0 {
 		cfg.Embeddings.TimeoutSeconds = Default().Embeddings.TimeoutSeconds
 	}
+	cfg.Planner.Mode = strings.ToLower(strings.TrimSpace(cfg.Planner.Mode))
+	if cfg.Planner.Mode == "" {
+		cfg.Planner.Mode = Default().Planner.Mode
+	}
+	if cfg.Planner.MaxRetries <= 0 {
+		cfg.Planner.MaxRetries = Default().Planner.MaxRetries
+	}
 
 	return cfg, nil
 }

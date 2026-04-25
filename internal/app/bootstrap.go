@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"local-agent/internal/agent"
+	plannersemantic "local-agent/internal/agent/planner/semantic"
 	"local-agent/internal/config"
 	"local-agent/internal/core"
 	"local-agent/internal/db"
@@ -124,8 +125,14 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 	}
 
 	runtime := &agent.Runtime{
-		Store:            store,
-		Planner:          agent.HeuristicPlanner{},
+		Store: store,
+		Planner: agent.NewHybridPlanner(registry, model, plannersemantic.Config{
+			Mode:                    cfg.Planner.Mode,
+			SemanticEnabled:         cfg.Planner.SemanticEnabled,
+			SemanticShadowMode:      cfg.Planner.SemanticShadowMode,
+			MaxRetries:              cfg.Planner.MaxRetries,
+			RequireSchemaValidation: cfg.Planner.RequireSchemaValidation,
+		}, cfg.Policy.SensitivePaths),
 		Runner:           einoapp.Runner{Model: model},
 		Approvals:        approvals,
 		Events:           eventWriter,

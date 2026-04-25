@@ -5,16 +5,16 @@
     {
       "id": "BUG-2026-04-25-planner-live-tool-routing",
       "title": "Natural-language planner fails to route several read-only ops/code requests to structured ToolProposal",
-      "status": "open",
+      "status": "fixed",
       "severity": "high",
       "area": "agent.planner",
       "summary": "Live tests exposed that the deterministic planner does not recognize several common Chinese phrases for read-only local ops and code workspace tasks. The underlying tools, router, effect inference, policy engine, and executors work; the failure is before routing, at natural-language intent mapping.",
       "current_state": {
-        "planner_fix": "withdrawn at user request",
+        "planner_fix": "Planner V2 hybrid refactor",
         "mcp_http_sse": "working in live smoke test",
         "mcp_stdio_chrome_devtools": "working in live smoke test",
         "capability_layer": "targeted smoke test passes",
-        "planner_layer": "targeted regression test fails and captures the open issue"
+        "planner_layer": "fixed"
       },
       "not_a_bug_in": [
         "MCP HTTP SSE transport",
@@ -123,6 +123,44 @@
         "go test ./...",
         "bash global_tests/run_global_tests.sh"
       ],
+      "verification": {
+        "planner_fix": "Planner V2 hybrid refactor",
+        "targeted_planner_regression": "passed",
+        "planner_v2_eval": "passed via TestPlannerV2 and planner v2 unit tests; planner eval fixtures added under evals/cases/planner",
+        "go_test_all": "passed",
+        "global_live_tests": "passed 8/8 after rerun outside sandbox with localhost PostgreSQL access",
+        "unchanged_layers": [
+          "ToolRouter unchanged",
+          "EffectInference unchanged",
+          "PolicyEngine unchanged",
+          "ApprovalCenter unchanged",
+          "Executor unchanged"
+        ],
+        "fixed_cases": [
+          {
+            "input": "请获取这台本地机器的系统概况",
+            "tool": "ops.local.system_info",
+            "input_snapshot": {}
+          },
+          {
+            "input": "请定位包含 `最小静态站点` 的文件，workspace: /www/wwwroot/test",
+            "tool": "code.search_text",
+            "input_snapshot": {
+              "path": "/www/wwwroot/test",
+              "query": "最小静态站点",
+              "limit": 50
+            }
+          },
+          {
+            "input": "请打开 workspace: /www/wwwroot/test 中的 `index.html` 并确认页面标题",
+            "tool": "code.read_file",
+            "input_snapshot": {
+              "path": "/www/wwwroot/test/index.html",
+              "max_bytes": 200000
+            }
+          }
+        ]
+      },
       "constraints": [
         "Do not commit code.",
         "Do not treat MCP live success as proof of planner correctness.",

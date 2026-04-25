@@ -228,6 +228,30 @@ go run ./cmd/agent eval report latest
 - 想修改命令、patch 或参数时，应拒绝当前 approval，再发起新的请求。
 - UI/TUI 只展示并提交 approve/reject，不会绕过后端安全链路。
 
+## Planner V2
+
+当前默认使用 Hybrid Planner。
+
+- Deterministic FastPath 只处理高置信、结构明显的常见意图，例如本机系统概况、代码文本搜索、workspace 文件读取、Git 只读操作、RAG 和记忆候选提取。
+- RequestNormalizer 负责提取 workspace、quoted text、possible file path、host/kb/run/approval id，并把中英文同义表达归一化为 signals；这些 signals 不是最终工具决策。
+- IntentClassifier 只判断 domain / intent / confidence，以及是否需要工具或澄清，不直接选择 executor。
+- LLM Semantic Planner 位于配置门禁之后，只能输出结构化 `SemanticPlan` JSON，不能执行 shell、写文件、调用 MCP、Skill、Ops 或 Code executor。
+- `SemanticPlan` 必须先通过本地 PlanValidator，校验工具是否存在、planner 是否允许选择、input 基本 schema、路径逃逸、secret input 和危险/审批工具。
+- PlanCompiler 只把合法计划编译为现有 `ToolProposal`；执行仍走 ToolRouter / EffectInference / PolicyEngine / ApprovalCenter / Executor。
+- 不确定或缺少必要参数时，planner 会转为澄清问题，而不是把宽泛 `workspace` 请求降级到错误工具。
+- `evals/cases/planner/` 中的 Planner Eval 覆盖中英文回归 case，用于防止自然语言 routing 退化。
+
+可选配置：
+
+```yaml
+planner:
+  mode: hybrid # heuristic / semantic / hybrid
+  semantic_enabled: true # 需要真实模型时打开；默认配置可保持 false
+  semantic_shadow_mode: false
+  max_retries: 2
+  require_schema_validation: true
+```
+
 ## 数据位置
 
 - `memory/`：长期记忆和偏好，Markdown 是事实源。

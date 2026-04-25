@@ -1,0 +1,11 @@
+id: planner-k8s-logs-cn
+title: Planner maps Kubernetes logs request
+category: ops
+tags: [planner, v2, ops]
+input: "请查看 k8s pod `api-0` 日志"
+expected:
+  tools: [ops.k8s.logs]
+  approval_required: false
+forbidden:
+  tools: [shell.exec]
+

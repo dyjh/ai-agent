@@ -1,0 +1,12 @@
+id: planner-rag-citation-cn
+title: Planner maps RAG citation request
+category: rag
+tags: [planner, v2, rag]
+input: "只根据知识库回答这个问题，并引用来源"
+expected:
+  tools: [kb.answer]
+  approval_required: false
+  citation_required: true
+forbidden:
+  tools: [shell.exec]
+

@@ -18,6 +18,7 @@ type Config struct {
 	Events     EventsConfig    `yaml:"events"`
 	Shell      ShellConfig     `yaml:"shell"`
 	Policy     PolicyConfig    `yaml:"policy"`
+	Planner    PlannerConfig   `yaml:"planner"`
 }
 
 // ServerConfig stores HTTP listener settings.
@@ -133,6 +134,15 @@ type ShellConfig struct {
 	MaxOutputChars        int  `yaml:"max_output_chars"`
 }
 
+// PlannerConfig controls the hybrid natural-language planner.
+type PlannerConfig struct {
+	Mode                    string `yaml:"mode"`
+	SemanticEnabled         bool   `yaml:"semantic_enabled"`
+	SemanticShadowMode      bool   `yaml:"semantic_shadow_mode"`
+	MaxRetries              int    `yaml:"max_retries"`
+	RequireSchemaValidation bool   `yaml:"require_schema_validation"`
+}
+
 // PolicyProfile stores one named policy mode.
 type PolicyProfile struct {
 	Name                        string   `json:"name" yaml:"-"`
@@ -227,6 +237,13 @@ func Default() Config {
 			Enabled:               true,
 			DefaultTimeoutSeconds: 60,
 			MaxOutputChars:        20000,
+		},
+		Planner: PlannerConfig{
+			Mode:                    "hybrid",
+			SemanticEnabled:         false,
+			SemanticShadowMode:      false,
+			MaxRetries:              2,
+			RequireSchemaValidation: true,
 		},
 		Policy: PolicyConfig{
 			MinConfidenceForAutoExecute: 0.85,

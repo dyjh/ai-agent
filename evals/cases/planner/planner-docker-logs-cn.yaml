@@ -1,0 +1,11 @@
+id: planner-docker-logs-cn
+title: Planner maps Docker logs request
+category: ops
+tags: [planner, v2, ops]
+input: "请查看 docker 容器 `web` 日志"
+expected:
+  tools: [ops.docker.logs]
+  approval_required: false
+forbidden:
+  tools: [shell.exec]
+

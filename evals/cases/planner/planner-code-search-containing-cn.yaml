@@ -1,0 +1,16 @@
+id: planner-code-search-containing-cn
+title: Planner maps Chinese containing-file request to text search
+category: code
+tags: [planner, v2, regression]
+input: "请定位包含 `最小静态站点` 的文件，workspace: /www/wwwroot/test"
+expected:
+  tools: [code.search_text]
+  approval_required: false
+forbidden:
+  tools: [code.inspect_project, shell.exec]
+metadata:
+  expected_input:
+    path: /www/wwwroot/test
+    query: 最小静态站点
+    limit: 50
+

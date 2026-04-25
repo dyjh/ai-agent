@@ -1,0 +1,11 @@
+id: planner-ops-system-overview-cn
+title: Planner maps Chinese system overview to local ops
+category: ops
+tags: [planner, v2, regression]
+input: "请获取这台本地机器的系统概况"
+expected:
+  tools: [ops.local.system_info]
+  approval_required: false
+forbidden:
+  tools: [shell.exec, code.inspect_project]
+

@@ -1,17 +1,17 @@
 {
   "project": "local-agent",
   "source": "promote-stageF-9",
-  "last_updated": "2026-04-25T01:35:00+08:00",
+  "last_updated": "2026-04-25T12:45:56+08:00",
   "overall_status": "full_agent_foundation_completed",
-  "current_task_id": "post-full-agent-backlog",
-  "current_task_title": "Post-F7 Backlog",
+  "current_task_id": "post-full-agent-planner-v2",
+  "current_task_title": "Post-F7 Bugfix P0 + Planner V2 Refactor",
   "summary": {
     "headline": "MVP 主链路保持稳定，F1 代码能力、F2 运维能力、F3 RAG 可靠性、F4 长期记忆治理、F5 安全策略/Secret Guard、F6 Eval/Replay 和 F7 Web UI/TUI 首版均已完成。",
     "progress": {
-      "completed": 23,
+      "completed": 24,
       "in_progress": 0,
       "pending": 1,
-      "total": 24
+      "total": 25
     },
     "verified": [
       "2026-04-23 已检查仓库结构，HTTP API / WebSocket / CLI / memory / kb / skills / mcp / tests 均已存在。",
@@ -36,7 +36,8 @@
       "2026-04-25 已完成 Phase F4：新增 MemoryItem Markdown parse/render、candidate extractor、review queue、基础 conflict/merge、archive/restore、Sensitive Memory Guard、Memory API/CLI、ContextBuilder active-memory 接入和回归测试，并确认 go test ./... 通过。",
       "2026-04-25 已完成 Phase F5：新增 policy profiles、统一 Secret Guard、Network Policy、Sensitive Data Flow Guard、Approval Explanation、RiskTrace、Security API/CLI、Swagger/OpenAPI 更新和回归测试，并确认 go test ./... 通过。",
       "2026-04-25 已完成 Phase F6：新增 EvalCase YAML/JSON、safe-mode EvalRunner、chat/RAG/code/ops/safety golden tasks、event/behavior replay、Eval report、API/CLI、Swagger/OpenAPI 更新和回归测试，并确认 go test ./... 通过。",
-      "2026-04-25 已完成 Phase F7 首版：新增独立 ui/web React/Vite Web UI、ui/tui Go TUI、Chat/Run/Approval/Code/Memory/KB/Skill/MCP/Ops/Eval/Settings 页面入口、CORS/WS 本机 origin 支持、README/Makefile/task.json 更新，并确认 go test ./...、ui/tui go test ./...、ui/web npm test 和 npm run build 通过。"
+      "2026-04-25 已完成 Phase F7 首版：新增独立 ui/web React/Vite Web UI、ui/tui Go TUI、Chat/Run/Approval/Code/Memory/KB/Skill/MCP/Ops/Eval/Settings 页面入口、CORS/WS 本机 origin 支持、README/Makefile/task.json 更新，并确认 go test ./...、ui/tui go test ./...、ui/web npm test 和 npm run build 通过。",
+      "2026-04-25 已完成 Post-F7 Planner V2：Hybrid Planner、RequestNormalizer、IntentClassifier、PlanningCatalog、SemanticPlan、FastPath、LLM Semantic Planner 配置门禁、PlanValidator、PlanCompiler、planner eval 和 live regression 修复。"
     ],
     "unfinished_overview": [
       "当前 step loop 已覆盖本地单用户可恢复多步任务，但仍不是无限自动规划的通用 graph 平台。",
@@ -592,6 +593,35 @@
       ]
     },
     {
+      "id": "post-full-agent-planner-v2",
+      "title": "Post-F7 Bugfix P0 + Planner V2 Refactor",
+      "status": "completed",
+      "completed_items": [
+        "新增 RequestNormalizer，统一提取 workspace、quoted text、possible file path、host/kb/run/approval id 和中英文归一化 signals。",
+        "新增 IntentClassifier，只输出 domain/intent/confidence/need_tool/need_clarify，不直接选择 executor。",
+        "新增 PlanningCatalog，从 ToolRegistry 生成 planner-safe tool spec，并为核心 code/git/ops/kb/memory 工具补充 examples、effects、auto-select 和 approval 标记。",
+        "新增 SemanticPlan / SemanticPlanStep 类型，LLM Semantic Planner 仅输出结构化 JSON 计划，不执行工具。",
+        "新增 Deterministic FastPath，覆盖系统概况、定位包含文本、workspace file open、code read/search/test/fix、git、RAG、memory 和常见 ops 高置信入口。",
+        "新增 PlanValidator，校验未知工具、planner-blocked 工具、基本 schema、必填参数、路径逃逸、secret input 和 approval-gated tool warning。",
+        "新增 PlanCompiler，将 answer/clarify/tool/multi_step SemanticPlan 编译为现有 Plan / ToolProposal 兼容形态。",
+        "新增 HybridPlanner，并让 Runtime 默认使用 hybrid；旧 HeuristicPlanner 保留为兼容 adapter 和 after-tool continuation 入口。",
+        "新增 planner v2 单元测试与 planner eval fixtures，覆盖 bug.json 三个 live regression case。",
+        "修复 BUG-2026-04-25-planner-live-tool-routing，并保持 ToolRouter / EffectInference / PolicyEngine / ApprovalCenter / Executor 链路不变。"
+      ],
+      "remaining_items": [
+        "更复杂 graph/parallel planning 仍属于后续 backlog。",
+        "planner semantic shadow metrics 与 production telemetry 后续补齐。",
+        "LLM Semantic Planner 生产 prompt/repair 可继续增加真实模型集成评测。",
+        "planner eval runner 后续可扩展 expected input field / clarification assertion 的原生校验。"
+      ],
+      "deliverables": [
+        "Hybrid Semantic Planner: FastPath + LLM Semantic Planner + PlanValidator + PlanCompiler",
+        "Planner V2 package layout and compatibility adapter",
+        "Planner V2 unit tests and regression eval cases",
+        "bug.json / README / task.json status updates"
+      ]
+    },
+    {
       "id": "post-full-agent-backlog",
       "title": "Post-F7 Backlog",
       "status": "pending",
@@ -722,6 +752,11 @@
       "at": "2026-04-25T01:35:00+08:00",
       "task_id": "full-agent-ui-tui",
       "summary": "完成 F7 首版：新增独立 ui/web React/Vite Web UI、ui/tui Go TUI、Chat/Run/Approval/Code/Memory/KB/Skill/MCP/Ops/Eval/Settings 页面入口、本机 CORS/WS origin 支持、Makefile/README/task.json 收口，并确认后端、Web UI 和 TUI 测试构建通过。"
+    },
+    {
+      "at": "2026-04-25T12:45:56+08:00",
+      "task_id": "post-full-agent-planner-v2",
+      "summary": "完成 Post-F7 Planner V2 hybrid refactor：新增 normalizer/classifier/catalog/semantic plan/fastpath/validator/compiler/hybrid adapter，修复 bug.json 三个 live planner routing regression，并补充 planner v2 测试和 eval fixtures。"
     }
   ]
 }

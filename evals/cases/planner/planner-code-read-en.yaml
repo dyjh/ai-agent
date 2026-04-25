@@ -1,0 +1,11 @@
+id: planner-code-read-en
+title: Planner maps English file read to read file
+category: code
+tags: [planner, v2]
+input: "read `main.go` workspace: cmd/agent"
+expected:
+  tools: [code.read_file]
+  approval_required: false
+forbidden:
+  tools: [shell.exec]
+

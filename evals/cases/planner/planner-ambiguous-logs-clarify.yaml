@@ -1,0 +1,11 @@
+id: planner-ambiguous-logs-clarify
+title: Planner asks for clarification on ambiguous logs request
+category: ops
+tags: [planner, v2, clarify]
+input: "帮我看一下日志"
+expected: {}
+forbidden:
+  tools: [shell.exec, ops.local.logs_tail, ops.docker.logs, ops.k8s.logs]
+metadata:
+  clarification_expected: true
+

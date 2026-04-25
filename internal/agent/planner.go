@@ -50,8 +50,9 @@ type HeuristicPlanner struct {
 	Adapter einoapp.ProposalToolAdapter
 }
 
-// Plan turns common local-ops intents into tool proposals and falls back to direct answering.
-func (p HeuristicPlanner) Plan(_ context.Context, input PlanInput) (Plan, error) {
+// Plan delegates first-pass planning to Planner V2 while keeping legacy
+// after-tool continuation behavior for existing workflows.
+func (p HeuristicPlanner) Plan(ctx context.Context, input PlanInput) (Plan, error) {
 	if input.LastToolResult != nil {
 		if next, ok := p.planAfterTool(input); ok {
 			return next, nil
@@ -62,6 +63,8 @@ func (p HeuristicPlanner) Plan(_ context.Context, input PlanInput) (Plan, error)
 			Reason:   "heuristic planner stops after one tool result",
 		}, nil
 	}
+
+	return (HybridPlanner{Adapter: p.Adapter}).Plan(ctx, input)
 
 	normalized := strings.ToLower(strings.TrimSpace(input.UserMessage))
 	workspace := extractWorkspace(input.UserMessage)
