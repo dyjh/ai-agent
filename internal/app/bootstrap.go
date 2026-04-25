@@ -90,13 +90,13 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 	var knowledgeService *kb.Service
 	if cfg.KB.Enabled {
 		kbCfg := cfg
-		kbCfg.Vector.Backend = config.VectorBackendQdrant
+		kbCfg.Vector.Backend = config.VectorBackend(cfg.KB.Provider)
 		kbCfg.Vector.FallbackToMemory = false
 		kbIndex, err := kb.NewVectorIndexFactory(logger).NewVectorIndex(ctx, kbCfg, embedder)
 		if err != nil {
-			return nil, fmt.Errorf("knowledge base qdrant unavailable: %w", err)
+			return nil, fmt.Errorf("knowledge base %s unavailable: %w", cfg.KB.Provider, err)
 		}
-		knowledgeService = kb.NewService(kbIndex, embedder, cfg.CollectionName("kb"))
+		knowledgeService = kb.NewService(kbIndex, embedder, kbCfg.CollectionName("kb"))
 		knowledgeService.SetNetworkPolicy(cfg.Policy.Network)
 	}
 	skillsManager := skills.NewManager(skillsRoot)

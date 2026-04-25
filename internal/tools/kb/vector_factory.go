@@ -13,7 +13,7 @@ type VectorIndexFactory interface {
 	NewVectorIndex(ctx context.Context, cfg config.Config, embedder Embedder) (VectorIndex, error)
 }
 
-// DefaultVectorIndexFactory selects between memory and Qdrant backends.
+// DefaultVectorIndexFactory selects between memory and remote vector backends.
 type DefaultVectorIndexFactory struct {
 	Logger *slog.Logger
 }
@@ -36,12 +36,13 @@ func (f *DefaultVectorIndexFactory) NewVectorIndex(ctx context.Context, cfg conf
 		return NewInMemoryVectorIndex(embedder, status), nil
 	case config.VectorBackendQdrant:
 		index, err := NewQdrantVectorIndex(QdrantIndexConfig{
-			URL:                cfg.Qdrant.URL,
-			APIKey:             cfg.Qdrant.APIKey,
-			TimeoutSeconds:     cfg.Qdrant.TimeoutSeconds,
-			EmbeddingDimension: cfg.Vector.EmbeddingDimension,
-			Distance:           cfg.Vector.Distance,
-			Collections:        configuredCollections(cfg),
+			URL:                         cfg.Qdrant.URL,
+			APIKey:                      cfg.Qdrant.APIKey,
+			TimeoutSeconds:              cfg.Qdrant.TimeoutSeconds,
+			EmbeddingDimension:          cfg.Vector.EmbeddingDimension,
+			Distance:                    cfg.Vector.Distance,
+			RecreateOnDimensionMismatch: cfg.Qdrant.RecreateOnDimensionMismatch,
+			Collections:                 configuredCollections(cfg),
 		}, embedder, nil)
 		if err == nil {
 			err = index.Health(ctx)
@@ -51,6 +52,9 @@ func (f *DefaultVectorIndexFactory) NewVectorIndex(ctx context.Context, cfg conf
 		}
 		if err == nil {
 			return index, nil
+		}
+		if isQdrantCollectionDimensionError(err) {
+			return nil, err
 		}
 		if !cfg.Vector.FallbackToMemory {
 			return nil, err
@@ -63,6 +67,53 @@ func (f *DefaultVectorIndexFactory) NewVectorIndex(ctx context.Context, cfg conf
 		status.VectorBackend = string(config.VectorBackendMemory)
 		status.FallbackReason = fallback
 		status.Qdrant = "fallback"
+		return NewInMemoryVectorIndex(embedder, status), nil
+	case config.VectorBackendPinecone:
+		index, err := NewPineconeVectorIndex(PineconeIndexConfig{
+			IndexHost:          cfg.Pinecone.IndexHost,
+			APIKey:             cfg.Pinecone.APIKey,
+			TimeoutSeconds:     cfg.Pinecone.TimeoutSeconds,
+			EmbeddingDimension: cfg.Vector.EmbeddingDimension,
+			Namespaces:         configuredCollections(cfg),
+		}, embedder, nil)
+		if err == nil {
+			err = index.EnsureCollections(ctx)
+		}
+		if err == nil {
+			return index, nil
+		}
+		if !cfg.Vector.FallbackToMemory {
+			return nil, err
+		}
+		fallback := fmt.Sprintf("pinecone unavailable: %v", err)
+		if f.Logger != nil {
+			f.Logger.Warn("vector backend fallback", "backend", "pinecone", "fallback", "memory", "reason", fallback)
+		}
+		status.VectorBackend = string(config.VectorBackendMemory)
+		status.FallbackReason = fallback
+		return NewInMemoryVectorIndex(embedder, status), nil
+	case config.VectorBackendOpenAI:
+		index, err := NewOpenAIVectorStoreIndex(OpenAIVectorStoreConfig{
+			BaseURL:        cfg.OpenAIKB.BaseURL,
+			APIKey:         cfg.OpenAIKB.APIKey,
+			TimeoutSeconds: cfg.OpenAIKB.TimeoutSeconds,
+			VectorStores:   configuredCollections(cfg),
+		}, nil)
+		if err == nil {
+			err = index.EnsureCollections(ctx)
+		}
+		if err == nil {
+			return index, nil
+		}
+		if !cfg.Vector.FallbackToMemory {
+			return nil, err
+		}
+		fallback := fmt.Sprintf("openai vector store unavailable: %v", err)
+		if f.Logger != nil {
+			f.Logger.Warn("vector backend fallback", "backend", "openai", "fallback", "memory", "reason", fallback)
+		}
+		status.VectorBackend = string(config.VectorBackendMemory)
+		status.FallbackReason = fallback
 		return NewInMemoryVectorIndex(embedder, status), nil
 	default:
 		return nil, fmt.Errorf("unsupported vector backend: %s", cfg.Vector.Backend)
@@ -87,9 +138,11 @@ func collectionStatus(cfg config.Config) map[string]string {
 }
 
 func configuredCollections(cfg config.Config) map[string]string {
-	return map[string]string{
-		"kb":     cfg.CollectionName("kb"),
-		"memory": cfg.CollectionName("memory"),
-		"code":   cfg.CollectionName("code"),
+	out := map[string]string{}
+	for _, scope := range []string{"kb", "memory", "code"} {
+		if name := cfg.CollectionName(scope); name != "" {
+			out[scope] = name
+		}
 	}
+	return out
 }

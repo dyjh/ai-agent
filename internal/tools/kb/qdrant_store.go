@@ -3,7 +3,9 @@ package kb
 import (
 	"bytes"
 	"context"
+	"crypto/sha1"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -23,12 +25,13 @@ type httpDoer interface {
 
 // QdrantIndexConfig stores the connection details needed by the HTTP adapter.
 type QdrantIndexConfig struct {
-	URL                string
-	APIKey             string
-	TimeoutSeconds     int
-	EmbeddingDimension int
-	Distance           string
-	Collections        map[string]string
+	URL                         string
+	APIKey                      string
+	TimeoutSeconds              int
+	EmbeddingDimension          int
+	Distance                    string
+	RecreateOnDimensionMismatch bool
+	Collections                 map[string]string
 }
 
 // InMemoryVectorIndex is a deterministic local vector index used for tests and fallback mode.
@@ -125,15 +128,16 @@ func (i *InMemoryVectorIndex) Health(_ context.Context) error {
 
 // QdrantVectorIndex is a thin HTTP adapter over Qdrant's REST API.
 type QdrantVectorIndex struct {
-	baseURL            string
-	apiKey             string
-	timeoutSeconds     int
-	embeddingDimension int
-	distance           string
-	collections        map[string]string
-	embedder           Embedder
-	client             httpDoer
-	status             VectorRuntimeStatus
+	baseURL                     string
+	apiKey                      string
+	timeoutSeconds              int
+	embeddingDimension          int
+	distance                    string
+	recreateOnDimensionMismatch bool
+	collections                 map[string]string
+	embedder                    Embedder
+	client                      httpDoer
+	status                      VectorRuntimeStatus
 }
 
 // NewQdrantVectorIndex constructs a Qdrant-backed index.
@@ -168,14 +172,15 @@ func NewQdrantVectorIndex(cfg QdrantIndexConfig, embedder Embedder, client httpD
 	}
 
 	return &QdrantVectorIndex{
-		baseURL:            strings.TrimRight(cfg.URL, "/"),
-		apiKey:             cfg.APIKey,
-		timeoutSeconds:     cfg.TimeoutSeconds,
-		embeddingDimension: cfg.EmbeddingDimension,
-		distance:           strings.ToLower(cfg.Distance),
-		collections:        collections,
-		embedder:           embedder,
-		client:             client,
+		baseURL:                     strings.TrimRight(cfg.URL, "/"),
+		apiKey:                      cfg.APIKey,
+		timeoutSeconds:              cfg.TimeoutSeconds,
+		embeddingDimension:          cfg.EmbeddingDimension,
+		distance:                    strings.ToLower(cfg.Distance),
+		recreateOnDimensionMismatch: cfg.RecreateOnDimensionMismatch,
+		collections:                 collections,
+		embedder:                    embedder,
+		client:                      client,
 		status: VectorRuntimeStatus{
 			VectorBackend: "qdrant",
 			Qdrant:        "configured",
@@ -189,27 +194,156 @@ func (q *QdrantVectorIndex) Status() VectorRuntimeStatus {
 	return cloneStatus(q.status)
 }
 
-// EnsureCollections creates configured collections when they do not already exist.
+// EnsureCollections creates configured collections and verifies existing
+// collections use the configured embedding dimension.
 func (q *QdrantVectorIndex) EnsureCollections(ctx context.Context) error {
 	for _, name := range q.collections {
-		exists, err := q.collectionExists(ctx, name)
+		info, err := q.collectionInfo(ctx, name)
 		if err != nil {
 			return err
 		}
-		if exists {
+		if !info.Exists {
+			if err := q.createCollection(ctx, name); err != nil {
+				return err
+			}
 			continue
 		}
-		body := map[string]any{
-			"vectors": map[string]any{
-				"size":     q.embeddingDimension,
-				"distance": q.qdrantDistance(),
-			},
+		if info.VectorSize == q.embeddingDimension {
+			continue
 		}
-		if err := q.requestJSON(ctx, http.MethodPut, "/collections/"+url.PathEscape(name), body, nil); err != nil {
-			return err
+		if info.VectorSize <= 0 {
+			return fmt.Errorf("qdrant collection %q vector dimension is unknown; configured dimension is %d", name, q.embeddingDimension)
+		}
+		if q.recreateOnDimensionMismatch || (info.PointsCountKnown && info.PointsCount == 0) {
+			if err := q.requestJSON(ctx, http.MethodDelete, "/collections/"+url.PathEscape(name), nil, nil); err != nil {
+				return err
+			}
+			if err := q.createCollection(ctx, name); err != nil {
+				return err
+			}
+			continue
+		}
+		return &qdrantCollectionDimensionError{
+			Collection:       name,
+			Expected:         q.embeddingDimension,
+			Actual:           info.VectorSize,
+			PointsCount:      info.PointsCount,
+			PointsCountKnown: info.PointsCountKnown,
 		}
 	}
 	return nil
+}
+
+func (q *QdrantVectorIndex) createCollection(ctx context.Context, name string) error {
+	body := map[string]any{
+		"vectors": map[string]any{
+			"size":     q.embeddingDimension,
+			"distance": q.qdrantDistance(),
+		},
+	}
+	return q.requestJSON(ctx, http.MethodPut, "/collections/"+url.PathEscape(name), body, nil)
+}
+
+type qdrantCollectionInfo struct {
+	Exists           bool
+	VectorSize       int
+	PointsCount      int64
+	PointsCountKnown bool
+}
+
+func (q *QdrantVectorIndex) collectionInfo(ctx context.Context, collection string) (qdrantCollectionInfo, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, q.urlWithTimeout("/collections/"+url.PathEscape(collection)), nil)
+	if err != nil {
+		return qdrantCollectionInfo{}, err
+	}
+	q.decorateHeaders(req)
+	resp, err := q.client.Do(req)
+	if err != nil {
+		return qdrantCollectionInfo{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return qdrantCollectionInfo{Exists: false}, nil
+	}
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return qdrantCollectionInfo{}, &qdrantAPIError{StatusCode: resp.StatusCode, Body: string(body)}
+	}
+
+	var response struct {
+		Result struct {
+			PointsCount *int64 `json:"points_count"`
+			Config      struct {
+				Params struct {
+					Vectors json.RawMessage `json:"vectors"`
+				} `json:"params"`
+			} `json:"config"`
+		} `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return qdrantCollectionInfo{}, err
+	}
+	info := qdrantCollectionInfo{
+		Exists:     true,
+		VectorSize: parseQdrantVectorSize(response.Result.Config.Params.Vectors),
+	}
+	if response.Result.PointsCount != nil {
+		info.PointsCountKnown = true
+		info.PointsCount = *response.Result.PointsCount
+	}
+	return info, nil
+}
+
+func parseQdrantVectorSize(raw json.RawMessage) int {
+	if len(raw) == 0 {
+		return 0
+	}
+	var unnamed struct {
+		Size int `json:"size"`
+	}
+	if err := json.Unmarshal(raw, &unnamed); err == nil && unnamed.Size > 0 {
+		return unnamed.Size
+	}
+	var named map[string]struct {
+		Size int `json:"size"`
+	}
+	if err := json.Unmarshal(raw, &named); err != nil {
+		return 0
+	}
+	for _, vector := range named {
+		if vector.Size > 0 {
+			return vector.Size
+		}
+	}
+	return 0
+}
+
+type qdrantCollectionDimensionError struct {
+	Collection       string
+	Expected         int
+	Actual           int
+	PointsCount      int64
+	PointsCountKnown bool
+}
+
+func (e *qdrantCollectionDimensionError) Error() string {
+	points := "unknown"
+	if e.PointsCountKnown {
+		points = fmt.Sprintf("%d", e.PointsCount)
+	}
+	return fmt.Sprintf(
+		"qdrant collection %q vector dimension mismatch: configured=%d existing=%d points=%s; recreate the collection or point QDRANT_COLLECTION_* at a collection created with dimension %d",
+		e.Collection,
+		e.Expected,
+		e.Actual,
+		points,
+		e.Expected,
+	)
+}
+
+func isQdrantCollectionDimensionError(err error) bool {
+	var target *qdrantCollectionDimensionError
+	return errors.As(err, &target)
 }
 
 // UpsertChunks writes points into the target collection.
@@ -220,7 +354,7 @@ func (q *QdrantVectorIndex) UpsertChunks(ctx context.Context, collection string,
 	points := make([]map[string]any, 0, len(chunks))
 	for _, chunk := range chunks {
 		points = append(points, map[string]any{
-			"id":      chunk.ID,
+			"id":      qdrantPointID(chunk.ID),
 			"vector":  chunk.Vector,
 			"payload": sanitizePayload(chunk),
 		})
@@ -309,27 +443,6 @@ func (q *QdrantVectorIndex) Health(ctx context.Context) error {
 		return &qdrantAPIError{StatusCode: resp.StatusCode, Body: string(body)}
 	}
 	return nil
-}
-
-func (q *QdrantVectorIndex) collectionExists(ctx context.Context, collection string) (bool, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, q.urlWithTimeout("/collections/"+url.PathEscape(collection)), nil)
-	if err != nil {
-		return false, err
-	}
-	q.decorateHeaders(req)
-	resp, err := q.client.Do(req)
-	if err != nil {
-		return false, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusNotFound {
-		return false, nil
-	}
-	if resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return false, &qdrantAPIError{StatusCode: resp.StatusCode, Body: string(body)}
-	}
-	return true, nil
 }
 
 func (q *QdrantVectorIndex) requestJSON(ctx context.Context, method, path string, requestBody any, responseBody any) error {
@@ -501,6 +614,14 @@ func sanitizePayload(chunk VectorChunk) map[string]any {
 		payload["text"] = security.RedactString(chunk.Text)
 	}
 	return payload
+}
+
+func qdrantPointID(id string) string {
+	sum := sha1.Sum([]byte(id))
+	bytes := sum[:16]
+	bytes[6] = (bytes[6] & 0x0f) | 0x50
+	bytes[8] = (bytes[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", bytes[0:4], bytes[4:6], bytes[6:8], bytes[8:10], bytes[10:16])
 }
 
 func cosine(a, b []float32) float64 {

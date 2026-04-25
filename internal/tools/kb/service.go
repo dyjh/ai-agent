@@ -723,16 +723,20 @@ func (s *Service) Health(ctx context.Context) VectorRuntimeStatus {
 	}
 	if err := s.index.Health(ctx); err != nil {
 		status.Error = err.Error()
-		if status.VectorBackend == "qdrant" {
-			status.Qdrant = "error"
+		if status.VectorBackend != "" && status.VectorBackend != "memory" {
+			if status.VectorBackend == "qdrant" {
+				status.Qdrant = "error"
+			}
 			for name := range status.Collections {
 				status.Collections[name] = "error"
 			}
 		}
 		return status
 	}
-	if status.VectorBackend == "qdrant" {
-		status.Qdrant = "ok"
+	if status.VectorBackend != "" && status.VectorBackend != "memory" {
+		if status.VectorBackend == "qdrant" {
+			status.Qdrant = "ok"
+		}
 		for name := range status.Collections {
 			status.Collections[name] = "ok"
 		}

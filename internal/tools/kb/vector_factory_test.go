@@ -96,3 +96,54 @@ func TestVectorFactoryQdrantNoFallback(t *testing.T) {
 		t.Fatalf("expected qdrant failure without fallback")
 	}
 }
+
+func TestVectorFactoryPineconeBackend(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/describe_index_stats" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"dimension":16}`))
+	}))
+	defer server.Close()
+
+	cfg := config.Default()
+	cfg.Vector.Backend = config.VectorBackendPinecone
+	cfg.Vector.EmbeddingDimension = 16
+	cfg.Pinecone.IndexHost = server.URL
+	cfg.Pinecone.APIKey = "pinecone-key"
+
+	index, err := NewVectorIndexFactory(slog.New(slog.NewTextHandler(io.Discard, nil))).NewVectorIndex(context.Background(), cfg, FakeEmbedder{Dimensions: 16})
+	if err != nil {
+		t.Fatalf("NewVectorIndex() error = %v", err)
+	}
+	if _, ok := index.(*PineconeVectorIndex); !ok {
+		t.Fatalf("expected pinecone index, got %T", index)
+	}
+}
+
+func TestVectorFactoryOpenAIBackend(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/vector_stores/vs_memory":
+			_, _ = w.Write([]byte(`{"id":"vs_memory"}`))
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	cfg := config.Default()
+	cfg.Vector.Backend = config.VectorBackendOpenAI
+	cfg.Vector.EmbeddingDimension = 16
+	cfg.OpenAIKB.BaseURL = server.URL
+	cfg.OpenAIKB.APIKey = "openai-key"
+	cfg.OpenAIKB.VectorStores = map[string]string{"memory": "vs_memory"}
+
+	index, err := NewVectorIndexFactory(slog.New(slog.NewTextHandler(io.Discard, nil))).NewVectorIndex(context.Background(), cfg, FakeEmbedder{Dimensions: 16})
+	if err != nil {
+		t.Fatalf("NewVectorIndex() error = %v", err)
+	}
+	if _, ok := index.(*OpenAIVectorStoreIndex); !ok {
+		t.Fatalf("expected openai vector store index, got %T", index)
+	}
+}

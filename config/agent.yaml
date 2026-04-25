@@ -11,7 +11,7 @@ kb:
   registry_path: ./knowledge/registry.yaml
 
 vector:
-  backend: qdrant
+  backend: ${KONWAGE_BASE_PROVIDER}
   fallback_to_memory: true
   embedding_dimension: ${EMBEDDING_DIMENSION}
   distance: cosine
@@ -21,9 +21,27 @@ qdrant:
   api_key: ${QDRANT_API_KEY}
   timeout_seconds: 10
   collections:
-    kb: kb_chunks
-    memory: memory_chunks
-    code: code_chunks
+    kb: ${QDRANT_COLLECTION_KB}
+    memory: ${QDRANT_COLLECTION_MEMORY}
+    code: ${QDRANT_COLLECTION_CODE}
+
+pinecone:
+  index_host: ${PINECONE_INDEX_HOST}
+  api_key: ${PINECONE_API_KEY}
+  timeout_seconds: 10
+  namespaces:
+    kb: ${PINECONE_NAMESPACE_KB}
+    memory: ${PINECONE_NAMESPACE_MEMORY}
+    code: ${PINECONE_NAMESPACE_CODE}
+
+openai_kb:
+  base_url: ${OPENAI_KB_BASE_URL}
+  api_key: ${OPENAI_KB_API_KEY}
+  timeout_seconds: 30
+  vector_stores:
+    kb: ${OPENAI_VECTOR_STORE_KB}
+    memory: ${OPENAI_VECTOR_STORE_MEMORY}
+    code: ${OPENAI_VECTOR_STORE_CODE}
 
 owner:
   preferred_language: zh-CN

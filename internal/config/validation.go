@@ -42,8 +42,8 @@ func ValidateRuntime(cfg Config) error {
 }
 
 // ValidateKnowledgeBase enforces the runtime KB feature gate. The in-memory
-// vector index remains available to package-level tests, but the configured
-// runtime provider is intentionally qdrant-only.
+// vector index remains available to package-level tests, but enabled runtime
+// providers must use a configured remote vector store.
 func ValidateKnowledgeBase(cfg Config) error {
 	if !cfg.KB.Enabled {
 		return nil
@@ -52,14 +52,39 @@ func ValidateKnowledgeBase(cfg Config) error {
 	if provider == "" {
 		return fmt.Errorf("%s is required when %s=true", EnvKonwageBaseProvider, EnvUseKonwageBase)
 	}
-	if provider != string(VectorBackendQdrant) {
+	switch VectorBackend(provider) {
+	case VectorBackendQdrant:
+		if strings.TrimSpace(cfg.Qdrant.URL) == "" {
+			return errors.New("qdrant.url is required when knowledge base provider is qdrant")
+		}
+		if _, err := url.ParseRequestURI(cfg.Qdrant.URL); err != nil {
+			return errors.New("qdrant.url is invalid")
+		}
+	case VectorBackendPinecone:
+		if strings.TrimSpace(cfg.Pinecone.IndexHost) == "" {
+			return errors.New("pinecone.index_host is required when knowledge base provider is pinecone")
+		}
+		if _, err := url.ParseRequestURI(cfg.Pinecone.IndexHost); err != nil {
+			return errors.New("pinecone.index_host is invalid")
+		}
+		if strings.TrimSpace(cfg.Pinecone.APIKey) == "" {
+			return errors.New("pinecone.api_key is required when knowledge base provider is pinecone")
+		}
+	case VectorBackendOpenAI:
+		if strings.TrimSpace(cfg.OpenAIKB.BaseURL) == "" {
+			return errors.New("openai_kb.base_url is required when knowledge base provider is openai")
+		}
+		if _, err := url.ParseRequestURI(cfg.OpenAIKB.BaseURL); err != nil {
+			return errors.New("openai_kb.base_url is invalid")
+		}
+		if strings.TrimSpace(cfg.OpenAIKB.APIKey) == "" {
+			return errors.New("openai_kb.api_key is required when knowledge base provider is openai")
+		}
+		if strings.TrimSpace(cfg.OpenAIKB.VectorStores["kb"]) == "" {
+			return errors.New("openai_kb.vector_stores.kb is required when knowledge base provider is openai")
+		}
+	default:
 		return fmt.Errorf("unsupported knowledge base provider: %s", provider)
-	}
-	if strings.TrimSpace(cfg.Qdrant.URL) == "" {
-		return errors.New("qdrant.url is required when knowledge base provider is qdrant")
-	}
-	if _, err := url.ParseRequestURI(cfg.Qdrant.URL); err != nil {
-		return errors.New("qdrant.url is invalid")
 	}
 	if strings.TrimSpace(cfg.KB.RegistryPath) == "" {
 		return errors.New("kb.registry_path is required when knowledge base is enabled")
@@ -137,7 +162,7 @@ func ValidatePolicyConfig(policy PolicyConfig) error {
 
 func validateVector(cfg Config) error {
 	switch cfg.Vector.Backend {
-	case "", VectorBackendMemory, VectorBackendQdrant:
+	case "", VectorBackendMemory, VectorBackendQdrant, VectorBackendPinecone, VectorBackendOpenAI:
 	default:
 		return fmt.Errorf("unsupported vector backend: %s", cfg.Vector.Backend)
 	}
@@ -146,6 +171,31 @@ func validateVector(cfg Config) error {
 	}
 	if cfg.Qdrant.TimeoutSeconds <= 0 {
 		return errors.New("qdrant.timeout_seconds must be positive")
+	}
+	if cfg.Pinecone.TimeoutSeconds <= 0 {
+		return errors.New("pinecone.timeout_seconds must be positive")
+	}
+	if cfg.OpenAIKB.TimeoutSeconds <= 0 {
+		return errors.New("openai_kb.timeout_seconds must be positive")
+	}
+	switch cfg.Vector.Backend {
+	case VectorBackendPinecone:
+		if strings.TrimSpace(cfg.Pinecone.IndexHost) == "" {
+			return errors.New("pinecone.index_host is required when vector.backend=pinecone")
+		}
+		if strings.TrimSpace(cfg.Pinecone.APIKey) == "" {
+			return errors.New("pinecone.api_key is required when vector.backend=pinecone")
+		}
+	case VectorBackendOpenAI:
+		if strings.TrimSpace(cfg.OpenAIKB.BaseURL) == "" {
+			return errors.New("openai_kb.base_url is required when vector.backend=openai")
+		}
+		if strings.TrimSpace(cfg.OpenAIKB.APIKey) == "" {
+			return errors.New("openai_kb.api_key is required when vector.backend=openai")
+		}
+		if strings.TrimSpace(cfg.OpenAIKB.VectorStores["memory"]) == "" {
+			return errors.New("openai_kb.vector_stores.memory is required when vector.backend=openai")
+		}
 	}
 	return nil
 }

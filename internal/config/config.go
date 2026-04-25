@@ -1,5 +1,7 @@
 package config
 
+import "strings"
+
 // Config is the root runtime configuration.
 type Config struct {
 	Server     ServerConfig    `yaml:"server"`
@@ -7,6 +9,8 @@ type Config struct {
 	KB         KBConfig        `yaml:"kb"`
 	Vector     VectorConfig    `yaml:"vector"`
 	Qdrant     QdrantConfig    `yaml:"qdrant"`
+	Pinecone   PineconeConfig  `yaml:"pinecone"`
+	OpenAIKB   OpenAIKBConfig  `yaml:"openai_kb"`
 	Owner      OwnerConfig     `yaml:"owner"`
 	LLM        LLMConfig       `yaml:"llm"`
 	Embeddings EmbeddingConfig `yaml:"embeddings"`
@@ -31,8 +35,10 @@ type DatabaseConfig struct {
 type VectorBackend string
 
 const (
-	VectorBackendMemory VectorBackend = "memory"
-	VectorBackendQdrant VectorBackend = "qdrant"
+	VectorBackendMemory   VectorBackend = "memory"
+	VectorBackendQdrant   VectorBackend = "qdrant"
+	VectorBackendPinecone VectorBackend = "pinecone"
+	VectorBackendOpenAI   VectorBackend = "openai"
 )
 
 const (
@@ -59,10 +65,27 @@ type VectorConfig struct {
 
 // QdrantConfig stores vector index configuration.
 type QdrantConfig struct {
-	URL            string            `yaml:"url"`
+	URL                         string            `yaml:"url"`
+	APIKey                      string            `yaml:"api_key"`
+	TimeoutSeconds              int               `yaml:"timeout_seconds"`
+	RecreateOnDimensionMismatch bool              `yaml:"recreate_on_dimension_mismatch"`
+	Collections                 map[string]string `yaml:"collections"`
+}
+
+// PineconeConfig stores Pinecone vector index settings.
+type PineconeConfig struct {
+	IndexHost      string            `yaml:"index_host"`
 	APIKey         string            `yaml:"api_key"`
 	TimeoutSeconds int               `yaml:"timeout_seconds"`
-	Collections    map[string]string `yaml:"collections"`
+	Namespaces     map[string]string `yaml:"namespaces"`
+}
+
+// OpenAIKBConfig stores OpenAI Vector Store settings.
+type OpenAIKBConfig struct {
+	BaseURL        string            `yaml:"base_url"`
+	APIKey         string            `yaml:"api_key"`
+	TimeoutSeconds int               `yaml:"timeout_seconds"`
+	VectorStores   map[string]string `yaml:"vector_stores"`
 }
 
 // OwnerConfig stores local operator preferences.
@@ -165,6 +188,19 @@ func Default() Config {
 				"memory": "memory_chunks",
 				"code":   "code_chunks",
 			},
+		},
+		Pinecone: PineconeConfig{
+			TimeoutSeconds: 10,
+			Namespaces: map[string]string{
+				"kb":     "kb_chunks",
+				"memory": "memory_chunks",
+				"code":   "code_chunks",
+			},
+		},
+		OpenAIKB: OpenAIKBConfig{
+			BaseURL:        "https://api.openai.com/v1",
+			TimeoutSeconds: 30,
+			VectorStores:   map[string]string{},
 		},
 		Owner: OwnerConfig{
 			PreferredLanguage: "zh-CN",
@@ -289,13 +325,20 @@ func NormalizePolicy(policy PolicyConfig) PolicyConfig {
 
 // CollectionName returns the configured collection name for a logical vector scope.
 func (c Config) CollectionName(scope string) string {
-	if c.Qdrant.Collections == nil {
+	switch c.vectorCollectionProvider() {
+	case VectorBackendPinecone:
+		if name := configuredName(c.Pinecone.Namespaces, scope); name != "" {
+			return name
+		}
+		return defaultCollectionName(scope)
+	case VectorBackendOpenAI:
+		return configuredName(c.OpenAIKB.VectorStores, scope)
+	default:
+		if name := configuredName(c.Qdrant.Collections, scope); name != "" {
+			return name
+		}
 		return defaultCollectionName(scope)
 	}
-	if name := c.Qdrant.Collections[scope]; name != "" {
-		return name
-	}
-	return defaultCollectionName(scope)
 }
 
 func defaultCollectionName(scope string) string {
@@ -309,4 +352,23 @@ func defaultCollectionName(scope string) string {
 	default:
 		return scope + "_chunks"
 	}
+}
+
+func configuredName(values map[string]string, scope string) string {
+	if values == nil {
+		return ""
+	}
+	return strings.TrimSpace(values[scope])
+}
+
+func (c Config) vectorCollectionProvider() VectorBackend {
+	backend := VectorBackend(strings.ToLower(strings.TrimSpace(string(c.Vector.Backend))))
+	if backend != "" && backend != VectorBackendMemory {
+		return backend
+	}
+	provider := VectorBackend(strings.ToLower(strings.TrimSpace(c.KB.Provider)))
+	if provider != "" {
+		return provider
+	}
+	return VectorBackendQdrant
 }

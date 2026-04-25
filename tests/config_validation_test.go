@@ -56,6 +56,78 @@ func TestConfigLoadEnablesQdrantKnowledgeBase(t *testing.T) {
 	}
 }
 
+func TestConfigLoadUsesQdrantCollectionEnv(t *testing.T) {
+	t.Setenv(config.EnvUseKonwageBase, "true")
+	t.Setenv(config.EnvKonwageBaseProvider, "qdrant")
+	t.Setenv("DATABASE_URL", "postgresql://agent:agent@localhost:5432/local_agent")
+	t.Setenv("QDRANT_URL", "http://localhost:6333")
+	t.Setenv(config.EnvQdrantCollectionKB, "kb_chunks_1024")
+	t.Setenv(config.EnvQdrantCollectionMemory, "memory_chunks_1024")
+	t.Setenv(config.EnvQdrantCollectionCode, "code_chunks_1024")
+	t.Setenv(config.EnvQdrantRecreateOnDimensionMismatch, "true")
+
+	cfg, err := config.Load(writeConfigFixture(t))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got := cfg.CollectionName("kb"); got != "kb_chunks_1024" {
+		t.Fatalf("CollectionName(kb) = %q, want kb_chunks_1024", got)
+	}
+	if got := cfg.CollectionName("memory"); got != "memory_chunks_1024" {
+		t.Fatalf("CollectionName(memory) = %q, want memory_chunks_1024", got)
+	}
+	if got := cfg.CollectionName("code"); got != "code_chunks_1024" {
+		t.Fatalf("CollectionName(code) = %q, want code_chunks_1024", got)
+	}
+	if !cfg.Qdrant.RecreateOnDimensionMismatch {
+		t.Fatalf("Qdrant.RecreateOnDimensionMismatch = false, want true")
+	}
+}
+
+func TestConfigLoadSupportsPineconeKnowledgeBase(t *testing.T) {
+	t.Setenv(config.EnvUseKonwageBase, "true")
+	t.Setenv(config.EnvKonwageBaseProvider, "pinecone")
+	t.Setenv("DATABASE_URL", "postgresql://agent:agent@localhost:5432/local_agent")
+	t.Setenv(config.EnvPineconeIndexHost, "https://example-index.svc.pinecone.io")
+	t.Setenv(config.EnvPineconeAPIKey, "pinecone-key")
+	t.Setenv(config.EnvPineconeNamespaceKB, "kb_ns")
+	t.Setenv(config.EnvPineconeNamespaceMemory, "memory_ns")
+
+	cfg, err := config.Load(writeConfigFixture(t))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	cfg.Vector.Backend = config.VectorBackendPinecone
+	if cfg.CollectionName("kb") != "kb_ns" || cfg.CollectionName("memory") != "memory_ns" {
+		t.Fatalf("collection names = kb:%q memory:%q", cfg.CollectionName("kb"), cfg.CollectionName("memory"))
+	}
+	if err := config.ValidateRuntime(cfg); err != nil {
+		t.Fatalf("ValidateRuntime() error = %v", err)
+	}
+}
+
+func TestConfigLoadSupportsOpenAIKnowledgeBase(t *testing.T) {
+	t.Setenv(config.EnvUseKonwageBase, "true")
+	t.Setenv(config.EnvKonwageBaseProvider, "openai")
+	t.Setenv("DATABASE_URL", "postgresql://agent:agent@localhost:5432/local_agent")
+	t.Setenv(config.EnvOpenAIKBBaseURL, "https://api.openai.com/v1")
+	t.Setenv(config.EnvOpenAIKBAPIKey, "openai-key")
+	t.Setenv(config.EnvOpenAIVectorStoreKB, "vs_kb")
+	t.Setenv(config.EnvOpenAIVectorStoreMemory, "vs_memory")
+
+	cfg, err := config.Load(writeConfigFixture(t))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	cfg.Vector.Backend = config.VectorBackendOpenAI
+	if cfg.CollectionName("kb") != "vs_kb" || cfg.CollectionName("memory") != "vs_memory" {
+		t.Fatalf("collection names = kb:%q memory:%q", cfg.CollectionName("kb"), cfg.CollectionName("memory"))
+	}
+	if err := config.ValidateRuntime(cfg); err != nil {
+		t.Fatalf("ValidateRuntime() error = %v", err)
+	}
+}
+
 func TestConfigLoadSupportsOllamaAndEmbeddingModelEnv(t *testing.T) {
 	t.Setenv(config.EnvUseKonwageBase, "false")
 	t.Setenv(config.EnvKonwageBaseProvider, "")
@@ -156,8 +228,25 @@ qdrant:
   url: ${QDRANT_URL}
   timeout_seconds: 10
   collections:
-    kb: kb_chunks
-    memory: memory_chunks
+    kb: ${QDRANT_COLLECTION_KB}
+    memory: ${QDRANT_COLLECTION_MEMORY}
+    code: ${QDRANT_COLLECTION_CODE}
+pinecone:
+  index_host: ${PINECONE_INDEX_HOST}
+  api_key: ${PINECONE_API_KEY}
+  timeout_seconds: 10
+  namespaces:
+    kb: ${PINECONE_NAMESPACE_KB}
+    memory: ${PINECONE_NAMESPACE_MEMORY}
+    code: ${PINECONE_NAMESPACE_CODE}
+openai_kb:
+  base_url: ${OPENAI_KB_BASE_URL}
+  api_key: ${OPENAI_KB_API_KEY}
+  timeout_seconds: 30
+  vector_stores:
+    kb: ${OPENAI_VECTOR_STORE_KB}
+    memory: ${OPENAI_VECTOR_STORE_MEMORY}
+    code: ${OPENAI_VECTOR_STORE_CODE}
 memory:
   root_dir: ./memory
 events:

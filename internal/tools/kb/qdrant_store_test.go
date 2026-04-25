@@ -3,8 +3,10 @@ package kb
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -52,6 +54,107 @@ func TestQdrantEnsureCollections(t *testing.T) {
 	}
 }
 
+func TestQdrantEnsureCollectionsAcceptsConfiguredDimension(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/collections/kb_chunks":
+			_, _ = w.Write([]byte(qdrantCollectionInfoResponse(16, 3)))
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	index, err := NewQdrantVectorIndex(QdrantIndexConfig{
+		URL:                server.URL,
+		EmbeddingDimension: 16,
+		Distance:           "cosine",
+		Collections:        map[string]string{"kb": "kb_chunks"},
+	}, FakeEmbedder{Dimensions: 16}, server.Client())
+	if err != nil {
+		t.Fatalf("NewQdrantVectorIndex() error = %v", err)
+	}
+	if err := index.EnsureCollections(context.Background()); err != nil {
+		t.Fatalf("EnsureCollections() error = %v", err)
+	}
+}
+
+func TestQdrantEnsureCollectionsRecreatesEmptyDimensionMismatch(t *testing.T) {
+	var deleted bool
+	var created bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/collections/kb_chunks":
+			_, _ = w.Write([]byte(qdrantCollectionInfoResponse(1536, 0)))
+		case r.Method == http.MethodDelete && r.URL.Path == "/collections/kb_chunks":
+			deleted = true
+			_, _ = w.Write([]byte(`{"status":"ok","result":true}`))
+		case r.Method == http.MethodPut && r.URL.Path == "/collections/kb_chunks":
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decode create body: %v", err)
+			}
+			vectors := body["vectors"].(map[string]any)
+			if vectors["size"] != float64(1024) {
+				t.Fatalf("vector size = %v, want 1024", vectors["size"])
+			}
+			created = true
+			_, _ = w.Write([]byte(`{"status":"ok","result":true}`))
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	index, err := NewQdrantVectorIndex(QdrantIndexConfig{
+		URL:                server.URL,
+		EmbeddingDimension: 1024,
+		Distance:           "cosine",
+		Collections:        map[string]string{"kb": "kb_chunks"},
+	}, FakeEmbedder{Dimensions: 1024}, server.Client())
+	if err != nil {
+		t.Fatalf("NewQdrantVectorIndex() error = %v", err)
+	}
+	if err := index.EnsureCollections(context.Background()); err != nil {
+		t.Fatalf("EnsureCollections() error = %v", err)
+	}
+	if !deleted || !created {
+		t.Fatalf("deleted=%v created=%v, want both true", deleted, created)
+	}
+}
+
+func TestQdrantEnsureCollectionsRejectsNonEmptyDimensionMismatch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/collections/kb_chunks":
+			_, _ = w.Write([]byte(qdrantCollectionInfoResponse(1536, 2)))
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	index, err := NewQdrantVectorIndex(QdrantIndexConfig{
+		URL:                server.URL,
+		EmbeddingDimension: 1024,
+		Distance:           "cosine",
+		Collections:        map[string]string{"kb": "kb_chunks"},
+	}, FakeEmbedder{Dimensions: 1024}, server.Client())
+	if err != nil {
+		t.Fatalf("NewQdrantVectorIndex() error = %v", err)
+	}
+	err = index.EnsureCollections(context.Background())
+	if err == nil {
+		t.Fatalf("EnsureCollections() error = nil, want dimension mismatch")
+	}
+	if !strings.Contains(err.Error(), `collection "kb_chunks"`) ||
+		!strings.Contains(err.Error(), "configured=1024") ||
+		!strings.Contains(err.Error(), "existing=1536") ||
+		!strings.Contains(err.Error(), "points=2") {
+		t.Fatalf("EnsureCollections() error = %v, want dimension mismatch details", err)
+	}
+}
+
 func TestQdrantUpsertChunks(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPut || r.URL.Path != "/collections/kb_chunks/points" {
@@ -66,9 +169,19 @@ func TestQdrantUpsertChunks(t *testing.T) {
 		}
 		points := body["points"].([]any)
 		point := points[0].(map[string]any)
+		pointID, _ := point["id"].(string)
+		if pointID == "chunk_1" {
+			t.Fatalf("qdrant point id used raw chunk id")
+		}
+		if !regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`).MatchString(pointID) {
+			t.Fatalf("qdrant point id = %q, want UUID", pointID)
+		}
 		payload := point["payload"].(map[string]any)
 		if payload["source_file"] != "kb_1/intro.md" {
 			t.Fatalf("source_file = %v", payload["source_file"])
+		}
+		if payload["chunk_id"] != "chunk_1" {
+			t.Fatalf("chunk_id payload = %v, want chunk_1", payload["chunk_id"])
 		}
 		if payload["text"] != "hello world" {
 			t.Fatalf("text = %v", payload["text"])
@@ -93,6 +206,7 @@ func TestQdrantUpsertChunks(t *testing.T) {
 		Vector:     []float32{0.1, 0.2},
 		SourceFile: "kb_1/intro.md",
 		Payload: map[string]any{
+			"chunk_id":     "chunk_1",
 			"kb_id":        "kb_1",
 			"document_id":  "doc_1",
 			"content_hash": "hash",
@@ -102,6 +216,20 @@ func TestQdrantUpsertChunks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertChunks() error = %v", err)
 	}
+}
+
+func qdrantCollectionInfoResponse(vectorSize int, pointsCount int64) string {
+	return fmt.Sprintf(`{
+		"status":"ok",
+		"result":{
+			"points_count":%d,
+			"config":{
+				"params":{
+					"vectors":{"size":%d,"distance":"Cosine"}
+				}
+			}
+		}
+	}`, pointsCount, vectorSize)
 }
 
 func TestQdrantDeleteBySourceFile(t *testing.T) {

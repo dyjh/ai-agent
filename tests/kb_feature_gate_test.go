@@ -64,7 +64,20 @@ func TestKnowledgeBaseDisabledFeatureGate(t *testing.T) {
 func TestKnowledgeBaseEnabledQdrantInitializes(t *testing.T) {
 	qdrant := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"result":true}`))
+		switch {
+		case r.URL.Path == "/healthz":
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
+		case r.Method == http.MethodGet:
+			_, _ = w.Write([]byte(`{
+				"status":"ok",
+				"result":{
+					"points_count":1,
+					"config":{"params":{"vectors":{"size":16,"distance":"Cosine"}}}
+				}
+			}`))
+		default:
+			_, _ = w.Write([]byte(`{"result":true}`))
+		}
 	}))
 	defer qdrant.Close()
 

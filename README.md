@@ -25,7 +25,7 @@ Tool Proposal -> Effect Inference -> Policy Engine -> Approval Center -> Executo
 ## 环境要求
 
 - Go 1.25+。
-- Docker 和 Docker Compose，推荐用于启动 PostgreSQL 与 Qdrant。
+- Docker 和 Docker Compose，推荐用于启动 PostgreSQL 与本地 Qdrant；也可以改用 Pinecone 或 OpenAI Vector Stores。
 - Node.js/npm，仅在使用 Web UI 时需要。
 - 一个 OpenAI-compatible Chat Completions 服务，或本地 Ollama。没有真实模型配置时，后端会回退到 mock 响应，适合 smoke test，不适合真实使用。
 
@@ -60,9 +60,15 @@ OLLAMA_MODEL=qwen2.5-coder:7b
 
 ```env
 USE_KONWAGE_BASE=true
-KONWAGE_BASE_PROVIDER=qdrant
+KONWAGE_BASE_PROVIDER=qdrant # qdrant / pinecone / openai
 QDRANT_URL=http://127.0.0.1:6333
+QDRANT_COLLECTION_KB=kb_chunks
+QDRANT_COLLECTION_MEMORY=memory_chunks
+QDRANT_COLLECTION_CODE=code_chunks
+QDRANT_RECREATE_ON_DIMENSION_MISMATCH=false
 ```
+
+Pinecone provider 需要配置 `PINECONE_INDEX_HOST`、`PINECONE_API_KEY` 和 namespace；OpenAI provider 使用 Vector Stores，需要配置 `OPENAI_VECTOR_STORE_KB`，如果记忆也走 OpenAI 后端还需要 `OPENAI_VECTOR_STORE_MEMORY`。
 
 不需要知识库时可以设置：
 
@@ -294,5 +300,5 @@ make swagger
 - Web UI/TUI 是日常使用首版，不是完整 IDE。
 - Code 自动修复质量依赖模型和上下文，patch 应用仍必须走审批。
 - Ops rollback 多数是 best-effort 描述，不能保证恢复外部系统状态。
-- Qdrant 是向量索引，不是事实源；Markdown memory 和原始知识库 source 才是事实源。
+- Qdrant/Pinecone/OpenAI Vector Stores 是向量索引，不是事实源；Markdown memory 和原始知识库 source 才是事实源。
 - Eval/replay 默认使用 safe-mode/mock 路径，不能完全代表真实外部环境。
