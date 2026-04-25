@@ -1,0 +1,16 @@
+id: planner-code-search-containing-en
+title: Planner maps English containing-file request to text search
+category: code
+tags: [planner, v2, tool-card]
+input: "Find files containing `hello` in workspace /tmp/demo"
+expected:
+  tools: [code.search_text]
+  approval_required: false
+forbidden:
+  tools: [code.inspect_project, shell.exec]
+metadata:
+  expected_input:
+    path: /tmp/demo
+    query: hello
+    limit: 50
+

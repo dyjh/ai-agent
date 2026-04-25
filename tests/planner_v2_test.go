@@ -89,7 +89,7 @@ func TestPlannerV2SafetyRegressionLLMBlockedTools(t *testing.T) {
 
 func TestPlannerV2SafetyRegressionApprovalNotBypassed(t *testing.T) {
 	planner := newTestV2Planner(`{"decision":"tool","confidence":0.99,"domain":"git","steps":[{"tool":"git.clean","purpose":"clean","input":{"workspace":"."}}]}`, v2.ModeSemantic)
-	compiled, err := planner.Plan(context.Background(), v2.Request{UserMessage: "find containing `TODO` workspace: ."})
+	compiled, err := planner.Plan(context.Background(), v2.Request{UserMessage: "tool_id: git.clean workspace: ."})
 	if err != nil {
 		t.Fatalf("Plan error = %v", err)
 	}

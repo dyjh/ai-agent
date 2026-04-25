@@ -1,0 +1,454 @@
+tool_cards:
+  - tool_id: shell.exec
+    domain: shell
+    title: Governed Shell Command
+    description: Execute a concrete shell command only after effect inference, policy checks, and approval when needed.
+    description_zh: 执行明确 shell 命令，必须经过效果推断、策略和必要审批。
+    when_to_use:
+      - The user explicitly requests an install or package manager operation that has no safer structured tool.
+    input_schema: {shell: string, command: string, cwd: string, timeout_seconds: number, purpose: string}
+    effects: [unknown.effect]
+    risk_level: high
+    auto_selectable: false
+    examples:
+      - user: "请帮我安装 axios 依赖"
+        input: {shell: bash, command: "pnpm add axios", cwd: ".", timeout_seconds: 60, purpose: 安装 axios 依赖}
+
+  - tool_id: code.read_file
+    domain: code
+    title: Read Workspace File
+    description: Read one concrete file from a local workspace without modifying it.
+    description_zh: 读取工作区中的一个明确文件，不修改文件。
+    when_to_use:
+      - The user asks to open, view, inspect, or confirm content in a specific file path.
+      - 用户给出 workspace 和文件名，并要求查看或确认文件内容。
+    when_not_to_use:
+      - The user wants to search many files for text.
+      - The user asks for general project structure rather than a concrete file.
+    required_slots: [possible_file]
+    input_schema: {path: string, max_bytes: number}
+    defaults: {max_bytes: 200000}
+    effects: [read, code.read]
+    risk_level: low
+    auto_selectable: true
+    examples:
+      - user: "请打开 workspace: /repo 中的 `index.html` 并确认页面标题"
+        input: {path: /repo/index.html, max_bytes: 200000}
+      - user: "Open `index.html` in workspace /tmp/demo"
+        input: {path: /tmp/demo/index.html, max_bytes: 200000}
+    negative_examples:
+      - user: "Find files containing `hello` in workspace /tmp/demo"
+        input: {path: /tmp/demo, query: hello}
+
+  - tool_id: code.search_text
+    domain: code
+    title: Search Workspace Text
+    description: Search local workspace files for an exact text query and return matching file lines.
+    description_zh: 在本地工作区中查找包含指定文本的文件和行。
+    when_to_use:
+      - The user asks to locate or find files containing quoted text.
+      - 用户要定位包含某段文本的文件。
+    when_not_to_use:
+      - The user asks to open a single concrete file.
+    required_slots: [quoted_text]
+    input_schema: {path: string, query: string, limit: number}
+    defaults: {path: ".", limit: 50}
+    effects: [read, code.read]
+    risk_level: low
+    auto_selectable: true
+    examples:
+      - user: "请定位包含 `最小静态站点` 的文件，workspace: /www/wwwroot/test"
+        input: {path: /www/wwwroot/test, query: 最小静态站点, limit: 50}
+      - user: "Find files containing `hello` in workspace /tmp/demo"
+        input: {path: /tmp/demo, query: hello, limit: 50}
+      - user: "find containing `TODO` workspace: ."
+        input: {path: ".", query: TODO, limit: 50}
+    negative_examples:
+      - user: "Open `index.html` in workspace /tmp/demo"
+        input: {path: /tmp/demo/index.html}
+
+  - tool_id: code.inspect_project
+    domain: code
+    title: Inspect Project
+    description: Inspect project languages, config files, and likely commands without changing files.
+    description_zh: 检查项目结构、语言构成、配置和可能的测试命令。
+    when_to_use:
+      - The request is broad code work and no concrete file or query is supplied.
+      - 用户要求实现功能、修代码或先了解项目，但没有明确测试失败或具体文件。
+    input_schema: {path: string}
+    defaults: {path: "."}
+    effects: [read, code.read]
+    risk_level: low
+    auto_selectable: true
+    examples:
+      - user: "Inspect project workspace: /repo"
+        input: {path: /repo}
+      - user: "帮我实现这个功能"
+        input: {path: "."}
+
+  - tool_id: code.run_tests
+    domain: code
+    title: Run Tests
+    description: Run an allowlisted test command in a workspace.
+    description_zh: 在工作区中运行允许列表内的测试命令。
+    when_to_use:
+      - The user asks to run tests or verify the project test suite.
+      - 用户要求跑测试、运行测试或先验证测试。
+    input_schema: {workspace: string, use_detected: boolean, timeout_seconds: number, max_output_bytes: number}
+    defaults: {workspace: ".", use_detected: true, timeout_seconds: 300, max_output_bytes: 200000}
+    effects: [code.test, process.read, fs.read]
+    risk_level: medium
+    auto_selectable: true
+    examples:
+      - user: "Run tests in workspace /tmp/demo"
+        input: {workspace: /tmp/demo, use_detected: true}
+      - user: "帮我修 bug 并跑测试"
+        input: {workspace: ".", use_detected: true, timeout_seconds: 300, max_output_bytes: 200000}
+
+  - tool_id: code.fix_test_failure_loop
+    domain: code
+    title: Fix Test Failure Loop
+    description: Run tests and prepare a bounded repair loop without applying code changes.
+    description_zh: 运行测试并整理失败上下文，后续代码修改仍需单独审批。
+    when_to_use:
+      - The user asks to fix failing tests.
+      - 用户明确说明测试失败，需要整理失败上下文并进入修复循环。
+    input_schema: {workspace: string, use_detected: boolean, max_iterations: number, stop_on_approval: boolean, auto_rerun_tests: boolean, failure_context_max: number}
+    defaults: {workspace: ".", use_detected: true, max_iterations: 3, stop_on_approval: true, auto_rerun_tests: true, failure_context_max: 3}
+    effects: [code.test, process.read, fs.read, code.plan]
+    risk_level: medium
+    auto_selectable: true
+    examples:
+      - user: "Fix failing tests in workspace /repo"
+        input: {workspace: /repo, use_detected: true, max_iterations: 3}
+
+  - tool_id: code.propose_patch
+    domain: code
+    title: Propose Patch
+    description: Preview a code patch without applying it.
+    description_zh: 预览代码补丁，不写入文件。
+    input_schema: {path: string, diff: string, content: string, files: array}
+    effects: [read, code.plan]
+    risk_level: low
+    auto_selectable: true
+
+  - tool_id: code.apply_patch
+    domain: code
+    title: Apply Patch
+    description: Apply a concrete patch snapshot inside the workspace.
+    description_zh: 应用已确定的补丁快照，会修改文件，必须审批。
+    input_schema: {path: string, diff: string, content: string, files: array}
+    effects: [fs.write, code.modify]
+    risk_level: high
+    auto_selectable: false
+
+  - tool_id: code.validate_patch
+    domain: code
+    title: Validate Patch
+    description: Validate a patch without modifying files.
+    description_zh: 校验补丁是否可应用，不修改文件。
+    input_schema: {path: string, diff: string, content: string, files: array}
+    effects: [read, code.plan]
+    risk_level: low
+    auto_selectable: true
+
+  - tool_id: git.status
+    domain: git
+    title: Git Status
+    description: Read git working tree status.
+    description_zh: 查看 Git 工作区状态。
+    input_schema: {workspace: string}
+    defaults: {workspace: "."}
+    effects: [read, git.read]
+    risk_level: low
+    auto_selectable: true
+    examples:
+      - user: "git status workspace: ."
+        input: {workspace: "."}
+
+  - tool_id: git.diff
+    domain: git
+    title: Git Diff
+    description: Read git diff without modifying the repository.
+    input_schema: {workspace: string}
+    defaults: {workspace: "."}
+    effects: [read, git.read]
+    risk_level: low
+    auto_selectable: true
+
+  - tool_id: git.diff_summary
+    domain: git
+    title: Git Diff Summary
+    description: Summarize git diff without modifying the repository.
+    input_schema: {workspace: string, staged: boolean}
+    defaults: {workspace: "."}
+    effects: [read, git.read]
+    risk_level: low
+    auto_selectable: true
+
+  - tool_id: git.commit_message_proposal
+    domain: git
+    title: Git Commit Message Proposal
+    description: Propose a commit message from staged changes without committing.
+    input_schema: {workspace: string}
+    defaults: {workspace: "."}
+    effects: [read, git.read]
+    risk_level: low
+    auto_selectable: true
+
+  - tool_id: git.add
+    domain: git
+    title: Git Add
+    description: Stage paths in git.
+    input_schema: {workspace: string, paths: array}
+    defaults: {workspace: "."}
+    effects: [git.write, fs.write]
+    risk_level: high
+    auto_selectable: false
+
+  - tool_id: git.commit
+    domain: git
+    title: Git Commit
+    description: Create a local git commit.
+    input_schema: {workspace: string, message: string}
+    defaults: {workspace: "."}
+    effects: [git.write, fs.write]
+    risk_level: high
+    auto_selectable: false
+
+  - tool_id: git.clean
+    domain: git
+    title: Git Clean
+    description: Delete untracked files with git clean.
+    input_schema: {workspace: string}
+    effects: [fs.delete, dangerous]
+    risk_level: dangerous
+    auto_selectable: false
+
+  - tool_id: ops.local.system_info
+    domain: ops
+    title: Local System Overview
+    description: Read local machine operating system and hardware overview.
+    description_zh: 获取本地机器系统概况、操作系统和硬件基础信息。
+    when_to_use:
+      - The user asks for local machine system overview or system information.
+      - 用户请求本地机器、这台机器、本机的系统概况或系统信息。
+    input_schema: {}
+    effects: [read, system.read]
+    risk_level: low
+    auto_selectable: true
+    examples:
+      - user: "请获取这台本地机器的系统概况"
+        input: {}
+      - user: "Get local machine system overview"
+        input: {}
+
+  - tool_id: ops.local.processes
+    domain: ops
+    title: Local Processes
+    description: Read local process list and CPU-related process metrics.
+    description_zh: 查看本机进程列表和 CPU 相关指标。
+    input_schema: {}
+    effects: [process.read, system.metrics.read]
+    risk_level: low
+    auto_selectable: true
+    examples:
+      - user: "看一下本机 CPU 占用"
+        input: {}
+
+  - tool_id: ops.local.disk_usage
+    domain: ops
+    title: Local Disk Usage
+    description: Read local disk usage.
+    description_zh: 查看本机磁盘空间和磁盘使用情况。
+    input_schema: {}
+    effects: [disk.read, system.metrics.read]
+    risk_level: low
+    auto_selectable: true
+    examples:
+      - user: "看一下磁盘空间"
+        input: {}
+
+  - tool_id: ops.local.memory_usage
+    domain: ops
+    title: Local Memory Usage
+    description: Read local memory usage.
+    description_zh: 查看本机内存使用情况。
+    input_schema: {}
+    effects: [memory.read, system.metrics.read]
+    risk_level: low
+    auto_selectable: true
+
+  - tool_id: ops.local.logs_tail
+    domain: ops
+    title: Local Logs Tail
+    description: Read the tail of a concrete local log file.
+    description_zh: 读取明确本地日志文件的尾部内容。
+    input_schema: {path: string, max_lines: number}
+    defaults: {max_lines: 100}
+    effects: [log.read]
+    risk_level: medium
+    auto_selectable: true
+
+  - tool_id: ops.local.service_restart
+    domain: ops
+    title: Local Service Restart
+    description: Restart a local service after approval.
+    description_zh: 重启本地服务，必须审批。
+    input_schema: {service: string}
+    effects: [service.restart, system.write]
+    risk_level: high
+    auto_selectable: false
+    examples:
+      - user: "重启服务 `nginx`"
+        input: {service: nginx}
+
+  - tool_id: ops.docker.ps
+    domain: ops
+    title: Docker PS
+    description: List Docker containers.
+    description_zh: 查看 Docker 容器状态和容器列表。
+    input_schema: {}
+    effects: [container.read]
+    risk_level: low
+    auto_selectable: true
+    examples:
+      - user: "看一下 docker 容器状态"
+        input: {}
+
+  - tool_id: ops.docker.logs
+    domain: ops
+    title: Docker Logs
+    description: Read logs from a specified Docker container.
+    description_zh: 读取指定 Docker 容器日志。
+    input_schema: {container: string, max_lines: number}
+    defaults: {max_lines: 200}
+    effects: [container.read, log.read]
+    risk_level: medium
+    auto_selectable: true
+    examples:
+      - user: "请查看 docker 容器 `web` 日志"
+        input: {container: web, max_lines: 200}
+
+  - tool_id: ops.docker.restart
+    domain: ops
+    title: Docker Restart
+    description: Restart a Docker container after approval.
+    input_schema: {container: string}
+    effects: [container.restart, container.write]
+    risk_level: high
+    auto_selectable: false
+
+  - tool_id: ops.k8s.get
+    domain: ops
+    title: Kubernetes Get
+    description: Get Kubernetes resources.
+    input_schema: {resource: string, namespace: string, context: string}
+    defaults: {resource: pods}
+    effects: [k8s.read]
+    risk_level: low
+    auto_selectable: true
+
+  - tool_id: ops.k8s.logs
+    domain: ops
+    title: Kubernetes Logs
+    description: Read logs from a Kubernetes workload or pod.
+    description_zh: 读取指定 Kubernetes Pod 或 workload 日志。
+    input_schema: {target: string, max_lines: number, namespace: string, context: string}
+    defaults: {max_lines: 200}
+    effects: [k8s.read, log.read]
+    risk_level: medium
+    auto_selectable: true
+    examples:
+      - user: "请查看 k8s pod `api-0` 日志"
+        input: {target: api-0, max_lines: 200}
+
+  - tool_id: ops.k8s.apply
+    domain: ops
+    title: Kubernetes Apply
+    description: Apply a Kubernetes manifest after approval.
+    input_schema: {manifest_path: string, namespace: string, context: string}
+    effects: [k8s.write]
+    risk_level: high
+    auto_selectable: false
+
+  - tool_id: kb.retrieve
+    domain: rag
+    title: Retrieve Knowledge Evidence
+    description: Retrieve local knowledge base evidence with hybrid search and citations.
+    description_zh: 从本地知识库检索证据和引用。
+    input_schema: {kb_id: string, query: string, mode: string, top_k: number, rerank: boolean}
+    defaults: {mode: hybrid, top_k: 5, rerank: true}
+    effects: [kb.read]
+    risk_level: low
+    auto_selectable: true
+
+  - tool_id: kb.answer
+    domain: rag
+    title: Answer From Knowledge Base
+    description: Answer using local knowledge base evidence and citations.
+    description_zh: 基于知识库证据回答，并可要求引用来源。
+    when_to_use:
+      - The user asks to answer only from the knowledge base or include citations.
+    input_schema: {kb_id: string, query: string, mode: string, top_k: number, require_citations: boolean, rerank: boolean}
+    defaults: {mode: normal, top_k: 5, require_citations: false, rerank: true}
+    effects: [kb.read]
+    risk_level: low
+    auto_selectable: true
+    examples:
+      - user: "只根据知识库回答这个问题，并引用来源"
+        input: {query: 只根据知识库回答这个问题，并引用来源, mode: kb_only, top_k: 5, require_citations: true, rerank: true}
+
+  - tool_id: memory.extract_candidates
+    domain: memory
+    title: Extract Memory Candidates
+    description: Extract candidate long-term memories into review without directly committing them.
+    description_zh: 提取长期记忆候选，进入 review queue，不直接写入长期记忆。
+    input_schema: {conversation_id: string, text: string, project_key: string, queue: boolean}
+    defaults: {queue: true}
+    effects: [memory.review]
+    risk_level: medium
+    auto_selectable: true
+    examples:
+      - user: "记住我喜欢中文回答"
+        input: {text: 记住我喜欢中文回答, queue: true}
+
+  - tool_id: memory.item_archive
+    domain: memory
+    title: Archive Memory Item
+    description: Archive a Markdown-backed memory item after approval.
+    description_zh: 归档或忘记一条指定的长期记忆条目，必须审批。
+    input_schema: {id: string}
+    effects: [fs.write, memory.modify]
+    risk_level: high
+    auto_selectable: false
+    examples:
+      - user: "忘记这条记忆 mem_123"
+        input: {id: mem_123}
+
+  - tool_id: memory.patch
+    domain: memory
+    title: Patch Memory Markdown
+    description: Create a pending Markdown memory patch.
+    input_schema: {path: string, body: string}
+    effects: [fs.write, memory.modify]
+    risk_level: high
+    auto_selectable: false
+
+  - tool_id: skill.run
+    domain: skill
+    title: Run Skill
+    description: Run a local registered skill through the governed tool router.
+    input_schema: {skill_id: string, args: object}
+    effects: [unknown.effect]
+    risk_level: unknown
+    auto_selectable: false
+
+  - tool_id: mcp.call_tool
+    domain: mcp
+    title: Call MCP Tool
+    description: Call a configured MCP tool through the governed tool router.
+    input_schema: {server_id: string, tool_name: string, arguments: object}
+    effects: [unknown.effect]
+    risk_level: unknown
+    auto_selectable: false

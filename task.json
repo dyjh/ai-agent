@@ -1,17 +1,17 @@
 {
   "project": "local-agent",
   "source": "promote-stageF-9",
-  "last_updated": "2026-04-25T12:45:56+08:00",
+  "last_updated": "2026-04-25T23:10:00+08:00",
   "overall_status": "full_agent_foundation_completed",
-  "current_task_id": "post-full-agent-planner-v2",
-  "current_task_title": "Post-F7 Bugfix P0 + Planner V2 Refactor",
+  "current_task_id": "post-full-agent-planner-v2-tool-card-refactor",
+  "current_task_title": "Planner V2.1 Tool Card Candidate Planner Refactor",
   "summary": {
     "headline": "MVP 主链路保持稳定，F1 代码能力、F2 运维能力、F3 RAG 可靠性、F4 长期记忆治理、F5 安全策略/Secret Guard、F6 Eval/Replay 和 F7 Web UI/TUI 首版均已完成。",
     "progress": {
-      "completed": 24,
+      "completed": 25,
       "in_progress": 0,
       "pending": 1,
-      "total": 25
+      "total": 26
     },
     "verified": [
       "2026-04-23 已检查仓库结构，HTTP API / WebSocket / CLI / memory / kb / skills / mcp / tests 均已存在。",
@@ -37,7 +37,8 @@
       "2026-04-25 已完成 Phase F5：新增 policy profiles、统一 Secret Guard、Network Policy、Sensitive Data Flow Guard、Approval Explanation、RiskTrace、Security API/CLI、Swagger/OpenAPI 更新和回归测试，并确认 go test ./... 通过。",
       "2026-04-25 已完成 Phase F6：新增 EvalCase YAML/JSON、safe-mode EvalRunner、chat/RAG/code/ops/safety golden tasks、event/behavior replay、Eval report、API/CLI、Swagger/OpenAPI 更新和回归测试，并确认 go test ./... 通过。",
       "2026-04-25 已完成 Phase F7 首版：新增独立 ui/web React/Vite Web UI、ui/tui Go TUI、Chat/Run/Approval/Code/Memory/KB/Skill/MCP/Ops/Eval/Settings 页面入口、CORS/WS 本机 origin 支持、README/Makefile/task.json 更新，并确认 go test ./...、ui/tui go test ./...、ui/web npm test 和 npm run build 通过。",
-      "2026-04-25 已完成 Post-F7 Planner V2：Hybrid Planner、RequestNormalizer、IntentClassifier、PlanningCatalog、SemanticPlan、FastPath、LLM Semantic Planner 配置门禁、PlanValidator、PlanCompiler、planner eval 和 live regression 修复。"
+      "2026-04-25 已完成 Post-F7 Planner V2：Hybrid Planner、RequestNormalizer、IntentClassifier、PlanningCatalog、SemanticPlan、FastPath、LLM Semantic Planner 配置门禁、PlanValidator、PlanCompiler、planner eval 和 live regression 修复。",
+      "2026-04-25 已完成 Planner V2.1：Slot-only Normalizer、Tool Card Catalog、CandidateSelector、候选 Tool Card Semantic Planner、signals.go keyword dictionary removed、old planner dead code cleaned、planner eval expanded，并保持 bug.json live regression case 通过。"
     ],
     "unfinished_overview": [
       "当前 step loop 已覆盖本地单用户可恢复多步任务，但仍不是无限自动规划的通用 graph 平台。",
@@ -622,6 +623,34 @@
       ]
     },
     {
+      "id": "post-full-agent-planner-v2-tool-card-refactor",
+      "title": "Planner V2.1 Tool Card Candidate Planner Refactor",
+      "status": "completed",
+      "completed_items": [
+        "新增 config/planner.tool-cards.yaml，核心 code/git/ops/RAG/memory/Skill/MCP 工具语义迁入 Tool Card。",
+        "新增 ToolCard loader 和 PlanningCatalog merge，ToolRegistry 仍作为 tool id/effects 事实源，Tool Card 只补充 planner metadata。",
+        "新增 CandidateSelector，基于结构化槽位、Tool Card metadata 和通用文本相似度召回 TopK 候选工具。",
+        "RequestNormalizer 降级为 slot-only，signals.go keyword dictionary removed，不再输出 system_overview/search_text/read_file 等自然语言语义 signal。",
+        "LLM Semantic Planner prompt 改为仅接收候选 Tool Cards；LLM 不可用时使用候选 Tool Card 本地 fallback，仍输出 SemanticPlan 并经过 Validator/Compiler。",
+        "PlanValidator 增加 candidate allowlist、Tool Card required_slots/defaults/schema 校验，并继续保留 path/secret/risk 安全闸门。",
+        "Deterministic FastPath 收缩为强结构入口，旧 HeuristicPlanner 首轮不可达 switch dead code cleaned。",
+        "Planner eval expanded，覆盖 bug.json 三个 live regression、英文等价表达、中英混合表达和 ambiguous logs clarify。"
+      ],
+      "remaining_items": [
+        "补充 semantic planner shadow metrics。",
+        "接入 embedding-based tool-card retrieval 替代当前 lexical scorer。",
+        "补充 planner telemetry，用于观察候选召回、LLM 选择、validator clarify 和 fallback 命中率。"
+      ],
+      "deliverables": [
+        "Tool Card Catalog",
+        "CandidateSelector",
+        "Slot-only Normalizer",
+        "Candidate-scoped Semantic Planner prompt and local fallback",
+        "Tool Card aware PlanValidator",
+        "Planner V2.1 regression tests and eval fixtures"
+      ]
+    },
+    {
       "id": "post-full-agent-backlog",
       "title": "Post-F7 Backlog",
       "status": "pending",
@@ -757,6 +786,11 @@
       "at": "2026-04-25T12:45:56+08:00",
       "task_id": "post-full-agent-planner-v2",
       "summary": "完成 Post-F7 Planner V2 hybrid refactor：新增 normalizer/classifier/catalog/semantic plan/fastpath/validator/compiler/hybrid adapter，修复 bug.json 三个 live planner routing regression，并补充 planner v2 测试和 eval fixtures。"
+    },
+    {
+      "at": "2026-04-25T23:10:00+08:00",
+      "task_id": "post-full-agent-planner-v2-tool-card-refactor",
+      "summary": "完成 Planner V2.1 Tool Card Candidate Planner Refactor：移除 signals.go 自然语言词表，引入 Tool Card Catalog、CandidateSelector、候选语义规划、Tool Card aware Validator，清理旧 planner 死代码并扩展回归/eval。"
     }
   ]
 }

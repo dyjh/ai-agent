@@ -6,17 +6,19 @@ import (
 	"local-agent/internal/agent/planner/normalize"
 )
 
-func TestIntentClassifierCoreCases(t *testing.T) {
+func TestIntentClassifierUsesStructuralSlotsOnly(t *testing.T) {
 	cases := []struct {
 		input  string
 		domain IntentDomain
 		intent string
 	}{
-		{"请获取这台本地机器的系统概况", DomainOps, "system_overview"},
-		{"system overview for this machine", DomainOps, "system_overview"},
-		{"请定位包含 `最小静态站点` 的文件，workspace: /www/wwwroot/test", DomainCode, "search_text"},
-		{"find containing `TODO` workspace: .", DomainCode, "search_text"},
-		{"请打开 workspace: /www/wwwroot/test 中的 `index.html`", DomainCode, "read_file"},
+		{"请定位包含 `最小静态站点` 的文件，workspace: /www/wwwroot/test", DomainCode, "workspace_scoped"},
+		{"find containing `TODO` workspace: .", DomainCode, "workspace_scoped"},
+		{"请打开 workspace: /www/wwwroot/test 中的 `index.html`", DomainCode, "workspace_scoped"},
+		{"kb_id: kb_1 question", DomainRAG, "knowledge"},
+		{"host_id: local status", DomainOps, "host_scoped"},
+		{"approval_id: apr_1", DomainApproval, "approval"},
+		{"run_id: run_1", DomainRun, "run"},
 	}
 	for _, tc := range cases {
 		req := normalize.New().Normalize(tc.input)
@@ -27,10 +29,16 @@ func TestIntentClassifierCoreCases(t *testing.T) {
 	}
 }
 
-func TestIntentClassifierAmbiguousLogsClarify(t *testing.T) {
-	req := normalize.New().Normalize("帮我看一下日志")
-	got := New().Classify(req)
-	if !got.NeedClarify || got.Intent != "logs" {
-		t.Fatalf("classification = %+v, want logs clarify", got)
+func TestIntentClassifierDoesNotClassifyNaturalLanguagePhrases(t *testing.T) {
+	for _, input := range []string{
+		"请获取这台本地机器的系统概况",
+		"system overview for this machine",
+		"帮我看一下日志",
+	} {
+		req := normalize.New().Normalize(input)
+		got := New().Classify(req)
+		if got.NeedTool || got.NeedClarify || got.Intent != "answer" {
+			t.Fatalf("Classify(%q)=%+v, want no natural-language intent decision", input, got)
+		}
 	}
 }

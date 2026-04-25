@@ -322,7 +322,7 @@ func TestPlannerOpsMapping(t *testing.T) {
 		{message: "看一下本机 CPU 占用", tool: "ops.local.processes"},
 		{message: "看一下磁盘空间", tool: "ops.local.disk_usage"},
 		{message: "看一下 docker 容器状态", tool: "ops.docker.ps"},
-		{message: "看一下 k8s pod 日志", tool: "ops.k8s.logs"},
+		{message: "看一下 k8s pod `api-0` 日志", tool: "ops.k8s.logs"},
 		{message: "重启服务 `nginx`", tool: "ops.local.service_restart"},
 	}
 	for _, tc := range cases {

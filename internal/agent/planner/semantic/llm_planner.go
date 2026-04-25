@@ -8,7 +8,7 @@ import (
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 
-	"local-agent/internal/agent/planner/catalog"
+	"local-agent/internal/agent/planner/candidate"
 	"local-agent/internal/agent/planner/intent"
 	"local-agent/internal/agent/planner/normalize"
 )
@@ -46,12 +46,12 @@ func NewLLMPlanner(model ChatModel, cfg Config) LLMSemanticPlanner {
 	return LLMSemanticPlanner{Model: model, Config: cfg}
 }
 
-// Plan returns a structured SemanticPlan. It never executes tools.
-func (p LLMSemanticPlanner) Plan(ctx context.Context, req normalize.NormalizedRequest, cls intent.IntentClassification, cat catalog.PlanningCatalog) (SemanticPlan, error) {
+// Plan returns a structured SemanticPlan from candidate tools. It never executes tools.
+func (p LLMSemanticPlanner) Plan(ctx context.Context, req normalize.NormalizedRequest, cls intent.IntentClassification, candidates []candidate.ToolCandidate) (SemanticPlan, error) {
 	if !p.Config.SemanticEnabled || p.Model == nil {
 		return SemanticPlan{}, ErrUnavailable
 	}
-	prompt := BuildPrompt(req, cls, cat)
+	prompt := BuildPrompt(req, cls, candidates)
 	var last string
 	for attempt := 0; attempt <= p.Config.MaxRetries; attempt++ {
 		content := prompt

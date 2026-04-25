@@ -232,11 +232,12 @@ go run ./cmd/agent eval report latest
 
 当前默认使用 Hybrid Planner。
 
-- Deterministic FastPath 只处理高置信、结构明显的常见意图，例如本机系统概况、代码文本搜索、workspace 文件读取、Git 只读操作、RAG 和记忆候选提取。
-- RequestNormalizer 负责提取 workspace、quoted text、possible file path、host/kb/run/approval id，并把中英文同义表达归一化为 signals；这些 signals 不是最终工具决策。
-- IntentClassifier 只判断 domain / intent / confidence，以及是否需要工具或澄清，不直接选择 executor。
-- LLM Semantic Planner 位于配置门禁之后，只能输出结构化 `SemanticPlan` JSON，不能执行 shell、写文件、调用 MCP、Skill、Ops 或 Code executor。
-- `SemanticPlan` 必须先通过本地 PlanValidator，校验工具是否存在、planner 是否允许选择、input 基本 schema、路径逃逸、secret input 和危险/审批工具。
+- RequestNormalizer 只提取结构化槽位：workspace、quoted text、possible file path、URL、host/kb/run/approval id、显式 tool id 和数字参数；`Signals` 只承载这些结构化信号，不再维护自然语言关键词词表。
+- Tool Card Catalog 位于 `config/planner.tool-cards.yaml`，用工具说明、用途、反例、示例、required slots、defaults、effects 和 risk level 描述 planner 语义；ToolRegistry 仍是工具存在性和真实 effects 的事实源。
+- CandidateSelector 根据结构化槽位和 Tool Card metadata / 文本相似度召回 TopK 候选工具，不做最终工具决策，也不在 Go 代码中维护中英文短语词典。
+- Deterministic FastPath 只保留强结构入口；自然语言工具选择进入 Tool Card Candidate Planner。
+- LLM Semantic Planner 位于配置门禁之后，只能从候选 Tool Cards 中输出结构化 `SemanticPlan` JSON，不能执行 shell、写文件、调用 MCP、Skill、Ops 或 Code executor，也不能发明工具。
+- `SemanticPlan` 必须先通过本地 PlanValidator，校验工具是否在候选集、工具是否存在、required slots、defaults、input schema、路径逃逸、secret input 和危险/审批工具。
 - PlanCompiler 只把合法计划编译为现有 `ToolProposal`；执行仍走 ToolRouter / EffectInference / PolicyEngine / ApprovalCenter / Executor。
 - 不确定或缺少必要参数时，planner 会转为澄清问题，而不是把宽泛 `workspace` 请求降级到错误工具。
 - `evals/cases/planner/` 中的 Planner Eval 覆盖中英文回归 case，用于防止自然语言 routing 退化。

@@ -125,6 +125,12 @@
       ],
       "verification": {
         "planner_fix": "Planner V2 hybrid refactor",
+        "planner_v2_1": [
+          "Planner V2.1 removed code-level natural-language signal dictionaries from normalize/signals.go.",
+          "Tool Card Candidate Planner is used for semantic tool selection.",
+          "The three live regression cases still pass through CandidateSelector -> SemanticPlan -> PlanValidator -> PlanCompiler.",
+          "ToolRouter, EffectInference, PolicyEngine, ApprovalCenter and Executor remain unchanged."
+        ],
         "targeted_planner_regression": "passed",
         "planner_v2_eval": "passed via TestPlannerV2 and planner v2 unit tests; planner eval fixtures added under evals/cases/planner",
         "go_test_all": "passed",

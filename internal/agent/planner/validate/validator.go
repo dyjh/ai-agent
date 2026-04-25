@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"local-agent/internal/agent/planner/catalog"
+	"local-agent/internal/agent/planner/normalize"
 	"local-agent/internal/agent/planner/semantic"
 	"local-agent/internal/core"
 )
@@ -19,7 +20,10 @@ type PlanValidationResult struct {
 
 // Options configures local safety checks.
 type Options struct {
-	SensitivePaths []string
+	SensitivePaths      []string
+	Request             *normalize.NormalizedRequest
+	CandidateToolIDs    []string
+	AllowCrossCandidate bool
 }
 
 // Validator validates SemanticPlan without executing anything.

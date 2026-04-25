@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"sort"
+	"strings"
 
 	"local-agent/internal/core"
 )
@@ -10,13 +11,21 @@ import (
 type PlanningToolSpec struct {
 	ToolID           string         `json:"tool_id"`
 	Domain           string         `json:"domain"`
+	Title            string         `json:"title,omitempty"`
 	Description      string         `json:"description"`
+	DescriptionZH    string         `json:"description_zh,omitempty"`
+	WhenToUse        []string       `json:"when_to_use,omitempty"`
+	WhenNotToUse     []string       `json:"when_not_to_use,omitempty"`
+	RequiredSlots    []string       `json:"required_slots,omitempty"`
 	InputSchema      map[string]any `json:"input_schema,omitempty"`
+	Defaults         map[string]any `json:"defaults,omitempty"`
 	DefaultEffects   []string       `json:"default_effects,omitempty"`
+	RiskLevel        string         `json:"risk_level,omitempty"`
 	AutoSelectable   bool           `json:"auto_selectable"`
 	RequiresApproval bool           `json:"requires_approval"`
 	Examples         []ToolExample  `json:"examples,omitempty"`
 	NegativeExamples []ToolExample  `json:"negative_examples,omitempty"`
+	Card             *ToolCard      `json:"card,omitempty"`
 }
 
 // ToolExample documents planner behavior without becoming a matching rule.
@@ -32,12 +41,29 @@ type Registry interface {
 
 // PlanningCatalog contains tool specs that may be selected by planners.
 type PlanningCatalog struct {
-	tools map[string]PlanningToolSpec
+	tools    map[string]PlanningToolSpec
+	warnings []string
 }
 
 // New builds a catalog from a ToolRegistry, adding fallback core tools when
 // registry is nil or incomplete for planner-only tests.
 func New(registry Registry) PlanningCatalog {
+	cards, _, _ := LoadDefaultToolCards()
+	return NewWithToolCards(registry, cards)
+}
+
+// NewWithToolCardFile builds a catalog and validates cards from one YAML file.
+func NewWithToolCardFile(registry Registry, path string) (PlanningCatalog, error) {
+	cards, err := LoadToolCards(path)
+	if err != nil {
+		return PlanningCatalog{}, err
+	}
+	return NewWithToolCards(registry, cards), nil
+}
+
+// NewWithToolCards builds a catalog from registry facts plus optional Tool
+// Cards. Tool ids and effects from the registry/core specs remain authoritative.
+func NewWithToolCards(registry Registry, cards []ToolCard) PlanningCatalog {
 	specs := map[string]core.ToolSpec{}
 	for _, spec := range coreToolSpecs() {
 		specs[spec.Name] = spec
@@ -53,24 +79,64 @@ func New(registry Registry) PlanningCatalog {
 			specs[spec.Name] = spec
 		}
 	}
+	cardByTool := map[string]ToolCard{}
+	for _, card := range cards {
+		cardByTool[card.ToolID] = normalizeCard(card)
+	}
 	c := PlanningCatalog{tools: map[string]PlanningToolSpec{}}
 	for _, spec := range specs {
 		tool := spec.Name
 		if tool == "" {
 			tool = spec.ID
 		}
-		examples, negatives := examplesForTool(tool)
 		effects := append([]string(nil), spec.DefaultEffects...)
-		c.tools[tool] = PlanningToolSpec{
+		card, hasCard := cardByTool[tool]
+		domain := domainForTool(tool)
+		description := spec.Description
+		inputSchema := cloneMap(spec.InputSchema)
+		auto := autoSelectable(tool, effects)
+		if hasCard {
+			if card.Domain != "" {
+				domain = card.Domain
+			}
+			if card.Description != "" {
+				description = card.Description
+			}
+			if len(card.InputSchema) > 0 {
+				inputSchema = cloneMap(card.InputSchema)
+			}
+			auto = card.AutoSelectable && autoSelectable(tool, effects)
+		} else {
+			auto = false
+			c.warnings = append(c.warnings, "tool card missing for "+tool)
+		}
+		specOut := PlanningToolSpec{
 			ToolID:           tool,
-			Domain:           domainForTool(tool),
-			Description:      spec.Description,
-			InputSchema:      cloneMap(spec.InputSchema),
+			Domain:           domain,
+			Description:      description,
+			InputSchema:      inputSchema,
 			DefaultEffects:   effects,
-			AutoSelectable:   autoSelectable(tool, effects),
-			RequiresApproval: requiresApproval(tool, effects),
-			Examples:         cloneExamples(examples),
-			NegativeExamples: cloneExamples(negatives),
+			AutoSelectable:   auto,
+			RequiresApproval: requiresApproval(tool, effects) || !auto,
+		}
+		if hasCard {
+			cardCopy := cloneCard(card)
+			specOut.Title = card.Title
+			specOut.DescriptionZH = card.DescriptionZH
+			specOut.WhenToUse = append([]string(nil), card.WhenToUse...)
+			specOut.WhenNotToUse = append([]string(nil), card.WhenNotToUse...)
+			specOut.RequiredSlots = append([]string(nil), card.RequiredSlots...)
+			specOut.Defaults = cloneMap(card.Defaults)
+			specOut.RiskLevel = card.RiskLevel
+			specOut.Examples = cloneExamples(card.Examples)
+			specOut.NegativeExamples = cloneExamples(card.NegativeExamples)
+			specOut.Card = &cardCopy
+		}
+		c.tools[tool] = specOut
+	}
+	for _, card := range cards {
+		if _, ok := specs[card.ToolID]; !ok {
+			c.warnings = append(c.warnings, "tool card references unknown tool "+card.ToolID)
 		}
 	}
 	return c
@@ -88,6 +154,11 @@ func (c PlanningCatalog) Has(tool string) bool {
 	return ok
 }
 
+// Warnings returns non-fatal catalog validation warnings.
+func (c PlanningCatalog) Warnings() []string {
+	return append([]string(nil), c.warnings...)
+}
+
 // All returns a deterministic list of tool specs.
 func (c PlanningCatalog) All() []PlanningToolSpec {
 	items := make([]PlanningToolSpec, 0, len(c.tools))
@@ -96,6 +167,17 @@ func (c PlanningCatalog) All() []PlanningToolSpec {
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].ToolID < items[j].ToolID })
 	return items
+}
+
+// SemanticText returns the text intended for generic semantic retrieval.
+func (s PlanningToolSpec) SemanticText() string {
+	parts := []string{s.ToolID, s.Domain, s.Title, s.Description, s.DescriptionZH}
+	parts = append(parts, s.WhenToUse...)
+	parts = append(parts, s.WhenNotToUse...)
+	for _, ex := range s.Examples {
+		parts = append(parts, ex.User)
+	}
+	return strings.Join(parts, "\n")
 }
 
 func cloneMap(in map[string]any) map[string]any {
@@ -118,6 +200,19 @@ func cloneExamples(in []ToolExample) []ToolExample {
 		out = append(out, ToolExample{User: item.User, Input: cloneMap(item.Input)})
 	}
 	return out
+}
+
+func cloneCard(card ToolCard) ToolCard {
+	cp := card
+	cp.WhenToUse = append([]string(nil), card.WhenToUse...)
+	cp.WhenNotToUse = append([]string(nil), card.WhenNotToUse...)
+	cp.RequiredSlots = append([]string(nil), card.RequiredSlots...)
+	cp.InputSchema = cloneMap(card.InputSchema)
+	cp.Defaults = cloneMap(card.Defaults)
+	cp.Effects = append([]string(nil), card.Effects...)
+	cp.Examples = cloneExamples(card.Examples)
+	cp.NegativeExamples = cloneExamples(card.NegativeExamples)
+	return cp
 }
 
 func coreToolSpecs() []core.ToolSpec {

@@ -6,7 +6,8 @@ import (
 )
 
 // NormalizedRequest is a structure-only view of a user request. It extracts
-// stable signals but does not choose tools.
+// stable slots and structural signals but does not choose tools or infer
+// natural-language intent.
 type NormalizedRequest struct {
 	Original       string         `json:"original"`
 	NormalizedText string         `json:"normalized_text"`
@@ -14,10 +15,13 @@ type NormalizedRequest struct {
 	Workspace      string         `json:"workspace,omitempty"`
 	QuotedTexts    []string       `json:"quoted_texts,omitempty"`
 	PossibleFiles  []string       `json:"possible_files,omitempty"`
+	URLs           []string       `json:"urls,omitempty"`
 	HostID         string         `json:"host_id,omitempty"`
 	KBID           string         `json:"kb_id,omitempty"`
 	RunID          string         `json:"run_id,omitempty"`
 	ApprovalID     string         `json:"approval_id,omitempty"`
+	ExplicitToolID string         `json:"explicit_tool_id,omitempty"`
+	Numbers        []string       `json:"numbers,omitempty"`
 	DomainHints    []string       `json:"domain_hints,omitempty"`
 	IntentHints    []string       `json:"intent_hints,omitempty"`
 	Signals        []string       `json:"signals,omitempty"`
@@ -32,8 +36,8 @@ func New() Normalizer {
 	return Normalizer{}
 }
 
-// Normalize extracts normalized text, scope hints, ids, quoted spans, file
-// candidates, and semantic signals.
+// Normalize extracts normalized text, structural scope hints, ids, quoted
+// spans, file candidates, URLs, numbers, and structural signals.
 func (Normalizer) Normalize(message string) NormalizedRequest {
 	original := strings.TrimSpace(message)
 	normalizedText := strings.ToLower(original)
@@ -45,10 +49,13 @@ func (Normalizer) Normalize(message string) NormalizedRequest {
 		LanguageHints:  languageHints(original),
 		Workspace:      workspace,
 		QuotedTexts:    quoted,
+		URLs:           ExtractURLs(original),
 		HostID:         ExtractID(original, []string{"host_id", "host", "主机"}),
 		KBID:           ExtractID(original, []string{"kb_id", "kbid", "kb", "知识库"}),
 		RunID:          ExtractID(original, []string{"run_id", "run"}),
 		ApprovalID:     ExtractID(original, []string{"approval_id", "approval", "审批"}),
+		ExplicitToolID: ExtractExplicitToolID(original),
+		Numbers:        ExtractNumbers(original),
 		Metadata:       map[string]any{},
 	}
 	req.PossibleFiles = PossibleWorkspaceFiles(workspace, quoted)

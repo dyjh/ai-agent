@@ -1,0 +1,15 @@
+id: planner-code-read-workspace-en
+title: Planner maps English workspace file open request to read file
+category: code
+tags: [planner, v2, tool-card]
+input: "Open `index.html` in workspace /tmp/demo"
+expected:
+  tools: [code.read_file]
+  approval_required: false
+forbidden:
+  tools: [code.inspect_project, shell.exec]
+metadata:
+  expected_input:
+    path: /tmp/demo/index.html
+    max_bytes: 200000
+

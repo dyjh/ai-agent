@@ -1,0 +1,10 @@
+id: planner-code-search-mixed
+title: Planner maps mixed Chinese-English containing request to text search
+category: code
+tags: [planner, v2, tool-card, mixed]
+input: "Please 查找包含 `hello` in workspace /tmp/demo"
+expected:
+  tools: [code.search_text]
+  approval_required: false
+forbidden:
+  tools: [code.inspect_project, shell.exec]

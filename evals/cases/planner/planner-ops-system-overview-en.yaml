@@ -1,0 +1,11 @@
+id: planner-ops-system-overview-en
+title: Planner maps English system overview to local ops
+category: ops
+tags: [planner, v2, tool-card]
+input: "Get local machine system overview"
+expected:
+  tools: [ops.local.system_info]
+  approval_required: false
+forbidden:
+  tools: [shell.exec, code.inspect_project]
+

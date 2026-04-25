@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"local-agent/internal/agent/planner/catalog"
 	"local-agent/internal/agent/planner/semantic"
 )
 
@@ -18,20 +19,35 @@ func (v Validator) validateStep(step *semantic.SemanticPlanStep) stepValidation 
 		result.Errors = append(result.Errors, "tool is not planner auto-selectable: "+step.Tool)
 		return result
 	}
+	if !v.Options.AllowCrossCandidate && len(v.Options.CandidateToolIDs) > 0 && !containsTool(v.Options.CandidateToolIDs, step.Tool) {
+		result.Errors = append(result.Errors, "tool was not in candidate set: "+step.Tool)
+		result.Clarify = "候选工具不足以安全处理这个请求，请补充目标或改用明确的工具参数。"
+		return result
+	}
 	if !spec.AutoSelectable {
 		result.Warnings = append(result.Warnings, "dangerous or approval-gated tool cannot execute without policy approval")
 	}
 	if spec.RequiresApproval {
 		result.Warnings = append(result.Warnings, "tool requires approval before execution")
 	}
+	if isDangerousSpec(spec) && !spec.RequiresApproval {
+		result.Errors = append(result.Errors, "dangerous tool must require approval: "+step.Tool)
+	}
 	if step.Input == nil {
 		step.Input = map[string]any{}
 	}
+	applyToolCardDefaults(step, spec)
 	applyDefaults(step)
 	safety := v.validateSafety(*step)
 	result.Errors = append(result.Errors, safety.Errors...)
 	result.Warnings = append(result.Warnings, safety.Warnings...)
-	for _, field := range requiredFields(step.Tool) {
+	for _, slot := range spec.RequiredSlots {
+		if !v.slotSatisfied(slot, *step) {
+			result.Errors = append(result.Errors, fmt.Sprintf("missing required slot %s for %s", slot, step.Tool))
+			result.Clarify = clarifyForMissing(step.Tool, slot)
+		}
+	}
+	for _, field := range mergeRequiredFields(requiredFieldsFromSchema(spec.InputSchema), requiredFields(step.Tool)) {
 		value, exists := step.Input[field]
 		if !exists || value == nil || strings.TrimSpace(fmt.Sprint(value)) == "" {
 			result.Errors = append(result.Errors, fmt.Sprintf("missing required input %s for %s", field, step.Tool))
@@ -48,6 +64,15 @@ func (v Validator) validateStep(step *semantic.SemanticPlanStep) stepValidation 
 		}
 	}
 	return result
+}
+
+func containsTool(tools []string, tool string) bool {
+	for _, item := range tools {
+		if strings.TrimSpace(item) == tool {
+			return true
+		}
+	}
+	return false
 }
 
 func plannerBlockedTool(tool string) bool {
@@ -144,6 +169,54 @@ func applyDefaults(step *semantic.SemanticPlanStep) {
 	}
 }
 
+func applyToolCardDefaults(step *semantic.SemanticPlanStep, spec catalog.PlanningToolSpec) {
+	for key, value := range spec.Defaults {
+		if _, ok := step.Input[key]; !ok {
+			step.Input[key] = value
+		}
+	}
+}
+
+func requiredFieldsFromSchema(schema map[string]any) []string {
+	raw, ok := schema["required"]
+	if !ok {
+		return nil
+	}
+	switch typed := raw.(type) {
+	case []string:
+		return append([]string(nil), typed...)
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if value := strings.TrimSpace(fmt.Sprint(item)); value != "" {
+				out = append(out, value)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func mergeRequiredFields(groups ...[]string) []string {
+	seen := map[string]struct{}{}
+	out := []string{}
+	for _, group := range groups {
+		for _, field := range group {
+			field = strings.TrimSpace(field)
+			if field == "" {
+				continue
+			}
+			if _, ok := seen[field]; ok {
+				continue
+			}
+			seen[field] = struct{}{}
+			out = append(out, field)
+		}
+	}
+	return out
+}
+
 func requiredFields(tool string) []string {
 	switch tool {
 	case "shell.exec":
@@ -207,4 +280,52 @@ func typeMatches(value any, typ string) bool {
 	default:
 		return true
 	}
+}
+
+func (v Validator) slotSatisfied(slot string, step semantic.SemanticPlanStep) bool {
+	slot = strings.TrimSpace(slot)
+	if slot == "" {
+		return true
+	}
+	if v.Options.Request == nil {
+		return true
+	}
+	req := *v.Options.Request
+	switch slot {
+	case "workspace":
+		return strings.TrimSpace(req.Workspace) != "" || strings.TrimSpace(fmt.Sprint(step.Input["workspace"])) != "" || strings.TrimSpace(fmt.Sprint(step.Input["path"])) != ""
+	case "quoted_text":
+		return len(req.QuotedTexts) > 0 || strings.TrimSpace(fmt.Sprint(step.Input["query"])) != ""
+	case "possible_file", "file_path":
+		return len(req.PossibleFiles) > 0 || strings.TrimSpace(fmt.Sprint(step.Input["path"])) != ""
+	case "url":
+		return len(req.URLs) > 0
+	case "host_id":
+		return strings.TrimSpace(req.HostID) != "" || strings.TrimSpace(fmt.Sprint(step.Input["host_id"])) != ""
+	case "kb_id":
+		return strings.TrimSpace(req.KBID) != "" || strings.TrimSpace(fmt.Sprint(step.Input["kb_id"])) != ""
+	case "run_id":
+		return strings.TrimSpace(req.RunID) != "" || strings.TrimSpace(fmt.Sprint(step.Input["run_id"])) != ""
+	case "approval_id":
+		return strings.TrimSpace(req.ApprovalID) != "" || strings.TrimSpace(fmt.Sprint(step.Input["approval_id"])) != ""
+	case "explicit_tool_id":
+		return strings.TrimSpace(req.ExplicitToolID) != ""
+	case "number":
+		return len(req.Numbers) > 0
+	default:
+		return strings.TrimSpace(fmt.Sprint(step.Input[slot])) != ""
+	}
+}
+
+func isDangerousSpec(spec catalog.PlanningToolSpec) bool {
+	if strings.EqualFold(spec.RiskLevel, "dangerous") || strings.EqualFold(spec.RiskLevel, "high") {
+		return true
+	}
+	for _, effect := range spec.DefaultEffects {
+		effect = strings.ToLower(effect)
+		if strings.Contains(effect, "danger") || strings.Contains(effect, "delete") {
+			return true
+		}
+	}
+	return false
 }

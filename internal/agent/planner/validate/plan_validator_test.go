@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"local-agent/internal/agent/planner/catalog"
+	"local-agent/internal/agent/planner/normalize"
 	"local-agent/internal/agent/planner/semantic"
 )
 
@@ -52,6 +53,28 @@ func TestPlanValidatorRejectsPlannerBlockedTool(t *testing.T) {
 	result := New(catalog.New(nil), Options{}).Validate(toolPlan("mcp.call_tool", map[string]any{"server_id": "s", "tool_name": "x", "args": map[string]any{}}))
 	if result.Valid {
 		t.Fatalf("mcp.call_tool must not be planner-selectable")
+	}
+}
+
+func TestPlanValidatorToolCardDefaultsRequiredSlotsAndCandidates(t *testing.T) {
+	req := normalize.New().Normalize("find containing `TODO` workspace: .")
+	result := New(catalog.New(nil), Options{
+		Request:          &req,
+		CandidateToolIDs: []string{"code.search_text"},
+	}).Validate(toolPlan("code.search_text", map[string]any{"query": "TODO"}))
+	if !result.Valid {
+		t.Fatalf("result = %+v, want valid", result)
+	}
+	if result.Sanitized.Steps[0].Input["limit"] != 50 || result.Sanitized.Steps[0].Input["path"] != "." {
+		t.Fatalf("input = %+v, want tool-card/default fallback values", result.Sanitized.Steps[0].Input)
+	}
+
+	result = New(catalog.New(nil), Options{
+		Request:          &req,
+		CandidateToolIDs: []string{"code.read_file"},
+	}).Validate(toolPlan("code.search_text", map[string]any{"path": ".", "query": "TODO"}))
+	if result.Valid || !strings.Contains(strings.Join(result.Errors, " "), "candidate") {
+		t.Fatalf("result = %+v, want candidate rejection", result)
 	}
 }
 
