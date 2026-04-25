@@ -1,0 +1,14 @@
+id: chat-prefer-zh
+title: Preference memory goes to review
+category: chat
+tags:
+  - smoke
+  - memory
+input: "以后请尽量用中文回答"
+expected:
+  tools:
+    - memory.extract_candidates
+  approval_required: true
+forbidden:
+  tools:
+    - memory.patch

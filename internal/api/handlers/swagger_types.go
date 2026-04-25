@@ -4,9 +4,12 @@ import (
 	"time"
 
 	"local-agent/internal/agent"
+	"local-agent/internal/config"
 	"local-agent/internal/core"
+	"local-agent/internal/security"
 	kbtools "local-agent/internal/tools/kb"
 	"local-agent/internal/tools/mcp"
+	memstore "local-agent/internal/tools/memory"
 	"local-agent/internal/tools/ops"
 	"local-agent/internal/tools/skills"
 )
@@ -29,6 +32,8 @@ type HealthResponse struct {
 	Timestamp     time.Time      `json:"timestamp"`
 	Server        map[string]any `json:"server"`
 	Database      map[string]any `json:"database"`
+	LLM           map[string]any `json:"llm"`
+	Embeddings    map[string]any `json:"embeddings"`
 	Qdrant        map[string]any `json:"qdrant"`
 	KnowledgeBase map[string]any `json:"knowledge_base"`
 	Workflow      map[string]any `json:"workflow"`
@@ -117,6 +122,35 @@ type CreateMemoryPatchRequest struct {
 	Body        string            `json:"body"`
 	Frontmatter map[string]string `json:"frontmatter"`
 }
+
+// MemoryItemListResponse wraps memory item lists.
+type MemoryItemListResponse struct {
+	Items []memstore.MemoryItem `json:"items"`
+}
+
+// MemoryReviewListResponse wraps memory review queue items.
+type MemoryReviewListResponse struct {
+	Items []memstore.MemoryReviewItem `json:"items"`
+}
+
+// MemoryExtractReviewRequest extracts candidate memories into review queue.
+type MemoryExtractReviewRequest struct {
+	ConversationID string `json:"conversation_id"`
+	MessageID      string `json:"message_id,omitempty"`
+	Text           string `json:"text"`
+	ProjectKey     string `json:"project_key,omitempty"`
+}
+
+// MemoryReviewDecisionRequest records a review decision note.
+type MemoryReviewDecisionRequest struct {
+	Note string `json:"note"`
+}
+
+// MemoryItemCreateRequest creates one memory item through ToolRouter.
+type MemoryItemCreateRequest = memstore.MemoryItemCreateInput
+
+// MemoryItemUpdateRequest updates one memory item through ToolRouter.
+type MemoryItemUpdateRequest = memstore.MemoryItemUpdateInput
 
 // KnowledgeBaseListResponse wraps knowledge base lists.
 type KnowledgeBaseListResponse struct {
@@ -270,4 +304,38 @@ type OpsRunbookListResponse struct {
 type OpsRunbookPlanRequest struct {
 	HostID string `json:"host_id,omitempty"`
 	DryRun bool   `json:"dry_run,omitempty"`
+}
+
+// PolicyProfileListResponse wraps configured policy profiles.
+type PolicyProfileListResponse struct {
+	Active string                 `json:"active"`
+	Items  []config.PolicyProfile `json:"items"`
+}
+
+// PolicyProfileValidateResponse reports profile validation status.
+type PolicyProfileValidateResponse struct {
+	Valid   bool                  `json:"valid"`
+	Error   string                `json:"error,omitempty"`
+	Profile *config.PolicyProfile `json:"profile,omitempty"`
+}
+
+// SecretScanRequest scans text or a structured payload for secret-like values.
+type SecretScanRequest struct {
+	Text    string         `json:"text,omitempty"`
+	Payload map[string]any `json:"payload,omitempty"`
+}
+
+// NetworkValidateURLRequest validates one outbound URL.
+type NetworkValidateURLRequest struct {
+	URL              string `json:"url"`
+	Method           string `json:"method,omitempty"`
+	MaxDownloadBytes int64  `json:"max_download_bytes,omitempty"`
+}
+
+// SecurityAuditReport summarizes redacted security-relevant events.
+type SecurityAuditReport struct {
+	Total  int                        `json:"total"`
+	Counts map[string]int             `json:"counts"`
+	Items  []core.Event               `json:"items"`
+	Scan   *security.SecretScanResult `json:"scan,omitempty"`
 }

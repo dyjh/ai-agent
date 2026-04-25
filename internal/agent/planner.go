@@ -7,6 +7,7 @@ import (
 
 	"local-agent/internal/core"
 	"local-agent/internal/einoapp"
+	"local-agent/internal/security"
 	"local-agent/internal/tools/ops"
 )
 
@@ -65,6 +66,44 @@ func (p HeuristicPlanner) Plan(_ context.Context, input PlanInput) (Plan, error)
 	normalized := strings.ToLower(strings.TrimSpace(input.UserMessage))
 	workspace := extractWorkspace(input.UserMessage)
 	switch {
+	case wantsMemoryExtract(normalized):
+		queueReview := !security.ContainsSensitiveString(input.UserMessage)
+		preamble := "我会先提取候选记忆并放入 review queue；不会直接写入长期记忆正文。"
+		if !queueReview {
+			preamble = "我会先运行记忆候选提取；疑似敏感内容不会写入 review queue 或长期记忆。"
+		}
+		proposal := p.Adapter.NewProposal("memory.extract_candidates", map[string]any{
+			"conversation_id": input.ConversationID,
+			"text":            input.UserMessage,
+			"project_key":     extractProjectKey(input.UserMessage),
+			"queue":           queueReview,
+		}, "提取长期记忆候选并进入 review queue", []string{"memory.review.write"})
+		return Plan{
+			Decision:     PlanDecisionTool,
+			Preamble:     preamble,
+			ToolProposal: &proposal,
+			Reason:       "matched memory extraction intent",
+		}, nil
+	case wantsMemoryArchive(normalized):
+		id := extractQuoted(input.UserMessage)
+		if id == "" {
+			id = extractPathAfter(input.UserMessage, []string{"memory", "记忆", "item"})
+		}
+		if id == "" {
+			fields := strings.Fields(input.UserMessage)
+			if len(fields) > 0 {
+				id = strings.Trim(fields[len(fields)-1], "`'\"，,。;；")
+			}
+		}
+		proposal := p.Adapter.NewProposal("memory.item_archive", map[string]any{
+			"id": id,
+		}, "归档指定 memory item", []string{"fs.write", "memory.modify"})
+		return Plan{
+			Decision:     PlanDecisionTool,
+			Preamble:     "我会把这次忘记/归档请求转换为 memory item 归档操作，并走审批。",
+			ToolProposal: &proposal,
+			Reason:       "matched memory archive intent",
+		}, nil
 	case wantsPatchApply(normalized):
 		path := extractPathAfter(input.UserMessage, []string{"file", "文件"})
 		if path == "" {
@@ -696,6 +735,15 @@ func wantsKBRetrieve(normalized string) bool {
 	return containsAny(normalized, []string{"检索知识库", "搜索知识库", "knowledge base search", "kb.retrieve", "hybrid retrieval"})
 }
 
+func wantsMemoryExtract(normalized string) bool {
+	return containsAny(normalized, []string{"记住", "记一下", "以后", "remember", "always", "never"}) &&
+		!wantsMemoryArchive(normalized)
+}
+
+func wantsMemoryArchive(normalized string) bool {
+	return containsAny(normalized, []string{"忘记", "删除这条记忆", "归档记忆", "archive memory", "forget this memory"})
+}
+
 func wantsPatchValidate(normalized string) bool {
 	return containsAny(normalized, []string{"validate patch", "patch validate", "验证 patch", "校验 patch", "dry-run patch"})
 }
@@ -944,6 +992,21 @@ func extractKBID(value string) string {
 		}
 		if strings.HasPrefix(lower, "kb_id:") {
 			return strings.TrimPrefix(lower, "kb_id:")
+		}
+	}
+	return ""
+}
+
+func extractProjectKey(value string) string {
+	for _, marker := range []string{"project:", "project：", "project_key:", "project_key：", "项目:", "项目："} {
+		idx := strings.Index(strings.ToLower(value), strings.ToLower(marker))
+		if idx < 0 {
+			continue
+		}
+		rest := strings.TrimSpace(value[idx+len(marker):])
+		fields := strings.Fields(rest)
+		if len(fields) > 0 {
+			return strings.Trim(fields[0], "`'\"，,。;；")
 		}
 	}
 	return ""

@@ -35,6 +35,13 @@ const (
 	VectorBackendQdrant VectorBackend = "qdrant"
 )
 
+const (
+	ProviderOpenAICompatible = "openai_compatible"
+	ProviderOllama           = "ollama"
+	ProviderMock             = "mock"
+	ProviderFake             = "fake"
+)
+
 // KBConfig stores KB metadata configuration.
 type KBConfig struct {
 	Enabled      bool   `yaml:"enabled"`
@@ -75,10 +82,11 @@ type LLMConfig struct {
 
 // EmbeddingConfig stores embedding provider settings.
 type EmbeddingConfig struct {
-	Provider string `yaml:"provider"`
-	BaseURL  string `yaml:"base_url"`
-	APIKey   string `yaml:"api_key"`
-	Model    string `yaml:"model"`
+	Provider       string `yaml:"provider"`
+	BaseURL        string `yaml:"base_url"`
+	APIKey         string `yaml:"api_key"`
+	Model          string `yaml:"model"`
+	TimeoutSeconds int    `yaml:"timeout_seconds"`
 }
 
 // MemoryConfig stores markdown memory settings.
@@ -102,10 +110,33 @@ type ShellConfig struct {
 	MaxOutputChars        int  `yaml:"max_output_chars"`
 }
 
+// PolicyProfile stores one named policy mode.
+type PolicyProfile struct {
+	Name                        string   `json:"name" yaml:"-"`
+	Description                 string   `json:"description" yaml:"description"`
+	AutoExecuteReadonly         bool     `json:"auto_execute_readonly" yaml:"auto_execute_readonly"`
+	RequireApprovalFor          []string `json:"require_approval_for" yaml:"require_approval_for"`
+	DenyEffects                 []string `json:"deny_effects,omitempty" yaml:"deny_effects,omitempty"`
+	MinConfidenceForAutoExecute float64  `json:"min_confidence_for_auto_execute" yaml:"min_confidence_for_auto_execute"`
+}
+
+// NetworkPolicy stores outbound network safety constraints.
+type NetworkPolicy struct {
+	DenyPrivateIP             bool     `json:"deny_private_ip" yaml:"deny_private_ip"`
+	DenyMetadataIP            bool     `json:"deny_metadata_ip" yaml:"deny_metadata_ip"`
+	AllowedDomains            []string `json:"allowed_domains,omitempty" yaml:"allowed_domains,omitempty"`
+	DeniedDomains             []string `json:"denied_domains,omitempty" yaml:"denied_domains,omitempty"`
+	RequireApprovalForMethods []string `json:"require_approval_for_methods,omitempty" yaml:"require_approval_for_methods,omitempty"`
+	MaxDownloadBytes          int64    `json:"max_download_bytes" yaml:"max_download_bytes"`
+}
+
 // PolicyConfig stores policy thresholds and sensitive paths.
 type PolicyConfig struct {
-	MinConfidenceForAutoExecute float64  `yaml:"min_confidence_for_auto_execute"`
-	SensitivePaths              []string `yaml:"sensitive_paths"`
+	MinConfidenceForAutoExecute float64                  `yaml:"min_confidence_for_auto_execute"`
+	SensitivePaths              []string                 `yaml:"sensitive_paths"`
+	ActiveProfile               string                   `yaml:"active_profile"`
+	Profiles                    map[string]PolicyProfile `yaml:"profiles"`
+	Network                     NetworkPolicy            `yaml:"network_policy"`
 }
 
 // Default returns a production-leaning default config.
@@ -140,6 +171,13 @@ func Default() Config {
 			DefaultShell:      "bash",
 			DefaultWorkspace:  ".",
 		},
+		LLM: LLMConfig{
+			Provider: ProviderMock,
+		},
+		Embeddings: EmbeddingConfig{
+			Provider:       ProviderFake,
+			TimeoutSeconds: 30,
+		},
 		Memory: MemoryConfig{
 			RootDir:         "./memory",
 			AutoExtract:     true,
@@ -165,8 +203,88 @@ func Default() Config {
 				"cookies",
 				"session",
 			},
+			ActiveProfile: "default",
+			Profiles:      DefaultPolicyProfiles(),
+			Network: NetworkPolicy{
+				DenyPrivateIP:             true,
+				DenyMetadataIP:            true,
+				DeniedDomains:             []string{"*.internal"},
+				RequireApprovalForMethods: []string{"POST", "PUT", "PATCH", "DELETE"},
+				MaxDownloadBytes:          10 << 20,
+			},
 		},
 	}
+}
+
+// DefaultPolicyProfiles returns the built-in profile set.
+func DefaultPolicyProfiles() map[string]PolicyProfile {
+	return map[string]PolicyProfile{
+		"default": {
+			Name:                        "default",
+			Description:                 "Default local development policy",
+			AutoExecuteReadonly:         true,
+			RequireApprovalFor:          []string{"sensitive_read", "fs.write", "code.modify", "git.write", "service.restart", "process.kill", "network.post", "network.put", "network.patch", "network.delete", "unknown.effect"},
+			MinConfidenceForAutoExecute: 0.75,
+		},
+		"strict": {
+			Name:                        "strict",
+			Description:                 "Strict mode, all tool calls require approval",
+			AutoExecuteReadonly:         false,
+			RequireApprovalFor:          []string{"*"},
+			MinConfidenceForAutoExecute: 0.95,
+		},
+		"developer": {
+			Name:                        "developer",
+			Description:                 "Developer mode for local code tasks",
+			AutoExecuteReadonly:         true,
+			RequireApprovalFor:          []string{"sensitive_read", "fs.write", "code.modify", "git.write", "package.install", "unknown.effect"},
+			MinConfidenceForAutoExecute: 0.75,
+		},
+		"ops": {
+			Name:                        "ops",
+			Description:                 "Operations mode for local and remote diagnostics",
+			AutoExecuteReadonly:         true,
+			RequireApprovalFor:          []string{"service.restart", "service.stop", "process.kill", "deployment.apply", "k8s.apply", "k8s.delete", "docker.restart", "fs.write", "network.write", "unknown.effect"},
+			MinConfidenceForAutoExecute: 0.8,
+		},
+		"offline": {
+			Name:                        "offline",
+			Description:                 "Offline mode forbids network writes and remote calls",
+			AutoExecuteReadonly:         true,
+			RequireApprovalFor:          []string{"sensitive_read", "fs.write", "code.modify", "git.write", "unknown.effect"},
+			DenyEffects:                 []string{"network.post", "network.put", "network.patch", "network.delete", "webhook.call", "email.send", "mcp.remote.call"},
+			MinConfidenceForAutoExecute: 0.8,
+		},
+	}
+}
+
+// NormalizePolicy fills profile defaults and returns a self-contained copy.
+func NormalizePolicy(policy PolicyConfig) PolicyConfig {
+	if policy.MinConfidenceForAutoExecute <= 0 {
+		policy.MinConfidenceForAutoExecute = Default().Policy.MinConfidenceForAutoExecute
+	}
+	if policy.ActiveProfile == "" {
+		policy.ActiveProfile = "default"
+	}
+	if len(policy.Profiles) == 0 {
+		policy.Profiles = DefaultPolicyProfiles()
+	}
+	for name, profile := range policy.Profiles {
+		if profile.Name == "" {
+			profile.Name = name
+		}
+		if profile.MinConfidenceForAutoExecute <= 0 {
+			profile.MinConfidenceForAutoExecute = policy.MinConfidenceForAutoExecute
+		}
+		policy.Profiles[name] = profile
+	}
+	if policy.Network.MaxDownloadBytes <= 0 {
+		policy.Network = Default().Policy.Network
+	}
+	if len(policy.Network.RequireApprovalForMethods) == 0 {
+		policy.Network.RequireApprovalForMethods = []string{"POST", "PUT", "PATCH", "DELETE"}
+	}
+	return policy
 }
 
 // CollectionName returns the configured collection name for a logical vector scope.

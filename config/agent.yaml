@@ -13,7 +13,7 @@ kb:
 vector:
   backend: qdrant
   fallback_to_memory: true
-  embedding_dimension: 1536
+  embedding_dimension: ${EMBEDDING_DIMENSION}
   distance: cosine
 
 qdrant:
@@ -31,16 +31,17 @@ owner:
   default_workspace: .
 
 llm:
-  provider: openai_compatible
+  provider: ${LLM_PROVIDER}
   base_url: ${OPENAI_BASE_URL}
   api_key: ${OPENAI_API_KEY}
   model: ${OPENAI_MODEL}
 
 embeddings:
-  provider: openai_compatible
-  base_url: ${OPENAI_BASE_URL}
-  api_key: ${OPENAI_API_KEY}
-  model: text-embedding-3-small
+  provider: ${EMBEDDING_PROVIDER}
+  base_url: ${EMBEDDING_BASE_URL}
+  api_key: ${EMBEDDING_API_KEY}
+  model: ${EMBEDDING_MODEL}
+  timeout_seconds: 30
 
 memory:
   root_dir: ./memory

@@ -97,11 +97,42 @@ func (r *LocalRouter) Propose(ctx context.Context, runID, conversationID string,
 			RiskLevel:      inference.RiskLevel,
 			Payload: map[string]any{
 				"summary":        approval.Summary,
+				"explanation":    approval.Explanation,
 				"input_snapshot": approval.InputSnapshot,
+				"risk_trace":     decision.RiskTrace,
 			},
 			CreatedAt: time.Now().UTC(),
 		})
 
+		return result, nil
+	}
+
+	if !decision.Allowed {
+		now := time.Now().UTC()
+		denied := &core.ToolResult{
+			ToolCallID: proposal.ID,
+			Output: map[string]any{
+				"status":     "denied",
+				"reason":     decision.Reason,
+				"risk_trace": decision.RiskTrace,
+			},
+			Error:      decision.Reason,
+			StartedAt:  now,
+			FinishedAt: now,
+		}
+		result.Result = denied
+		r.emit(core.Event{
+			Type:           "policy.denied",
+			RunID:          runID,
+			ConversationID: conversationID,
+			Tool:           proposal.Tool,
+			ToolCallID:     proposal.ID,
+			RiskLevel:      decision.RiskLevel,
+			Payload: map[string]any{
+				"decision": decision,
+			},
+			CreatedAt: now,
+		})
 		return result, nil
 	}
 

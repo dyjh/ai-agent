@@ -1,17 +1,17 @@
 {
   "project": "local-agent",
-  "source": "promote-stageF-5",
-  "last_updated": "2026-04-24T23:45:00+08:00",
-  "overall_status": "post_mvp_full_agent_in_progress",
-  "current_task_id": "full-agent-memory-governance",
-  "current_task_title": "Phase F4: Memory Governance",
+  "source": "promote-stageF-9",
+  "last_updated": "2026-04-25T01:35:00+08:00",
+  "overall_status": "full_agent_foundation_completed",
+  "current_task_id": "post-full-agent-backlog",
+  "current_task_title": "Post-F7 Backlog",
   "summary": {
-    "headline": "MVP 主链路保持稳定，F1 代码能力、F2 运维能力和 F3 RAG 可靠性增强已完成，下一阶段进入长期记忆治理。",
+    "headline": "MVP 主链路保持稳定，F1 代码能力、F2 运维能力、F3 RAG 可靠性、F4 长期记忆治理、F5 安全策略/Secret Guard、F6 Eval/Replay 和 F7 Web UI/TUI 首版均已完成。",
     "progress": {
-      "completed": 19,
-      "in_progress": 1,
-      "pending": 3,
-      "total": 23
+      "completed": 23,
+      "in_progress": 0,
+      "pending": 1,
+      "total": 24
     },
     "verified": [
       "2026-04-23 已检查仓库结构，HTTP API / WebSocket / CLI / memory / kb / skills / mcp / tests 均已存在。",
@@ -32,7 +32,11 @@
       "2026-04-24 已完成 Phase F1-E 首轮硬化：新增 schema-driven CodePlan 持久化、fix loop 状态接口、审批后 apply_patch -> rerun tests、增强 unified diff parser/hash/rollback metadata、git.diff_summary / git.commit_message_proposal 和对应测试，并确认 go test ./... 通过。",
       "2026-04-24 继续完成 F1-E 硬化：code.propose_patch 支持 unified diff preview，fix loop 可携带 test/patch 状态并处理 approval rejected/max iterations，Planner 正确传递 CLI workspace hint，git.commit 增加 status/staged diff/message pre-check，并补充回归测试。",
       "2026-04-24 已完成 Phase F2：新增 HostProfile API/CLI、Local/SSH/Docker/K8s 结构化 Ops tools、Runbook plan/execute、Rollback Plan、Ops planner mapping、Swagger/OpenAPI 更新和 mock-based 回归测试，并确认 go test ./... 通过。",
-      "2026-04-24 已完成 Phase F3：新增 Knowledge Source registry、source sync 增量索引、Markdown/txt/json/html/PDF best-effort parser、hybrid retrieval/rerank/citations、kb.retrieve/kb.answer、RAG eval、API/CLI/Swagger/README 更新和回归测试，并确认 go test ./... 通过。"
+      "2026-04-24 已完成 Phase F3：新增 Knowledge Source registry、source sync 增量索引、Markdown/txt/json/html/PDF best-effort parser、hybrid retrieval/rerank/citations、kb.retrieve/kb.answer、RAG eval、API/CLI/Swagger/README 更新和回归测试，并确认 go test ./... 通过。",
+      "2026-04-25 已完成 Phase F4：新增 MemoryItem Markdown parse/render、candidate extractor、review queue、基础 conflict/merge、archive/restore、Sensitive Memory Guard、Memory API/CLI、ContextBuilder active-memory 接入和回归测试，并确认 go test ./... 通过。",
+      "2026-04-25 已完成 Phase F5：新增 policy profiles、统一 Secret Guard、Network Policy、Sensitive Data Flow Guard、Approval Explanation、RiskTrace、Security API/CLI、Swagger/OpenAPI 更新和回归测试，并确认 go test ./... 通过。",
+      "2026-04-25 已完成 Phase F6：新增 EvalCase YAML/JSON、safe-mode EvalRunner、chat/RAG/code/ops/safety golden tasks、event/behavior replay、Eval report、API/CLI、Swagger/OpenAPI 更新和回归测试，并确认 go test ./... 通过。",
+      "2026-04-25 已完成 Phase F7 首版：新增独立 ui/web React/Vite Web UI、ui/tui Go TUI、Chat/Run/Approval/Code/Memory/KB/Skill/MCP/Ops/Eval/Settings 页面入口、CORS/WS 本机 origin 支持、README/Makefile/task.json 更新，并确认 go test ./...、ui/tui go test ./...、ui/web npm test 和 npm run build 通过。"
     ],
     "unfinished_overview": [
       "当前 step loop 已覆盖本地单用户可恢复多步任务，但仍不是无限自动规划的通用 graph 平台。",
@@ -42,6 +46,9 @@
       "Code Workspace 已覆盖读/搜/项目检测、结构化 CodePlan、测试执行、失败解析、Git workflow summary、patch propose/validate/dry-run 和审批后 patch apply；自动修复循环已有有界状态接口和状态携带能力，但自动 patch 质量仍依赖 planner/model。",
       "Ops Capability 已覆盖本地/SSH/Docker/K8s 结构化排查、写操作审批、runbook 和 rollback plan；真实 SSH/Docker/K8s 集成测试仍需要显式环境 gate，部分 rollback 只能 best-effort。",
       "RAG Reliability 已覆盖 source、增量同步、hybrid retrieval、citation answer 和 eval；source registry/index job/eval case 当前仍为进程内管理，URL/PDF/Office/模型 rerank 仍需后续生产化增强。",
+      "Security Policy 已覆盖内置 profile、secret scan/redaction/block、network deny、approval explanation、risk trace 和 JSONL audit scan；secret detection 仍不是 100% 精确，network policy 需要未来新增网络工具继续显式接入。",
+      "Eval/Replay 已覆盖 safe-mode golden task、报告、event replay 和 behavior replay；mock executor 不能完全代表真实外部环境，LLM 非确定性和 integration eval 仍需后续增强。",
+      "Web UI/TUI 当前是本地单用户首版，不内置认证；Web UI 的 Code/Ops 执行动作通过对话工作流触发，不新增绕过审批链路的直通执行 API；diff UI 仍是 preview，不是完整交互式编辑器。",
       "更复杂的 graph/branch/parallel workflow 仍属于后续 backlog。"
     ]
   },
@@ -465,41 +472,138 @@
     {
       "id": "full-agent-memory-governance",
       "title": "Phase F4: Memory Governance",
-      "status": "in_progress",
+      "status": "completed",
+      "completed_items": [
+        "新增 MemoryItem / MemoryDocument / MemoryCandidate / MemoryReviewItem / MemoryConflict 结构，支持 Markdown item marker parse/render 和旧 Markdown 兼容解析。",
+        "新增 memory.extract_candidates，按长期偏好、项目事实、流程经验等启发式提取候选；敏感内容不进入候选。",
+        "新增 memory/review/*.json review queue，支持 candidate pending、approve apply、reject no-write，并在 approve 前再次执行 Sensitive Memory Guard。",
+        "新增 memory.detect_conflicts / memory.merge_candidates，使用 basic lexical similarity + scope/type/project metadata 检测 duplicate / contradiction 并给出保守 merge suggestion。",
+        "新增 archive / restore / expired 状态处理，ContextBuilder 默认只使用 active、未过期、非敏感 memory item。",
+        "增强 Markdown memory write / patch apply / reindex payload guard，避免 API key、token、password、private key、cookie/session、DSN 等敏感内容写入长期记忆或 Qdrant payload。",
+        "新增 memory.item_create / update / archive / restore / delete Tool executors，写操作继续通过 ToolRouter -> EffectInference -> PolicyEngine -> ApprovalCenter -> Executor。",
+        "新增 Memory CRUD API、Review API 和 CLI 子命令，并补充 planner 对“记住/忘记”类请求的治理工具映射。",
+        "补充 memory_governance 回归测试，覆盖 parse/render、extract、review approve/reject、conflict、archive/restore、ContextBuilder、API approval path 和 index payload guard，并确认 go test ./... 通过。"
+      ],
+      "remaining_items": [
+        "conflict detection 当前仍是 basic lexical / metadata，后续可接 vector similarity 或模型判定。",
+        "memory extraction 当前为启发式规则，后续可接 Eino/LLM extractor 并保留 review queue 和 sensitive guard。",
+        "review queue 当前落在 memory/review/*.json，后续可按本地单用户模式优化索引和分页，但仍不能把长期记忆正文转入 PostgreSQL。"
+      ],
       "deliverables": [
-        "Memory classification",
-        "Memory review/edit/delete",
-        "Sensitive memory write prevention"
+        "MemoryItem Markdown parse/render",
+        "Memory candidate extraction and review queue",
+        "Memory CRUD/review API and CLI",
+        "Conflict/merge, archive/restore, expiration filtering",
+        "Sensitive memory write and vector payload guard"
       ]
     },
     {
       "id": "full-agent-security-policy",
       "title": "Phase F5: Security Policy and Secret Guard",
-      "status": "pending",
+      "status": "completed",
+      "completed_items": [
+        "新增内置 Policy Profiles：default / strict / developer / ops / offline，并让 PolicyDecision 输出 policy_profile 和 RiskTrace。",
+        "新增统一 SecretGuard，支持常见 API key、bearer token、private key、password/secret/token assignment、cookie/session、cloud credential、DB DSN password 和 .env 风格内容检测、脱敏和 long-term storage block 判定。",
+        "将 JSONL、agent_events、WebSocket/API 响应、messages、run state、ToolResult、Memory 和 KB/Qdrant payload 写入路径接入统一脱敏；Memory/KB 长期存储遇到高风险 secret 会拒绝写入或索引。",
+        "新增 Network Policy，支持 deny metadata/private IP、domain allow/deny、写方法审批和最大下载大小限制；KB URL source 与 MCP HTTP endpoint 已接入 deny 校验。",
+        "扩展 ApprovalRecord，新增 ApprovalExplanation，包含 summary、why_needed、expected_effects、risk_level、affected_targets、rollback_plan 和 safety_notes，同时保持 approval.input_snapshot 原值执行语义。",
+        "新增 Security API 与 CLI：policy profiles、secret scan、network policy validate-url、audit report，并重新生成 Swagger/OpenAPI。",
+        "补充 F5 回归测试，覆盖 policy profiles、secret guard、network policy、approval explanation、sensitive storage block、audit/API redaction，并确认 go test ./... 通过。"
+      ],
+      "remaining_items": [
+        "Secret detection 不能保证 100% 准确，后续可继续扩展 allowlist 和更细粒度类型识别。",
+        "Network Policy 已覆盖 KB URL source 与 MCP HTTP endpoint，未来新增 webhook/email/general HTTP tools 时仍需显式接入。",
+        "Security Audit 初版基于 JSONL scan，复杂查询和长期归档可在后续继续增强；replay correlation 已在 F6 提供基础能力。"
+      ],
       "deliverables": [
-        "Secret guard",
-        "Policy explanations",
-        "Expanded command/resource analysis"
+        "Policy profiles and risk trace",
+        "Secret guard and sensitive data flow guard",
+        "Network policy",
+        "Approval explanations",
+        "Security API / CLI / Swagger",
+        "Security regression tests"
       ]
     },
     {
       "id": "full-agent-eval-replay",
       "title": "Phase F6: Eval and Replay",
-      "status": "pending",
+      "status": "completed",
+      "completed_items": [
+        "新增 internal/evals，定义 EvalCategory、EvalCase、EvalExpected、EvalForbidden、EvalRun、EvalResult、EvalReport、ReplayOptions 和 ReplayResult。",
+        "支持 YAML / JSON eval case 解析、目录结构 evals/cases/fixtures/runs/reports/replays、case CRUD 和读取时 Secret Guard 检查。",
+        "实现 safe-mode EvalRunner，复用 HeuristicPlanner、EffectInference、PolicyEngine 和 ApprovalCenter，执行器替换为 MockExecutor，默认不执行真实写操作。",
+        "实现 expected tools、tool sequence、approval required、citation required、expected sources、refusal expected、risk level、policy profile、forbidden tools/effects 和 secret leakage 断言。",
+        "新增 chat/RAG/code/ops/safety 默认 golden cases，覆盖 memory review path、KB citation、patch approval、本地 ops 只读和敏感 .env 读取审批。",
+        "实现 Eval report JSON/Markdown 输出，写入 evals/reports，并提供 run 汇总和 failure/security 摘要。",
+        "实现 Event Replay 和 Behavior Replay：event 模式只读取脱敏 JSONL，behavior 模式使用 mock ToolRouter 重新比较 tool sequence/approval。",
+        "新增 /v1/evals*、/v1/runs/{run_id}/replay、/v1/replays/{replay_id} API，补充 swag 注释并重新生成 Swagger/OpenAPI。",
+        "新增 agent eval、agent runs replay、agent replay get CLI 和 Makefile eval/eval-safety/eval-report regression gate。",
+        "补充 eval case parse、safe runner、Eval API、event/behavior replay 和 report 回归测试，并确认 go test ./... 通过。"
+      ],
+      "remaining_items": [
+        "当前 EvalRunner 默认使用 mock executor，不代表真实外部系统可用性；真实 Docker/K8s/SSH/Qdrant/LLM eval 需后续 env-gated integration matrix。",
+        "behavior replay 比较启发式 planner 的安全 mock 行为，原始 LLM 输出非确定时仍可能产生差异。",
+        "当前 report 是本地 JSON/Markdown 文件，复杂趋势分析、长期归档和 UI diff viewer 留给 F7/后续阶段。"
+      ],
       "deliverables": [
-        "Run replay",
-        "Golden task suites",
-        "Safety regression tests"
+        "EvalCase YAML/JSON and file-backed case registry",
+        "Safe-mode EvalRunner for chat/RAG/code/ops/safety",
+        "Event/behavior run replay",
+        "JSON/Markdown eval reports",
+        "Eval/Replay API、CLI、Swagger and regression tests"
       ]
     },
     {
       "id": "full-agent-ui-tui",
       "title": "Phase F7: Web UI / TUI",
-      "status": "pending",
+      "status": "completed",
+      "completed_items": [
+        "新增顶层 ui/ 目录，Web UI 和 TUI 与后端 internal 包隔离。",
+        "新增 ui/web React + TypeScript + Vite 工程，包含统一 API client、WebSocket client、基础 stores、路由和响应式工作台布局。",
+        "实现 Chat UI：会话列表、WebSocket streaming、HTTP fallback、当前 run 事件和 approval card。",
+        "实现 Run Timeline 与 Approval Center：pending approval 列表、risk filter、snapshot hash/input_snapshot 展示、approve/reject 调用。",
+        "实现 Code UI：通过对话工作流触发 code/git 能力，提供 unified diff preview、changed file/conflict/sensitive warning。",
+        "实现 Memory UI：memory item list/filter/create、review queue approve/reject、archive/restore 入口。",
+        "实现 Knowledge/RAG UI：KB health/list、source 添加、retrieve/answer、citation 展示和 KB disabled 状态输出。",
+        "实现 Skill/MCP UI：skill registry/detail/validate/run、MCP server/policy/refresh/test/call tool 入口，执行仍走 ToolRouter/Approval。",
+        "实现 Ops UI：host profile/runbook 列表、只读排查 workflow launcher、runbook plan/execute 和 rollback 输出展示入口。",
+        "实现 Eval/Replay UI：eval case/run/report、event replay 和 behavior replay 入口。",
+        "实现 Settings/Health/Security UI：/v1/health、policy profiles、network policy、audit、Swagger/OpenAPI 链接。",
+        "新增 ui/tui 独立 Go TUI，支持 chat、approval approve/reject、run timeline、memory search、KB answer、eval summary 和 diff preview。",
+        "新增本机 CORS middleware 和 WebSocket localhost/127.0.0.1 origin 支持，便于 Vite UI 访问后端。",
+        "新增根 Makefile ui-install/ui-dev/ui-build/ui-test/tui/tui-test 目标和 UI README。",
+        "补充 Web UI api client / ws reducer / approval helper / diff parser 测试，以及 TUI render / approval prompt / diff preview 测试。",
+        "确认 go test ./...、ui/tui go test ./...、ui/web npm test 和 ui/web npm run build 通过。"
+      ],
+      "remaining_items": [
+        "UI 当前不内置认证，默认只面向本地单用户部署。",
+        "Web UI 仍与 backend 分进程运行，后续可补 packaging/installers 或静态资源可选托管开关。",
+        "Code diff UI 当前是 preview，不是完整交互式 diff editor 或 conflict resolver。",
+        "Run graph 可视化仍是 timeline MVP，后续可补更丰富的 graph/branch/parallel workflow 展示。",
+        "TUI 是轻量终端体验，后续可接 Bubble Tea 等更完整 TUI 框架。",
+        "不做 real-time collaboration、多用户 RBAC 或云端 SaaS 化。"
+      ],
       "deliverables": [
         "Approval center UI",
         "Run timeline",
-        "Memory / KB / code / ops views"
+        "Memory / KB / code / ops views",
+        "Eval / Replay / Settings views",
+        "Standalone TUI"
+      ]
+    },
+    {
+      "id": "post-full-agent-backlog",
+      "title": "Post-F7 Backlog",
+      "status": "pending",
+      "deliverables": [
+        "Packaging and installers",
+        "Richer graph visualization",
+        "Advanced diff editor / conflict resolution",
+        "Optional auth for non-local deployments"
+      ],
+      "remaining_items": [
+        "保持单用户本地优先，不引入租户、多用户 RBAC 或 cloud-first 假设。",
+        "后续新增任何执行能力仍必须走 ToolRouter / EffectInference / PolicyEngine / ApprovalCenter / Executor / Event Log。"
       ]
     }
   ],
@@ -598,6 +702,26 @@
       "at": "2026-04-24T23:45:00+08:00",
       "task_id": "full-agent-rag-reliability",
       "summary": "完成 F3：Knowledge Sources、source sync 增量索引、parser pipeline、hybrid retrieval/rerank/citations、kb.answer、RAG eval、Planner/API/CLI/Swagger/README 更新和回归测试。"
+    },
+    {
+      "at": "2026-04-25T00:28:00+08:00",
+      "task_id": "full-agent-memory-governance",
+      "summary": "完成 F4：MemoryItem Markdown parse/render、候选提取、review queue、基础冲突检测、archive/restore、Sensitive Memory Guard、Memory API/CLI、ContextBuilder active memory 接入和回归测试。"
+    },
+    {
+      "at": "2026-04-25T00:50:00+08:00",
+      "task_id": "full-agent-security-policy",
+      "summary": "完成 F5：Policy Profiles、统一 Secret Guard、Network Policy、Sensitive Data Flow Guard、Approval Explanation、RiskTrace、Security API/CLI、Swagger/OpenAPI 更新和 F5 回归测试，当前任务切换到 F6 Eval/Replay。"
+    },
+    {
+      "at": "2026-04-25T01:10:00+08:00",
+      "task_id": "full-agent-eval-replay",
+      "summary": "完成 F6：EvalCase YAML/JSON、safe-mode EvalRunner、chat/RAG/code/ops/safety golden tasks、event/behavior replay、JSON/Markdown report、API/CLI/Swagger、Makefile regression gate 和回归测试，当前任务切换到 F7 Web UI/TUI。"
+    },
+    {
+      "at": "2026-04-25T01:35:00+08:00",
+      "task_id": "full-agent-ui-tui",
+      "summary": "完成 F7 首版：新增独立 ui/web React/Vite Web UI、ui/tui Go TUI、Chat/Run/Approval/Code/Memory/KB/Skill/MCP/Ops/Eval/Settings 页面入口、本机 CORS/WS origin 支持、Makefile/README/task.json 收口，并确认后端、Web UI 和 TUI 测试构建通过。"
     }
   ]
 }

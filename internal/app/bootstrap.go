@@ -13,6 +13,7 @@ import (
 	"local-agent/internal/db"
 	"local-agent/internal/db/repo"
 	"local-agent/internal/einoapp"
+	"local-agent/internal/evals"
 	"local-agent/internal/events"
 	toolscore "local-agent/internal/tools"
 	"local-agent/internal/tools/code"
@@ -40,6 +41,7 @@ type Bootstrap struct {
 	Skills    *skills.Manager
 	MCP       *mcp.Manager
 	Ops       *ops.Manager
+	Evals     *evals.Manager
 }
 
 // NewBootstrap wires the base application dependencies.
@@ -54,6 +56,8 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 	_ = os.MkdirAll(skillsRoot, 0o755)
 	runbookRoot := filepath.Join(filepath.Dir(cfg.Memory.RootDir), "runbooks")
 	_ = os.MkdirAll(runbookRoot, 0o755)
+	evalsRoot := filepath.Join(filepath.Dir(cfg.Memory.RootDir), "evals")
+	_ = os.MkdirAll(evalsRoot, 0o755)
 
 	store := repo.NewMemoryStore()
 	if cfg.Database.URL != "" {
@@ -65,7 +69,10 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 		}
 	}
 
-	embedder := kb.FakeEmbedder{Dimensions: cfg.Vector.EmbeddingDimension}
+	embedder, err := kb.NewEmbedder(cfg.Embeddings, cfg.Vector.EmbeddingDimension)
+	if err != nil {
+		return nil, err
+	}
 	index, err := kb.NewVectorIndexFactory(logger).NewVectorIndex(ctx, cfg, embedder)
 	if err != nil {
 		return nil, err
@@ -90,9 +97,11 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 			return nil, fmt.Errorf("knowledge base qdrant unavailable: %w", err)
 		}
 		knowledgeService = kb.NewService(kbIndex, embedder, cfg.CollectionName("kb"))
+		knowledgeService.SetNetworkPolicy(cfg.Policy.Network)
 	}
 	skillsManager := skills.NewManager(skillsRoot)
 	mcpManager := mcp.NewManager()
+	mcpManager.SetNetworkPolicy(cfg.Policy.Network)
 	if err := mcpManager.LoadConfig(resolveConfigPath("config/mcp.servers.yaml"), resolveConfigPath("config/mcp.tool-policies.yaml")); err != nil {
 		return nil, err
 	}
@@ -131,6 +140,10 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 		},
 		Router: router,
 	}
+	evalsManager := evals.NewManager(evalsRoot, cfg.Events.JSONLRoot, registry, cfg.Policy, runtime)
+	if err := evalsManager.EnsureLayout(); err != nil {
+		return nil, err
+	}
 
 	return &Bootstrap{
 		Config:    cfg,
@@ -146,6 +159,7 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 		Skills:    skillsManager,
 		MCP:       mcpManager,
 		Ops:       opsManager,
+		Evals:     evalsManager,
 	}, nil
 }
 
@@ -289,22 +303,7 @@ func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb
 
 	registerGitTools(registry, cfg)
 	registerOpsTools(registry, cfg, opsManager)
-	registry.Register(core.ToolSpec{
-		ID:             "memory.search",
-		Provider:       "local",
-		Name:           "memory.search",
-		Description:    "Search Markdown memory files",
-		InputSchema:    map[string]any{"query": "string", "limit": "number"},
-		DefaultEffects: []string{"read", "memory.read"},
-	}, &memstore.SearchExecutor{Store: memoryStore})
-	registry.Register(core.ToolSpec{
-		ID:             "memory.patch",
-		Provider:       "local",
-		Name:           "memory.patch",
-		Description:    "Create a pending Markdown memory patch",
-		InputSchema:    map[string]any{"path": "string", "body": "string"},
-		DefaultEffects: []string{"fs.write", "memory.modify"},
-	}, &memstore.PatchExecutor{Store: memoryStore})
+	registerMemoryTools(registry, memoryStore)
 	if cfg.KB.Enabled && knowledge != nil {
 		registry.Register(core.ToolSpec{
 			ID:          "kb.search",
@@ -401,6 +400,69 @@ func registerTools(cfg config.Config, memoryStore *memstore.Store, knowledge *kb
 	}, &mcp.CallToolExecutor{Client: mcpManager})
 
 	return registry
+}
+
+func registerMemoryTools(registry *toolscore.Registry, memoryStore *memstore.Store) {
+	registry.Register(core.ToolSpec{
+		ID:             "memory.search",
+		Provider:       "local",
+		Name:           "memory.search",
+		Description:    "Search Markdown memory files",
+		InputSchema:    map[string]any{"query": "string", "limit": "number"},
+		DefaultEffects: []string{"read", "memory.read"},
+	}, &memstore.SearchExecutor{Store: memoryStore})
+	registry.Register(core.ToolSpec{
+		ID:             "memory.patch",
+		Provider:       "local",
+		Name:           "memory.patch",
+		Description:    "Create a pending Markdown memory patch",
+		InputSchema:    map[string]any{"path": "string", "body": "string"},
+		DefaultEffects: []string{"fs.write", "memory.modify"},
+	}, &memstore.PatchExecutor{Store: memoryStore})
+	registry.Register(core.ToolSpec{
+		ID:             "memory.extract_candidates",
+		Provider:       "local",
+		Name:           "memory.extract_candidates",
+		Description:    "Extract candidate long-term memories without directly committing them",
+		InputSchema:    map[string]any{"conversation_id": "string", "message_id": "string", "text": "string", "project_key": "string", "queue": "boolean"},
+		DefaultEffects: []string{"memory.review"},
+	}, &memstore.ExtractCandidatesExecutor{Store: memoryStore})
+	registry.Register(core.ToolSpec{
+		ID:             "memory.detect_conflicts",
+		Provider:       "local",
+		Name:           "memory.detect_conflicts",
+		Description:    "Detect duplicate or conflicting memory candidates",
+		InputSchema:    map[string]any{"candidate": "object"},
+		DefaultEffects: []string{"read", "memory.read"},
+	}, &memstore.DetectConflictsExecutor{Store: memoryStore})
+	registry.Register(core.ToolSpec{
+		ID:             "memory.merge_candidates",
+		Provider:       "local",
+		Name:           "memory.merge_candidates",
+		Description:    "Suggest memory candidate merge behavior without writing",
+		InputSchema:    map[string]any{"candidate": "object"},
+		DefaultEffects: []string{"read", "memory.read"},
+	}, &memstore.MergeCandidatesExecutor{Store: memoryStore})
+	for _, spec := range []struct {
+		name        string
+		description string
+		executor    toolscore.Executor
+	}{
+		{name: "memory.item_create", description: "Create a Markdown-backed memory item after approval", executor: &memstore.ItemCreateExecutor{Store: memoryStore}},
+		{name: "memory.item_update", description: "Update a Markdown-backed memory item after approval", executor: &memstore.ItemUpdateExecutor{Store: memoryStore}},
+		{name: "memory.item_archive", description: "Archive a Markdown-backed memory item after approval", executor: &memstore.ItemArchiveExecutor{Store: memoryStore}},
+		{name: "memory.item_restore", description: "Restore a Markdown-backed memory item after approval", executor: &memstore.ItemRestoreExecutor{Store: memoryStore}},
+		{name: "memory.item_delete", description: "Archive or force-delete a Markdown-backed memory item after approval", executor: &memstore.ItemDeleteExecutor{Store: memoryStore}},
+	} {
+		registry.Register(core.ToolSpec{
+			ID:             spec.name,
+			Provider:       "local",
+			Name:           spec.name,
+			Description:    spec.description,
+			InputSchema:    map[string]any{"id": "string", "text": "string", "scope": "string", "type": "string", "project_key": "string", "tags": "array", "fields": "object", "force": "boolean"},
+			DefaultEffects: []string{"fs.write", "memory.modify"},
+		}, spec.executor)
+	}
 }
 
 func registerGitTools(registry *toolscore.Registry, cfg config.Config) {

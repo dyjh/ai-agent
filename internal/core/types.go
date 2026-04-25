@@ -40,6 +40,19 @@ type EffectInferenceResult struct {
 	ApprovalRequired bool     `json:"approval_required"`
 	Confidence       float64  `json:"confidence"`
 	ReasonSummary    string   `json:"reason_summary"`
+	Signals          []string `json:"signals,omitempty"`
+}
+
+// RiskTrace explains how a policy decision was reached.
+type RiskTrace struct {
+	ToolID        string   `json:"tool_id"`
+	Effects       []string `json:"effects"`
+	RiskLevel     string   `json:"risk_level"`
+	Confidence    float64  `json:"confidence"`
+	Signals       []string `json:"signals"`
+	PolicyProfile string   `json:"policy_profile"`
+	Decision      string   `json:"decision"`
+	Reason        string   `json:"reason"`
 }
 
 // PolicyDecision controls whether execution is automatic or gated by approval.
@@ -49,6 +62,19 @@ type PolicyDecision struct {
 	RiskLevel        string         `json:"risk_level"`
 	Reason           string         `json:"reason"`
 	ApprovalPayload  map[string]any `json:"approval_payload,omitempty"`
+	PolicyProfile    string         `json:"policy_profile,omitempty"`
+	RiskTrace        *RiskTrace     `json:"risk_trace,omitempty"`
+}
+
+// ApprovalExplanation is a redacted, user-facing explanation for an approval request.
+type ApprovalExplanation struct {
+	Summary         string         `json:"summary"`
+	WhyNeeded       string         `json:"why_needed"`
+	ExpectedEffects []string       `json:"expected_effects"`
+	RiskLevel       string         `json:"risk_level"`
+	AffectedTargets []string       `json:"affected_targets,omitempty"`
+	RollbackPlan    map[string]any `json:"rollback_plan,omitempty"`
+	SafetyNotes     []string       `json:"safety_notes,omitempty"`
 }
 
 // ApprovalStatus tracks approval lifecycle.
@@ -71,6 +97,7 @@ type ApprovalRecord struct {
 	InputSnapshot  map[string]any        `json:"input_snapshot"`
 	SnapshotHash   string                `json:"snapshot_hash"`
 	Summary        string                `json:"summary"`
+	Explanation    *ApprovalExplanation  `json:"explanation,omitempty"`
 	Status         ApprovalStatus        `json:"status"`
 	Reason         string                `json:"reason,omitempty"`
 	CreatedAt      time.Time             `json:"created_at"`

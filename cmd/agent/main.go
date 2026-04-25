@@ -35,6 +35,9 @@ func main() {
 	root.AddCommand(codeCommand(&serverURL))
 	root.AddCommand(gitCommand(&serverURL))
 	root.AddCommand(opsCommand(&serverURL))
+	root.AddCommand(securityCommand(&serverURL))
+	root.AddCommand(evalCommand(&serverURL))
+	root.AddCommand(replayCommand(&serverURL))
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
@@ -169,6 +172,159 @@ func memoryCommand(serverURL *string) *cobra.Command {
 		Short: "Reindex memory into the vector index",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return printJSONRequest(http.MethodPost, *serverURL+"/v1/memory/reindex", map[string]any{})
+		},
+	})
+	cmd.AddCommand(memoryItemsCommand(serverURL))
+	cmd.AddCommand(memoryReviewCommand(serverURL))
+	return cmd
+}
+
+func memoryItemsCommand(serverURL *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "items",
+		Short: "Manage governed memory items",
+	}
+	var scope, itemType, projectKey, status, tag, query string
+	var includeArchived bool
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List memory items",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			params := make([]string, 0, 7)
+			addParam := func(key, value string) {
+				if value != "" {
+					params = append(params, key+"="+value)
+				}
+			}
+			addParam("scope", scope)
+			addParam("type", itemType)
+			addParam("project_key", projectKey)
+			addParam("status", status)
+			addParam("tag", tag)
+			addParam("query", query)
+			if includeArchived {
+				params = append(params, "include_archived=true")
+			}
+			url := *serverURL + "/v1/memory/items"
+			if len(params) > 0 {
+				url += "?" + strings.Join(params, "&")
+			}
+			return printRequest(http.MethodGet, url, nil)
+		},
+	}
+	listCmd.Flags().StringVar(&scope, "scope", "", "memory scope")
+	listCmd.Flags().StringVar(&itemType, "type", "", "memory type")
+	listCmd.Flags().StringVar(&projectKey, "project", "", "project key")
+	listCmd.Flags().StringVar(&status, "status", "", "item status")
+	listCmd.Flags().StringVar(&tag, "tag", "", "tag filter")
+	listCmd.Flags().StringVar(&query, "query", "", "text query")
+	listCmd.Flags().BoolVar(&includeArchived, "include-archived", false, "include archived/rejected/expired items")
+	cmd.AddCommand(listCmd)
+	cmd.AddCommand(&cobra.Command{
+		Use:   "get [item_id]",
+		Short: "Get one memory item",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printRequest(http.MethodGet, fmt.Sprintf("%s/v1/memory/items/%s", *serverURL, args[0]), nil)
+		},
+	})
+	var createScope, createType, createProject, createPath string
+	var createTags []string
+	createCmd := &cobra.Command{
+		Use:   "create [text]",
+		Short: "Create a memory item through approval",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			body := map[string]any{
+				"text":        strings.Join(args, " "),
+				"scope":       createScope,
+				"type":        createType,
+				"project_key": createProject,
+				"tags":        createTags,
+				"path":        createPath,
+			}
+			return printJSONRequest(http.MethodPost, *serverURL+"/v1/memory/items", body)
+		},
+	}
+	createCmd.Flags().StringVar(&createScope, "scope", "user", "memory scope")
+	createCmd.Flags().StringVar(&createType, "type", "preference", "memory type")
+	createCmd.Flags().StringVar(&createProject, "project", "", "project key")
+	createCmd.Flags().StringSliceVar(&createTags, "tag", nil, "memory tag")
+	createCmd.Flags().StringVar(&createPath, "path", "", "target markdown path")
+	cmd.AddCommand(createCmd)
+	cmd.AddCommand(&cobra.Command{
+		Use:   "update [item_id] [text]",
+		Short: "Update memory item text through approval",
+		Args:  cobra.MinimumNArgs(2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printJSONRequest(http.MethodPatch, fmt.Sprintf("%s/v1/memory/items/%s", *serverURL, args[0]), map[string]any{
+				"text": strings.Join(args[1:], " "),
+			})
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "archive [item_id]",
+		Short: "Archive a memory item through approval",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/memory/items/%s/archive", *serverURL, args[0]), map[string]any{})
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "restore [item_id]",
+		Short: "Restore a memory item through approval",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/memory/items/%s/restore", *serverURL, args[0]), map[string]any{})
+		},
+	})
+	return cmd
+}
+
+func memoryReviewCommand(serverURL *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "review",
+		Short: "Manage memory review queue",
+	}
+	cmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List review items",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return printRequest(http.MethodGet, *serverURL+"/v1/memory/review", nil)
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "show [review_id]",
+		Short: "Show one review item",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printRequest(http.MethodGet, fmt.Sprintf("%s/v1/memory/review/%s", *serverURL, args[0]), nil)
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "extract [text]",
+		Short: "Extract candidates into review queue",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printJSONRequest(http.MethodPost, *serverURL+"/v1/memory/review/extract", map[string]any{
+				"text": strings.Join(args, " "),
+			})
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "approve [review_id]",
+		Short: "Approve and apply a review item",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/memory/review/%s/approve", *serverURL, args[0]), map[string]any{})
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "reject [review_id]",
+		Short: "Reject a review item",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/memory/review/%s/reject", *serverURL, args[0]), map[string]any{})
 		},
 	})
 	return cmd
@@ -529,6 +685,23 @@ func runsCommand(serverURL *string) *cobra.Command {
 			return printRequest(http.MethodGet, fmt.Sprintf("%s/v1/runs/%s/steps", *serverURL, args[0]), nil)
 		},
 	})
+	replayCmd := &cobra.Command{
+		Use:   "replay [run_id]",
+		Short: "Replay a workflow run in safe mode",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			mode, _ := c.Flags().GetString("mode")
+			return printJSONRequest(http.MethodPost, fmt.Sprintf("%s/v1/runs/%s/replay", *serverURL, args[0]), map[string]any{
+				"mode":               mode,
+				"use_mock_tools":     true,
+				"redact_secrets":     true,
+				"compare_tool_calls": true,
+				"compare_approvals":  true,
+			})
+		},
+	}
+	replayCmd.Flags().String("mode", "event", "replay mode: event or behavior")
+	cmd.AddCommand(replayCmd)
 	resumeCmd := &cobra.Command{
 		Use:   "resume [run_id]",
 		Short: "Resume a paused run",
@@ -894,6 +1067,223 @@ func opsCommand(serverURL *string) *cobra.Command {
 		},
 	})
 	cmd.AddCommand(runbooksCmd)
+	return cmd
+}
+
+func evalCommand(serverURL *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "eval",
+		Short: "Run generic safe-mode eval suites",
+	}
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List eval cases",
+		RunE: func(c *cobra.Command, _ []string) error {
+			category, _ := c.Flags().GetString("category")
+			tag, _ := c.Flags().GetString("tag")
+			url := *serverURL + "/v1/evals"
+			params := []string{}
+			if category != "" {
+				params = append(params, "category="+category)
+			}
+			if tag != "" {
+				params = append(params, "tag="+tag)
+			}
+			if len(params) > 0 {
+				url += "?" + strings.Join(params, "&")
+			}
+			return printRequest(http.MethodGet, url, nil)
+		},
+	}
+	listCmd.Flags().String("category", "", "eval category")
+	listCmd.Flags().String("tag", "", "tag filter")
+	cmd.AddCommand(listCmd)
+	cmd.AddCommand(&cobra.Command{
+		Use:   "show [case_id]",
+		Short: "Show one eval case",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printRequest(http.MethodGet, fmt.Sprintf("%s/v1/evals/%s", *serverURL, args[0]), nil)
+		},
+	})
+	runCmd := &cobra.Command{
+		Use:   "run",
+		Short: "Run eval cases with mock tools",
+		RunE: func(c *cobra.Command, _ []string) error {
+			category, _ := c.Flags().GetString("category")
+			tag, _ := c.Flags().GetString("tag")
+			approvalMode, _ := c.Flags().GetString("approval-mode")
+			body := map[string]any{
+				"category":      category,
+				"tag":           tag,
+				"approval_mode": approvalMode,
+			}
+			respBody, err := doJSONRequest(http.MethodPost, *serverURL+"/v1/evals/run", body)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(os.Stdout, string(respBody))
+			var payload struct {
+				Status string `json:"status"`
+				Failed int    `json:"failed"`
+				Errors int    `json:"errors"`
+			}
+			if err := json.Unmarshal(respBody, &payload); err == nil && category == "safety" && (payload.Failed > 0 || payload.Errors > 0 || payload.Status == "failed" || payload.Status == "error") {
+				return fmt.Errorf("safety eval failed")
+			}
+			return nil
+		},
+	}
+	runCmd.Flags().String("category", "", "eval category")
+	runCmd.Flags().String("tag", "", "tag filter")
+	runCmd.Flags().String("approval-mode", "reject_all_writes", "approval simulation mode")
+	cmd.AddCommand(runCmd)
+	reportCmd := &cobra.Command{
+		Use:   "report [run_id]",
+		Short: "Read an eval report; defaults to latest",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			runID := "latest"
+			if len(args) > 0 {
+				runID = args[0]
+			}
+			format, _ := c.Flags().GetString("format")
+			url := fmt.Sprintf("%s/v1/evals/runs/%s/report", *serverURL, runID)
+			if format != "" {
+				url += "?format=" + format
+			}
+			return printRequest(http.MethodGet, url, nil)
+		},
+	}
+	reportCmd.Flags().String("format", "json", "report format: json or markdown")
+	cmd.AddCommand(reportCmd)
+	return cmd
+}
+
+func replayCommand(serverURL *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "replay",
+		Short: "Inspect saved replay results",
+	}
+	cmd.AddCommand(&cobra.Command{
+		Use:   "get [replay_id]",
+		Short: "Get one replay result",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printRequest(http.MethodGet, fmt.Sprintf("%s/v1/replays/%s", *serverURL, args[0]), nil)
+		},
+	})
+	return cmd
+}
+
+func securityCommand(serverURL *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "security",
+		Short: "Inspect security policy, secret guard, network policy and audit logs",
+	}
+	policiesCmd := &cobra.Command{
+		Use:   "policies",
+		Short: "Inspect policy profiles",
+	}
+	policiesCmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List policy profiles",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return printRequest(http.MethodGet, *serverURL+"/v1/security/policy-profiles", nil)
+		},
+	})
+	policiesCmd.AddCommand(&cobra.Command{
+		Use:   "show [name]",
+		Short: "Show one policy profile",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return printRequest(http.MethodGet, fmt.Sprintf("%s/v1/security/policy-profiles/%s", *serverURL, args[0]), nil)
+		},
+	})
+	cmd.AddCommand(policiesCmd)
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "secret-scan [file]",
+		Short: "Scan a local file for secret-like values",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			data, err := os.ReadFile(args[0])
+			if err != nil {
+				return err
+			}
+			return printJSONRequest(http.MethodPost, *serverURL+"/v1/security/secret-scan", map[string]any{
+				"text": string(data),
+			})
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "secret-scan-text",
+		Short: "Scan stdin for secret-like values",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			data, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				return err
+			}
+			return printJSONRequest(http.MethodPost, *serverURL+"/v1/security/secret-scan", map[string]any{
+				"text": string(data),
+			})
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "network-policy",
+		Short: "Show network policy",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return printRequest(http.MethodGet, *serverURL+"/v1/security/network-policy", nil)
+		},
+	})
+	validateURLCmd := &cobra.Command{
+		Use:   "validate-url [url]",
+		Short: "Validate a URL against network policy",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			method, _ := c.Flags().GetString("method")
+			maxBytes, _ := c.Flags().GetInt64("max-download-bytes")
+			return printJSONRequest(http.MethodPost, *serverURL+"/v1/security/network-policy/validate-url", map[string]any{
+				"url":                args[0],
+				"method":             method,
+				"max_download_bytes": maxBytes,
+			})
+		},
+	}
+	validateURLCmd.Flags().String("method", "GET", "HTTP method")
+	validateURLCmd.Flags().Int64("max-download-bytes", 0, "requested max download bytes")
+	cmd.AddCommand(validateURLCmd)
+
+	auditCmd := &cobra.Command{
+		Use:   "audit",
+		Short: "Read redacted security audit events",
+		RunE: func(c *cobra.Command, _ []string) error {
+			limit, _ := c.Flags().GetInt("limit")
+			eventType, _ := c.Flags().GetString("type")
+			url := fmt.Sprintf("%s/v1/security/audit?limit=%d", *serverURL, limit)
+			if eventType != "" {
+				url += "&type=" + eventType
+			}
+			return printRequest(http.MethodGet, url, nil)
+		},
+	}
+	auditCmd.PersistentFlags().Int("limit", 100, "max events")
+	auditCmd.PersistentFlags().String("type", "", "event type filter")
+	auditCmd.AddCommand(&cobra.Command{
+		Use:   "run [run_id]",
+		Short: "Read redacted security audit events for one run",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			limit, _ := c.Flags().GetInt("limit")
+			eventType, _ := c.Flags().GetString("type")
+			url := fmt.Sprintf("%s/v1/security/audit/runs/%s?limit=%d", *serverURL, args[0], limit)
+			if eventType != "" {
+				url += "&type=" + eventType
+			}
+			return printRequest(http.MethodGet, url, nil)
+		},
+	})
+	cmd.AddCommand(auditCmd)
 	return cmd
 }
 

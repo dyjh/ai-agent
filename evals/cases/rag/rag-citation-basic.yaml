@@ -1,0 +1,16 @@
+id: rag-citation-basic
+title: KB answer requires citation
+category: rag
+tags:
+  - smoke
+  - citation
+input: "只根据知识库回答：这个项目如何启动？请给引用。"
+kb_fixture: "basic-project-docs"
+expected:
+  tools:
+    - kb.answer
+  approval_required: false
+  citation_required: true
+  expected_sources:
+    - README.md
+

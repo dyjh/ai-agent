@@ -303,6 +303,391 @@
                 }
             }
         },
+        "/v1/evals": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Eval"
+                ],
+                "summary": "List eval cases",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Eval category",
+                        "name": "category",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Tag filter",
+                        "name": "tag",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_evals.EvalCaseListResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Eval"
+                ],
+                "summary": "Create eval case",
+                "parameters": [
+                    {
+                        "description": "Eval case",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_evals.EvalCase"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_evals.EvalCase"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/evals/run": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Eval"
+                ],
+                "summary": "Run eval cases in safe mode",
+                "parameters": [
+                    {
+                        "description": "Eval run selection",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_evals.EvalRunRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_evals.EvalRun"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/evals/runs": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Eval"
+                ],
+                "summary": "List eval runs",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Max runs to return",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_evals.EvalRunListResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/evals/runs/{run_id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Eval"
+                ],
+                "summary": "Get eval run",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Eval run ID or latest",
+                        "name": "run_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_evals.EvalRun"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/evals/runs/{run_id}/report": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Eval"
+                ],
+                "summary": "Get eval report",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Eval run ID or latest",
+                        "name": "run_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "json or markdown",
+                        "name": "format",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_evals.EvalReport"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/evals/{case_id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Eval"
+                ],
+                "summary": "Get eval case",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Eval case ID",
+                        "name": "case_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_evals.EvalCase"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Eval"
+                ],
+                "summary": "Delete eval case",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Eval case ID",
+                        "name": "case_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.StatusResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Eval"
+                ],
+                "summary": "Update eval case",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Eval case ID",
+                        "name": "case_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Eval case",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_evals.EvalCase"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_evals.EvalCase"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/health": {
             "get": {
                 "produces": [
@@ -1380,6 +1765,332 @@
                 }
             }
         },
+        "/v1/memory/items": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Memory"
+                ],
+                "summary": "List memory items",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Memory scope",
+                        "name": "scope",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Memory type",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Project key",
+                        "name": "project_key",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Item status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Tag",
+                        "name": "tag",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Text query",
+                        "name": "query",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include archived/rejected/expired items",
+                        "name": "include_archived",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum items",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.MemoryItemListResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Memory"
+                ],
+                "summary": "Create memory item through ToolRouter",
+                "parameters": [
+                    {
+                        "description": "Memory item payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.MemoryItemCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ToolRouteResponse"
+                        }
+                    },
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ToolRouteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/memory/items/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Memory"
+                ],
+                "summary": "Get memory item",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Memory item ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_memory.MemoryItem"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Memory"
+                ],
+                "summary": "Archive or force-delete memory item through ToolRouter",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Memory item ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Physically remove item block",
+                        "name": "force",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ToolRouteResponse"
+                        }
+                    },
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ToolRouteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Memory"
+                ],
+                "summary": "Update memory item through ToolRouter",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Memory item ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Memory item update",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.MemoryItemUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ToolRouteResponse"
+                        }
+                    },
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ToolRouteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/memory/items/{id}/archive": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Memory"
+                ],
+                "summary": "Archive memory item through ToolRouter",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Memory item ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ToolRouteResponse"
+                        }
+                    },
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ToolRouteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/memory/items/{id}/restore": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Memory"
+                ],
+                "summary": "Restore memory item through ToolRouter",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Memory item ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ToolRouteResponse"
+                        }
+                    },
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ToolRouteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/memory/patches": {
             "post": {
                 "consumes": [
@@ -1440,6 +2151,208 @@
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/memory/review": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Memory"
+                ],
+                "summary": "List memory review queue",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Review status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum items",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.MemoryReviewListResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/memory/review/extract": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Memory"
+                ],
+                "summary": "Extract memory candidates into review queue",
+                "parameters": [
+                    {
+                        "description": "Extraction payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.MemoryExtractReviewRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.MemoryReviewListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/memory/review/{review_id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Memory"
+                ],
+                "summary": "Get memory review item",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Review ID",
+                        "name": "review_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_memory.MemoryReviewItem"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/memory/review/{review_id}/approve": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Memory"
+                ],
+                "summary": "Approve memory review item and apply it",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Review ID",
+                        "name": "review_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Decision note",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.MemoryReviewDecisionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_memory.MemoryReviewItem"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/memory/review/{review_id}/reject": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Memory"
+                ],
+                "summary": "Reject memory review item",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Review ID",
+                        "name": "review_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Decision note",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.MemoryReviewDecisionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_tools_memory.MemoryReviewItem"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
                         }
@@ -1993,6 +2906,46 @@
                 }
             }
         },
+        "/v1/replays/{replay_id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Replay"
+                ],
+                "summary": "Get replay result",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Replay ID",
+                        "name": "replay_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_evals.ReplayResult"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/runs": {
             "get": {
                 "produces": [
@@ -2121,6 +3074,57 @@
                 }
             }
         },
+        "/v1/runs/{run_id}/replay": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Replay"
+                ],
+                "summary": "Replay workflow run in safe mode",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Workflow run ID",
+                        "name": "run_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Replay options",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_evals.ReplayOptions"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_evals.ReplayResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/runs/{run_id}/resume": {
             "post": {
                 "consumes": [
@@ -2214,6 +3218,280 @@
                         "description": "Service Unavailable",
                         "schema": {
                             "$ref": "#/definitions/internal_api_handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/security/audit": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Security"
+                ],
+                "summary": "Read security audit report",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event type filter",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Max events",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.SecurityAuditReport"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/security/audit/runs/{run_id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Security"
+                ],
+                "summary": "Read security audit report for a run",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Run ID",
+                        "name": "run_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Event type filter",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Max events",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.SecurityAuditReport"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/security/network-policy": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Security"
+                ],
+                "summary": "Get network policy",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_config.NetworkPolicy"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/security/network-policy/validate-url": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Security"
+                ],
+                "summary": "Validate URL against network policy",
+                "parameters": [
+                    {
+                        "description": "URL validation payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.NetworkValidateURLRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_security.NetworkPolicyDecision"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/security/policy-profiles": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Security"
+                ],
+                "summary": "List policy profiles",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.PolicyProfileListResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/security/policy-profiles/validate": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Security"
+                ],
+                "summary": "Validate a policy profile",
+                "parameters": [
+                    {
+                        "description": "Policy profile payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_config.PolicyProfile"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.PolicyProfileValidateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.PolicyProfileValidateResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/security/policy-profiles/{name}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Security"
+                ],
+                "summary": "Get policy profile",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Policy profile name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_config.PolicyProfile"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/security/secret-scan": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Security"
+                ],
+                "summary": "Scan text or payload for secrets",
+                "parameters": [
+                    {
+                        "description": "Secret scan payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.SecretScanRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/local-agent_internal_security.SecretScanResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_handlers.LegacyErrorResponse"
                         }
                     }
                 }
@@ -2802,7 +4080,15 @@
                     "type": "object",
                     "additionalProperties": {}
                 },
+                "embeddings": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
                 "knowledge_base": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "llm": {
                     "type": "object",
                     "additionalProperties": {}
                 },
@@ -3029,6 +4315,23 @@
                 }
             }
         },
+        "internal_api_handlers.MemoryExtractReviewRequest": {
+            "type": "object",
+            "properties": {
+                "conversation_id": {
+                    "type": "string"
+                },
+                "message_id": {
+                    "type": "string"
+                },
+                "project_key": {
+                    "type": "string"
+                },
+                "text": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_api_handlers.MemoryFileListResponse": {
             "type": "object",
             "properties": {
@@ -3051,6 +4354,135 @@
                 }
             }
         },
+        "internal_api_handlers.MemoryItemCreateRequest": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "number"
+                },
+                "decay_policy": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "importance": {
+                    "type": "number"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "path": {
+                    "type": "string"
+                },
+                "project_key": {
+                    "type": "string"
+                },
+                "scope": {
+                    "$ref": "#/definitions/local-agent_internal_tools_memory.MemoryScope"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "source_message_id": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "text": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/local-agent_internal_tools_memory.MemoryType"
+                }
+            }
+        },
+        "internal_api_handlers.MemoryItemListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_tools_memory.MemoryItem"
+                    }
+                }
+            }
+        },
+        "internal_api_handlers.MemoryItemUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "clear_expires_at": {
+                    "type": "boolean"
+                },
+                "confidence": {
+                    "type": "number"
+                },
+                "decay_policy": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "importance": {
+                    "type": "number"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "metadata_set": {
+                    "type": "boolean"
+                },
+                "project_key": {
+                    "type": "string"
+                },
+                "scope": {
+                    "$ref": "#/definitions/local-agent_internal_tools_memory.MemoryScope"
+                },
+                "status": {
+                    "$ref": "#/definitions/local-agent_internal_tools_memory.MemoryItemStatus"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tags_set": {
+                    "type": "boolean"
+                },
+                "text": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/local-agent_internal_tools_memory.MemoryType"
+                }
+            }
+        },
+        "internal_api_handlers.MemoryReviewDecisionRequest": {
+            "type": "object",
+            "properties": {
+                "note": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api_handlers.MemoryReviewListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_tools_memory.MemoryReviewItem"
+                    }
+                }
+            }
+        },
         "internal_api_handlers.MessageListResponse": {
             "type": "object",
             "properties": {
@@ -3059,6 +4491,20 @@
                     "items": {
                         "$ref": "#/definitions/local-agent_internal_core.Message"
                     }
+                }
+            }
+        },
+        "internal_api_handlers.NetworkValidateURLRequest": {
+            "type": "object",
+            "properties": {
+                "max_download_bytes": {
+                    "type": "integer"
+                },
+                "method": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
                 }
             }
         },
@@ -3092,6 +4538,34 @@
                 },
                 "host_id": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_api_handlers.PolicyProfileListResponse": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_config.PolicyProfile"
+                    }
+                }
+            }
+        },
+        "internal_api_handlers.PolicyProfileValidateResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "profile": {
+                    "$ref": "#/definitions/local-agent_internal_config.PolicyProfile"
+                },
+                "valid": {
+                    "type": "boolean"
                 }
             }
         },
@@ -3197,6 +4671,41 @@
                     "type": "boolean"
                 },
                 "top_k": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_api_handlers.SecretScanRequest": {
+            "type": "object",
+            "properties": {
+                "payload": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "text": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api_handlers.SecurityAuditReport": {
+            "type": "object",
+            "properties": {
+                "counts": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_core.Event"
+                    }
+                },
+                "scan": {
+                    "$ref": "#/definitions/local-agent_internal_security.SecretScanResult"
+                },
+                "total": {
                     "type": "integer"
                 }
             }
@@ -3602,6 +5111,103 @@
                 "RunStepTypeCancel"
             ]
         },
+        "local-agent_internal_config.NetworkPolicy": {
+            "type": "object",
+            "properties": {
+                "allowed_domains": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "denied_domains": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "deny_metadata_ip": {
+                    "type": "boolean"
+                },
+                "deny_private_ip": {
+                    "type": "boolean"
+                },
+                "max_download_bytes": {
+                    "type": "integer"
+                },
+                "require_approval_for_methods": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "local-agent_internal_config.PolicyProfile": {
+            "type": "object",
+            "properties": {
+                "auto_execute_readonly": {
+                    "type": "boolean"
+                },
+                "deny_effects": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "description": {
+                    "type": "string"
+                },
+                "min_confidence_for_auto_execute": {
+                    "type": "number"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "require_approval_for": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "local-agent_internal_core.ApprovalExplanation": {
+            "type": "object",
+            "properties": {
+                "affected_targets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "expected_effects": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "risk_level": {
+                    "type": "string"
+                },
+                "rollback_plan": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "safety_notes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "summary": {
+                    "type": "string"
+                },
+                "why_needed": {
+                    "type": "string"
+                }
+            }
+        },
         "local-agent_internal_core.ApprovalRecord": {
             "type": "object",
             "properties": {
@@ -3613,6 +5219,9 @@
                 },
                 "decision": {
                     "$ref": "#/definitions/local-agent_internal_core.PolicyDecision"
+                },
+                "explanation": {
+                    "$ref": "#/definitions/local-agent_internal_core.ApprovalExplanation"
                 },
                 "id": {
                     "type": "string"
@@ -3706,6 +5315,54 @@
                 },
                 "sensitive": {
                     "type": "boolean"
+                },
+                "signals": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "local-agent_internal_core.Event": {
+            "type": "object",
+            "properties": {
+                "approval_id": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "conversation_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "payload": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "risk_level": {
+                    "type": "string"
+                },
+                "run_id": {
+                    "type": "string"
+                },
+                "step_id": {
+                    "type": "string"
+                },
+                "step_index": {
+                    "type": "integer"
+                },
+                "tool": {
+                    "type": "string"
+                },
+                "tool_call_id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
                 }
             }
         },
@@ -3955,6 +5612,9 @@
                     "type": "object",
                     "additionalProperties": {}
                 },
+                "policy_profile": {
+                    "type": "string"
+                },
                 "reason": {
                     "type": "string"
                 },
@@ -3962,6 +5622,44 @@
                     "type": "boolean"
                 },
                 "risk_level": {
+                    "type": "string"
+                },
+                "risk_trace": {
+                    "$ref": "#/definitions/local-agent_internal_core.RiskTrace"
+                }
+            }
+        },
+        "local-agent_internal_core.RiskTrace": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "number"
+                },
+                "decision": {
+                    "type": "string"
+                },
+                "effects": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "policy_profile": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "risk_level": {
+                    "type": "string"
+                },
+                "signals": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tool_id": {
                     "type": "string"
                 }
             }
@@ -4083,6 +5781,680 @@
                     "type": "string"
                 },
                 "tool_call_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_evals.CategoryStats": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "type": "integer"
+                },
+                "failed": {
+                    "type": "integer"
+                },
+                "passed": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "local-agent_internal_evals.EvalApprovalMode": {
+            "type": "string",
+            "enum": [
+                "reject_all_writes",
+                "approve_expected_writes",
+                "auto_approve_readonly"
+            ],
+            "x-enum-varnames": [
+                "EvalApprovalRejectAllWrites",
+                "EvalApprovalApproveExpectedOnly",
+                "EvalApprovalAutoApproveReadonly"
+            ]
+        },
+        "local-agent_internal_evals.EvalAssertion": {
+            "type": "object",
+            "properties": {
+                "actual": {},
+                "expected": {},
+                "message": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "passed": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "local-agent_internal_evals.EvalCase": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "$ref": "#/definitions/local-agent_internal_evals.EvalCategory"
+                },
+                "conversation": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_evals.EvalMessage"
+                    }
+                },
+                "expected": {
+                    "$ref": "#/definitions/local-agent_internal_evals.EvalExpected"
+                },
+                "forbidden": {
+                    "$ref": "#/definitions/local-agent_internal_evals.EvalForbidden"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "input": {
+                    "type": "string"
+                },
+                "kb_fixture": {
+                    "type": "string"
+                },
+                "memory_fixture": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "ops_fixture": {
+                    "type": "string"
+                },
+                "replay": {
+                    "$ref": "#/definitions/local-agent_internal_evals.ReplayOptions"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                },
+                "workspace_fixture": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_evals.EvalCaseListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_evals.EvalCase"
+                    }
+                }
+            }
+        },
+        "local-agent_internal_evals.EvalCategory": {
+            "type": "string",
+            "enum": [
+                "chat",
+                "rag",
+                "code",
+                "ops",
+                "safety"
+            ],
+            "x-enum-varnames": [
+                "EvalCategoryChat",
+                "EvalCategoryRAG",
+                "EvalCategoryCode",
+                "EvalCategoryOps",
+                "EvalCategorySafety"
+            ]
+        },
+        "local-agent_internal_evals.EvalCitation": {
+            "type": "object",
+            "properties": {
+                "document_id": {
+                    "type": "string"
+                },
+                "score": {
+                    "type": "number"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "source_file": {
+                    "type": "string"
+                },
+                "source_uri": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_evals.EvalExpected": {
+            "type": "object",
+            "properties": {
+                "answer_hints": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "approval_required": {
+                    "type": "boolean"
+                },
+                "citation_required": {
+                    "type": "boolean"
+                },
+                "expected_sources": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "policy_profile": {
+                    "type": "string"
+                },
+                "refusal_expected": {
+                    "type": "boolean"
+                },
+                "risk_level": {
+                    "type": "string"
+                },
+                "tool_sequence": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tools": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "local-agent_internal_evals.EvalForbidden": {
+            "type": "object",
+            "properties": {
+                "effects": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "secret_patterns": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tools": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "local-agent_internal_evals.EvalMessage": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_evals.EvalReport": {
+            "type": "object",
+            "properties": {
+                "by_category": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/local-agent_internal_evals.CategoryStats"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "failures": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_evals.EvalReportFailure"
+                    }
+                },
+                "run_id": {
+                    "type": "string"
+                },
+                "security": {
+                    "$ref": "#/definitions/local-agent_internal_evals.EvalReportSecurity"
+                },
+                "summary": {
+                    "$ref": "#/definitions/local-agent_internal_evals.EvalReportSummary"
+                }
+            }
+        },
+        "local-agent_internal_evals.EvalReportFailure": {
+            "type": "object",
+            "properties": {
+                "actual": {},
+                "assertion": {
+                    "type": "string"
+                },
+                "case_id": {
+                    "type": "string"
+                },
+                "category": {
+                    "type": "string"
+                },
+                "expected": {},
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_evals.EvalReportSecurity": {
+            "type": "object",
+            "properties": {
+                "forbidden_tool_calls": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "secret_findings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_security.SecretFinding"
+                    }
+                },
+                "unexpected_auto_approvals": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "local-agent_internal_evals.EvalReportSummary": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "type": "integer"
+                },
+                "failed": {
+                    "type": "integer"
+                },
+                "pass_rate": {
+                    "type": "number"
+                },
+                "passed": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "local-agent_internal_evals.EvalResult": {
+            "type": "object",
+            "properties": {
+                "approvals": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "assertions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_evals.EvalAssertion"
+                    }
+                },
+                "case_id": {
+                    "type": "string"
+                },
+                "category": {
+                    "$ref": "#/definitions/local-agent_internal_evals.EvalCategory"
+                },
+                "citations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_evals.EvalCitation"
+                    }
+                },
+                "error": {
+                    "type": "string"
+                },
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_core.Event"
+                    }
+                },
+                "passed": {
+                    "type": "boolean"
+                },
+                "policy_decisions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_core.PolicyDecision"
+                    }
+                },
+                "refused": {
+                    "type": "boolean"
+                },
+                "risk_traces": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_core.RiskTrace"
+                    }
+                },
+                "score": {
+                    "type": "number"
+                },
+                "secret_findings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_security.SecretFinding"
+                    }
+                },
+                "status": {
+                    "$ref": "#/definitions/local-agent_internal_evals.EvalRunStatus"
+                },
+                "summary": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "tool_calls": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "local-agent_internal_evals.EvalRun": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "type": "integer"
+                },
+                "failed": {
+                    "type": "integer"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "passed": {
+                    "type": "integer"
+                },
+                "report_path": {
+                    "type": "string"
+                },
+                "request": {
+                    "$ref": "#/definitions/local-agent_internal_evals.EvalRunRequest"
+                },
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_evals.EvalResult"
+                    }
+                },
+                "run_id": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/local-agent_internal_evals.EvalRunStatus"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "local-agent_internal_evals.EvalRunListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_evals.EvalRun"
+                    }
+                }
+            }
+        },
+        "local-agent_internal_evals.EvalRunRequest": {
+            "type": "object",
+            "properties": {
+                "approval_mode": {
+                    "$ref": "#/definitions/local-agent_internal_evals.EvalApprovalMode"
+                },
+                "case_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "category": {
+                    "$ref": "#/definitions/local-agent_internal_evals.EvalCategory"
+                },
+                "max_steps": {
+                    "type": "integer"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "local-agent_internal_evals.EvalRunStatus": {
+            "type": "string",
+            "enum": [
+                "pending",
+                "running",
+                "passed",
+                "failed",
+                "error"
+            ],
+            "x-enum-varnames": [
+                "EvalRunPending",
+                "EvalRunRunning",
+                "EvalRunPassed",
+                "EvalRunFailed",
+                "EvalRunError"
+            ]
+        },
+        "local-agent_internal_evals.ReplayDiff": {
+            "type": "object",
+            "properties": {
+                "actual_approvals": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "actual_tools": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "approval_changed": {
+                    "type": "boolean"
+                },
+                "citation_changed": {
+                    "type": "boolean"
+                },
+                "expected_approvals": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "expected_tools": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "risk_level_changed": {
+                    "type": "boolean"
+                },
+                "tool_sequence_changed": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "local-agent_internal_evals.ReplayMode": {
+            "type": "string",
+            "enum": [
+                "event",
+                "behavior"
+            ],
+            "x-enum-varnames": [
+                "ReplayModeEvent",
+                "ReplayModeBehavior"
+            ]
+        },
+        "local-agent_internal_evals.ReplayOptions": {
+            "type": "object",
+            "properties": {
+                "compare_approvals": {
+                    "type": "boolean"
+                },
+                "compare_tool_calls": {
+                    "type": "boolean"
+                },
+                "mode": {
+                    "$ref": "#/definitions/local-agent_internal_evals.ReplayMode"
+                },
+                "redact_secrets": {
+                    "type": "boolean"
+                },
+                "use_mock_tools": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "local-agent_internal_evals.ReplayResult": {
+            "type": "object",
+            "properties": {
+                "behavior": {
+                    "$ref": "#/definitions/local-agent_internal_evals.EvalResult"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "diff": {
+                    "$ref": "#/definitions/local-agent_internal_evals.ReplayDiff"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_core.Event"
+                    }
+                },
+                "mode": {
+                    "$ref": "#/definitions/local-agent_internal_evals.ReplayMode"
+                },
+                "options": {
+                    "$ref": "#/definitions/local-agent_internal_evals.ReplayOptions"
+                },
+                "replay_id": {
+                    "type": "string"
+                },
+                "source_run_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/local-agent_internal_evals.EvalRunStatus"
+                },
+                "summary": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_security.NetworkPolicyDecision": {
+            "type": "object",
+            "properties": {
+                "allowed": {
+                    "type": "boolean"
+                },
+                "host": {
+                    "type": "string"
+                },
+                "method": {
+                    "type": "string"
+                },
+                "normalized_url": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "requires_approval": {
+                    "type": "boolean"
+                },
+                "risk_level": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_security.SecretFinding": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "number"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "location": {
+                    "type": "string"
+                },
+                "redacted": {
+                    "type": "string"
+                },
+                "severity": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_security.SecretScanResult": {
+            "type": "object",
+            "properties": {
+                "findings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_security.SecretFinding"
+                    }
+                },
+                "has_secret": {
+                    "type": "boolean"
+                },
+                "redacted_text": {
                     "type": "string"
                 }
             }
@@ -4673,6 +7045,256 @@
                     "type": "string"
                 }
             }
+        },
+        "local-agent_internal_tools_memory.MemoryCandidate": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "number"
+                },
+                "decay_policy": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "importance": {
+                    "type": "number"
+                },
+                "project_key": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "scope": {
+                    "$ref": "#/definitions/local-agent_internal_tools_memory.MemoryScope"
+                },
+                "sensitive": {
+                    "type": "boolean"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "source_id": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "target_path": {
+                    "type": "string"
+                },
+                "text": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/local-agent_internal_tools_memory.MemoryType"
+                }
+            }
+        },
+        "local-agent_internal_tools_memory.MemoryConflict": {
+            "type": "object",
+            "properties": {
+                "candidate_id": {
+                    "type": "string"
+                },
+                "conflict_id": {
+                    "type": "string"
+                },
+                "existing_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "severity": {
+                    "type": "string"
+                },
+                "summary": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "local-agent_internal_tools_memory.MemoryItem": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "number"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "decay_policy": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "importance": {
+                    "type": "number"
+                },
+                "last_used_at": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "path": {
+                    "type": "string"
+                },
+                "project_key": {
+                    "type": "string"
+                },
+                "scope": {
+                    "$ref": "#/definitions/local-agent_internal_tools_memory.MemoryScope"
+                },
+                "sensitive": {
+                    "type": "boolean"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "source_message_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/local-agent_internal_tools_memory.MemoryItemStatus"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "text": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/local-agent_internal_tools_memory.MemoryType"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "use_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "local-agent_internal_tools_memory.MemoryItemStatus": {
+            "type": "string",
+            "enum": [
+                "active",
+                "pending",
+                "rejected",
+                "expired",
+                "archived"
+            ],
+            "x-enum-varnames": [
+                "MemoryItemStatusActive",
+                "MemoryItemStatusPending",
+                "MemoryItemStatusRejected",
+                "MemoryItemStatusExpired",
+                "MemoryItemStatusArchived"
+            ]
+        },
+        "local-agent_internal_tools_memory.MemoryReviewItem": {
+            "type": "object",
+            "properties": {
+                "applied_item": {
+                    "$ref": "#/definitions/local-agent_internal_tools_memory.MemoryItem"
+                },
+                "candidate": {
+                    "$ref": "#/definitions/local-agent_internal_tools_memory.MemoryCandidate"
+                },
+                "conflict_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "conflicts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/local-agent_internal_tools_memory.MemoryConflict"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "decided_at": {
+                    "type": "string"
+                },
+                "decision_note": {
+                    "type": "string"
+                },
+                "review_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/local-agent_internal_tools_memory.MemoryReviewStatus"
+                }
+            }
+        },
+        "local-agent_internal_tools_memory.MemoryReviewStatus": {
+            "type": "string",
+            "enum": [
+                "pending",
+                "approved",
+                "rejected",
+                "applied"
+            ],
+            "x-enum-varnames": [
+                "MemoryReviewPending",
+                "MemoryReviewApproved",
+                "MemoryReviewRejected",
+                "MemoryReviewApplied"
+            ]
+        },
+        "local-agent_internal_tools_memory.MemoryScope": {
+            "type": "string",
+            "enum": [
+                "user",
+                "project",
+                "procedure",
+                "conversation"
+            ],
+            "x-enum-varnames": [
+                "MemoryScopeUser",
+                "MemoryScopeProject",
+                "MemoryScopeProcedure",
+                "MemoryScopeConversation"
+            ]
+        },
+        "local-agent_internal_tools_memory.MemoryType": {
+            "type": "string",
+            "enum": [
+                "preference",
+                "fact",
+                "procedure",
+                "project",
+                "episode"
+            ],
+            "x-enum-varnames": [
+                "MemoryTypePreference",
+                "MemoryTypeFact",
+                "MemoryTypeProcedure",
+                "MemoryTypeProject",
+                "MemoryTypeEpisode"
+            ]
         },
         "local-agent_internal_tools_ops.HostProfile": {
             "type": "object",

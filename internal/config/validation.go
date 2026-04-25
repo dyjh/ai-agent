@@ -26,7 +26,13 @@ func ValidateRuntime(cfg Config) error {
 	if cfg.Policy.MinConfidenceForAutoExecute <= 0 {
 		errs = append(errs, errors.New("policy.min_confidence_for_auto_execute must be positive"))
 	}
+	if err := ValidatePolicyConfig(cfg.Policy); err != nil {
+		errs = append(errs, err)
+	}
 	if err := ValidateKnowledgeBase(cfg); err != nil {
+		errs = append(errs, err)
+	}
+	if err := ValidateModelProviders(cfg); err != nil {
 		errs = append(errs, err)
 	}
 	if err := validateVector(cfg); err != nil {
@@ -59,6 +65,74 @@ func ValidateKnowledgeBase(cfg Config) error {
 		return errors.New("kb.registry_path is required when knowledge base is enabled")
 	}
 	return nil
+}
+
+// ValidateModelProviders checks non-secret model provider configuration.
+func ValidateModelProviders(cfg Config) error {
+	var errs []error
+	switch strings.ToLower(strings.TrimSpace(cfg.LLM.Provider)) {
+	case "", ProviderMock:
+	case ProviderOpenAICompatible:
+		if strings.TrimSpace(cfg.LLM.Model) == "" && (strings.TrimSpace(cfg.LLM.BaseURL) != "" || strings.TrimSpace(cfg.LLM.APIKey) != "") {
+			errs = append(errs, errors.New("llm.model is required when llm.provider=openai_compatible"))
+		}
+	case ProviderOllama:
+		if strings.TrimSpace(cfg.LLM.Model) == "" {
+			errs = append(errs, errors.New("llm.model is required when llm.provider=ollama"))
+		}
+		if strings.TrimSpace(cfg.LLM.BaseURL) == "" {
+			errs = append(errs, errors.New("llm.base_url is required when llm.provider=ollama"))
+		}
+	default:
+		errs = append(errs, fmt.Errorf("unsupported llm provider: %s", cfg.LLM.Provider))
+	}
+
+	switch strings.ToLower(strings.TrimSpace(cfg.Embeddings.Provider)) {
+	case "", ProviderFake:
+	case ProviderOpenAICompatible:
+		if strings.TrimSpace(cfg.Embeddings.Model) == "" {
+			errs = append(errs, fmt.Errorf("%s is required when embeddings.provider=openai_compatible", EnvEmbeddingModel))
+		}
+		if strings.TrimSpace(cfg.Embeddings.BaseURL) == "" {
+			errs = append(errs, errors.New("embeddings.base_url is required when embeddings.provider=openai_compatible"))
+		}
+	case ProviderOllama:
+		if strings.TrimSpace(cfg.Embeddings.Model) == "" {
+			errs = append(errs, fmt.Errorf("%s is required when embeddings.provider=ollama", EnvEmbeddingModel))
+		}
+		if strings.TrimSpace(cfg.Embeddings.BaseURL) == "" {
+			errs = append(errs, errors.New("embeddings.base_url is required when embeddings.provider=ollama"))
+		}
+	default:
+		errs = append(errs, fmt.Errorf("unsupported embeddings provider: %s", cfg.Embeddings.Provider))
+	}
+	if cfg.Embeddings.TimeoutSeconds < 0 {
+		errs = append(errs, errors.New("embeddings.timeout_seconds must be non-negative"))
+	}
+	return errors.Join(errs...)
+}
+
+// ValidatePolicyConfig checks policy profiles and network policy coherence.
+func ValidatePolicyConfig(policy PolicyConfig) error {
+	var errs []error
+	normalized := NormalizePolicy(policy)
+	if strings.TrimSpace(normalized.ActiveProfile) == "" {
+		errs = append(errs, errors.New("policy.active_profile is required"))
+	} else if _, ok := normalized.Profiles[normalized.ActiveProfile]; !ok {
+		errs = append(errs, fmt.Errorf("policy active profile %q is not defined", normalized.ActiveProfile))
+	}
+	for name, profile := range normalized.Profiles {
+		if strings.TrimSpace(name) == "" {
+			errs = append(errs, errors.New("policy profile name is required"))
+		}
+		if profile.MinConfidenceForAutoExecute <= 0 {
+			errs = append(errs, fmt.Errorf("policy profile %s min_confidence_for_auto_execute must be positive", name))
+		}
+	}
+	if normalized.Network.MaxDownloadBytes <= 0 {
+		errs = append(errs, errors.New("policy.network_policy.max_download_bytes must be positive"))
+	}
+	return errors.Join(errs...)
 }
 
 func validateVector(cfg Config) error {

@@ -2,6 +2,8 @@ package einoapp
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 	"strings"
 
 	openai "github.com/cloudwego/eino-ext/components/model/openai"
@@ -16,16 +18,48 @@ type ChatModel interface {
 	Generate(ctx context.Context, messages []*schema.Message, opts ...model.Option) (*schema.Message, error)
 }
 
-// NewChatModel creates either a real Eino OpenAI-compatible model or a mock model.
+// NewChatModel creates a provider-backed Eino model or a mock model.
 func NewChatModel(ctx context.Context, cfg config.LLMConfig) (ChatModel, error) {
-	if cfg.APIKey == "" || cfg.Model == "" {
-		return MockChatModel{}, nil
+	provider := strings.ToLower(strings.TrimSpace(cfg.Provider))
+	if provider == "" {
+		provider = config.ProviderMock
 	}
-	return openai.NewChatModel(ctx, &openai.ChatModelConfig{
-		APIKey:  cfg.APIKey,
-		BaseURL: cfg.BaseURL,
-		Model:   cfg.Model,
-	})
+	switch provider {
+	case config.ProviderMock:
+		return MockChatModel{}, nil
+	case config.ProviderOpenAICompatible:
+		if cfg.APIKey == "" || cfg.Model == "" {
+			return MockChatModel{}, nil
+		}
+		return openai.NewChatModel(ctx, &openai.ChatModelConfig{
+			APIKey:  cfg.APIKey,
+			BaseURL: cfg.BaseURL,
+			Model:   cfg.Model,
+		})
+	case config.ProviderOllama:
+		if strings.TrimSpace(cfg.Model) == "" {
+			return nil, fmt.Errorf("ollama model is required")
+		}
+		return openai.NewChatModel(ctx, &openai.ChatModelConfig{
+			APIKey:  "ollama",
+			BaseURL: ollamaOpenAIBaseURL(cfg.BaseURL),
+			Model:   cfg.Model,
+		})
+	default:
+		return nil, fmt.Errorf("unsupported llm provider: %s", cfg.Provider)
+	}
+}
+
+func ollamaOpenAIBaseURL(baseURL string) string {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		baseURL = "http://127.0.0.1:11434"
+	}
+	u, err := url.Parse(baseURL)
+	if err == nil && strings.HasSuffix(strings.TrimRight(u.Path, "/"), "/v1") {
+		return baseURL
+	}
+	return baseURL + "/v1"
 }
 
 // MockChatModel is used when no real provider is configured.

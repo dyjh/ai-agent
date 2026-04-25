@@ -16,8 +16,10 @@ import (
 	"sync"
 	"time"
 
+	"local-agent/internal/config"
 	"local-agent/internal/core"
 	"local-agent/internal/ids"
+	"local-agent/internal/security"
 )
 
 const (
@@ -36,6 +38,7 @@ type Service struct {
 	parsers    ParserRegistry
 	httpClient *http.Client
 	urlMax     int64
+	network    config.NetworkPolicy
 
 	mu             sync.RWMutex
 	bases          map[string]core.KnowledgeBase
@@ -57,6 +60,7 @@ func NewService(index VectorIndex, embedder Embedder, collection string) *Servic
 		parsers:        NewDefaultParserRegistry(),
 		httpClient:     &http.Client{Timeout: defaultURLTimeout},
 		urlMax:         defaultURLMaxBytes,
+		network:        config.Default().Policy.Network,
 		bases:          map[string]core.KnowledgeBase{},
 		sources:        map[string]map[string]KnowledgeSource{},
 		documents:      map[string]map[string]KnowledgeDocument{},
@@ -66,6 +70,14 @@ func NewService(index VectorIndex, embedder Embedder, collection string) *Servic
 		evalRuns:       map[string]RAGEvalRun{},
 		documentChunks: map[string]map[string][]string{},
 	}
+}
+
+// SetNetworkPolicy sets URL source policy constraints.
+func (s *Service) SetNetworkPolicy(policy config.NetworkPolicy) {
+	if policy.MaxDownloadBytes > 0 {
+		s.urlMax = policy.MaxDownloadBytes
+	}
+	s.network = policy
 }
 
 // CreateKB registers a new knowledge base.
@@ -170,6 +182,12 @@ func (s *Service) UpdateSource(kbID, sourceID string, input UpdateSourceInput) (
 	source.UpdatedAt = time.Now().UTC()
 	if err := validateSource(source); err != nil {
 		return KnowledgeSource{}, err
+	}
+	if source.Type == KnowledgeSourceURL {
+		decision := security.ValidateNetworkURL(s.network, source.URI, http.MethodGet, s.urlMax)
+		if !decision.Allowed {
+			return KnowledgeSource{}, fmt.Errorf("network policy denied URL source: %s", decision.Reason)
+		}
 	}
 	s.sources[kbID][sourceID] = source
 	return cloneSource(source), nil
@@ -767,6 +785,12 @@ func (s *Service) buildSource(kbID string, input CreateSourceInput, now time.Tim
 	if err := validateSource(source); err != nil {
 		return KnowledgeSource{}, err
 	}
+	if source.Type == KnowledgeSourceURL {
+		decision := security.ValidateNetworkURL(s.network, source.URI, http.MethodGet, s.urlMax)
+		if !decision.Allowed {
+			return KnowledgeSource{}, fmt.Errorf("network policy denied URL source: %s", decision.Reason)
+		}
+	}
 	return source, nil
 }
 
@@ -885,6 +909,10 @@ func (s *Service) collectLocalFolder(source KnowledgeSource) ([]sourceCandidate,
 }
 
 func (s *Service) collectURL(ctx context.Context, source KnowledgeSource) ([]sourceCandidate, error) {
+	decision := security.ValidateNetworkURL(s.network, source.URI, http.MethodGet, s.urlMax)
+	if !decision.Allowed {
+		return nil, fmt.Errorf("network policy denied URL source: %s", decision.Reason)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, source.URI, nil)
 	if err != nil {
 		return nil, err
@@ -920,6 +948,9 @@ func (s *Service) collectURL(ctx context.Context, source KnowledgeSource) ([]sou
 func (s *Service) prepareDocument(ctx context.Context, source KnowledgeSource, filename, sourceURI string, parsed *ParsedDocument, now time.Time) (KnowledgeDocument, []KnowledgeChunk, []VectorChunk, error) {
 	if parsed == nil || strings.TrimSpace(parsed.Text) == "" {
 		return KnowledgeDocument{}, nil, nil, fmt.Errorf("parsed document is empty: %s", filename)
+	}
+	if scan := security.ScanText(parsed.Text); security.MustBlockLongTermStorage(scan) {
+		return KnowledgeDocument{}, nil, nil, fmt.Errorf("refusing to index secret-bearing knowledge document: %s", filename)
 	}
 	doc := KnowledgeDocument{
 		DocumentID:  stableDocumentID(source.KBID, source.SourceID, sourceURI),
@@ -1193,7 +1224,7 @@ func chunkPayload(chunk KnowledgeChunk) map[string]any {
 	payload["chunk_index"] = chunk.ChunkIndex
 	payload["content_hash"] = chunk.ContentHash
 	payload["updated_at"] = chunk.UpdatedAt.Format(time.RFC3339)
-	payload["text"] = chunk.Text
+	payload["text"] = security.RedactString(chunk.Text)
 	return payload
 }
 

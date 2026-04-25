@@ -79,6 +79,9 @@ func (s *Store) WriteFile(file core.MemoryFile) error {
 	if security.IsSensitivePath(file.Path, nil) {
 		return errors.New("refusing to write sensitive memory path")
 	}
+	if scan := ScanSensitiveMemory(file.Body); scan.Sensitive {
+		return errors.New("refusing to write sensitive memory content")
+	}
 	abs, err := s.resolve(file.Path)
 	if err != nil {
 		return err
@@ -118,7 +121,7 @@ func (s *Store) CreatePatch(input core.MemoryPatch) (core.MemoryPatch, error) {
 	if input.Path == "" {
 		return core.MemoryPatch{}, errors.New("patch path is required")
 	}
-	if input.Sensitive {
+	if input.Sensitive || ScanSensitiveMemory(input.Body).Sensitive {
 		return core.MemoryPatch{}, errors.New("sensitive patches must not be auto-created")
 	}
 
@@ -138,7 +141,7 @@ func (s *Store) CreatePatch(input core.MemoryPatch) (core.MemoryPatch, error) {
 
 // ApplyPatch applies a memory patch and triggers reindexing.
 func (s *Store) ApplyPatch(ctx context.Context, patch core.MemoryPatch) error {
-	if patch.Sensitive {
+	if patch.Sensitive || ScanSensitiveMemory(patch.Body).Sensitive {
 		return errors.New("refusing to apply sensitive memory patch")
 	}
 	if err := s.WriteFile(core.MemoryFile{
@@ -174,7 +177,8 @@ func (s *Store) Reindex(ctx context.Context) error {
 func (s *Store) resolve(path string) (string, error) {
 	abs := filepath.Clean(filepath.Join(s.Root, path))
 	root := filepath.Clean(s.Root)
-	if !strings.HasPrefix(abs, root) {
+	rel, err := filepath.Rel(root, abs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", errors.New("path escapes memory root")
 	}
 	return abs, nil

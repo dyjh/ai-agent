@@ -56,6 +56,34 @@ func TestConfigLoadEnablesQdrantKnowledgeBase(t *testing.T) {
 	}
 }
 
+func TestConfigLoadSupportsOllamaAndEmbeddingModelEnv(t *testing.T) {
+	t.Setenv(config.EnvUseKonwageBase, "false")
+	t.Setenv(config.EnvKonwageBaseProvider, "")
+	t.Setenv(config.EnvLLMProvider, config.ProviderOllama)
+	t.Setenv(config.EnvOllamaBaseURL, "http://localhost:11434")
+	t.Setenv(config.EnvOllamaModel, "qwen2.5-coder:7b")
+	t.Setenv(config.EnvEmbeddingProvider, config.ProviderOllama)
+	t.Setenv(config.EnvEmbeddingModel, "nomic-embed-text")
+	t.Setenv("DATABASE_URL", "postgresql://agent:agent@localhost:5432/local_agent")
+
+	cfg, err := config.Load(writeConfigFixture(t))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.LLM.Provider != config.ProviderOllama || cfg.LLM.BaseURL != "http://localhost:11434" || cfg.LLM.Model != "qwen2.5-coder:7b" {
+		t.Fatalf("LLM config = provider:%q base:%q model:%q", cfg.LLM.Provider, cfg.LLM.BaseURL, cfg.LLM.Model)
+	}
+	if cfg.Embeddings.Provider != config.ProviderOllama || cfg.Embeddings.Model != "nomic-embed-text" {
+		t.Fatalf("embedding config = provider:%q model:%q", cfg.Embeddings.Provider, cfg.Embeddings.Model)
+	}
+	if cfg.Embeddings.BaseURL != "http://localhost:11434" {
+		t.Fatalf("embedding base_url = %q, want ollama base url", cfg.Embeddings.BaseURL)
+	}
+	if err := config.ValidateRuntime(cfg); err != nil {
+		t.Fatalf("ValidateRuntime() error = %v", err)
+	}
+}
+
 func TestConfigValidationRejectsInvalidKnowledgeProvider(t *testing.T) {
 	cfg := validRuntimeConfig(t)
 	cfg.KB.Enabled = true
@@ -71,6 +99,25 @@ func TestConfigValidationRequiresProviderWhenKnowledgeEnabled(t *testing.T) {
 	cfg.KB.Provider = ""
 	if err := config.ValidateRuntime(cfg); err == nil || !strings.Contains(err.Error(), config.EnvKonwageBaseProvider) {
 		t.Fatalf("ValidateRuntime() error = %v, want provider required", err)
+	}
+}
+
+func TestConfigValidationRejectsInvalidModelProviders(t *testing.T) {
+	cfg := validRuntimeConfig(t)
+	cfg.LLM.Provider = "other"
+	cfg.Embeddings.Provider = "other"
+	if err := config.ValidateRuntime(cfg); err == nil || !strings.Contains(err.Error(), "unsupported llm provider") || !strings.Contains(err.Error(), "unsupported embeddings provider") {
+		t.Fatalf("ValidateRuntime() error = %v, want unsupported model provider errors", err)
+	}
+}
+
+func TestConfigValidationRequiresEmbeddingModelForConfiguredProvider(t *testing.T) {
+	cfg := validRuntimeConfig(t)
+	cfg.Embeddings.Provider = config.ProviderOpenAICompatible
+	cfg.Embeddings.BaseURL = "http://localhost:9999/v1"
+	cfg.Embeddings.Model = ""
+	if err := config.ValidateRuntime(cfg); err == nil || !strings.Contains(err.Error(), config.EnvEmbeddingModel) {
+		t.Fatalf("ValidateRuntime() error = %v, want embedding model error", err)
 	}
 }
 
@@ -120,6 +167,17 @@ shell:
   enabled: true
   default_timeout_seconds: 60
   max_output_chars: 20000
+llm:
+  provider: ${LLM_PROVIDER}
+  base_url: ${OPENAI_BASE_URL}
+  api_key: ${OPENAI_API_KEY}
+  model: ${OPENAI_MODEL}
+embeddings:
+  provider: ${EMBEDDING_PROVIDER}
+  base_url: ${EMBEDDING_BASE_URL}
+  api_key: ${EMBEDDING_API_KEY}
+  model: ${EMBEDDING_MODEL}
+  timeout_seconds: 30
 policy:
   min_confidence_for_auto_execute: 0.85
 `)

@@ -1,0 +1,83 @@
+profiles:
+  default:
+    description: Default local development policy
+    auto_execute_readonly: true
+    require_approval_for:
+      - sensitive_read
+      - fs.write
+      - code.modify
+      - git.write
+      - service.restart
+      - process.kill
+      - network.post
+      - network.put
+      - network.patch
+      - network.delete
+      - unknown.effect
+    min_confidence_for_auto_execute: 0.75
+
+  strict:
+    description: Strict mode, all tool calls require approval
+    auto_execute_readonly: false
+    require_approval_for:
+      - "*"
+    min_confidence_for_auto_execute: 0.95
+
+  developer:
+    description: Developer mode for local code tasks
+    auto_execute_readonly: true
+    require_approval_for:
+      - sensitive_read
+      - fs.write
+      - code.modify
+      - git.write
+      - package.install
+      - unknown.effect
+    min_confidence_for_auto_execute: 0.75
+
+  ops:
+    description: Operations mode for local and remote diagnostics
+    auto_execute_readonly: true
+    require_approval_for:
+      - service.restart
+      - service.stop
+      - process.kill
+      - deployment.apply
+      - k8s.apply
+      - k8s.delete
+      - docker.restart
+      - fs.write
+      - network.write
+      - unknown.effect
+    min_confidence_for_auto_execute: 0.8
+
+  offline:
+    description: Offline mode forbids network writes and remote calls
+    auto_execute_readonly: true
+    require_approval_for:
+      - sensitive_read
+      - fs.write
+      - code.modify
+      - git.write
+      - unknown.effect
+    deny_effects:
+      - network.post
+      - network.put
+      - network.patch
+      - network.delete
+      - webhook.call
+      - email.send
+      - mcp.remote.call
+    min_confidence_for_auto_execute: 0.8
+
+network_policy:
+  deny_private_ip: true
+  deny_metadata_ip: true
+  denied_domains:
+    - "*.internal"
+  require_approval_for_methods:
+    - POST
+    - PUT
+    - PATCH
+    - DELETE
+  max_download_bytes: 10485760

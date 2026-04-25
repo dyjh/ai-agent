@@ -1,4 +1,5 @@
 policy:
+  active_profile: default
   min_confidence_for_auto_execute: 0.85
   sensitive_paths:
     - .env

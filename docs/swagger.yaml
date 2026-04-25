@@ -66,7 +66,13 @@ definitions:
       docs:
         additionalProperties: {}
         type: object
+      embeddings:
+        additionalProperties: {}
+        type: object
       knowledge_base:
+        additionalProperties: {}
+        type: object
+      llm:
         additionalProperties: {}
         type: object
       qdrant:
@@ -214,6 +220,17 @@ definitions:
           $ref: '#/definitions/local-agent_internal_core.MCPToolPolicy'
         type: array
     type: object
+  internal_api_handlers.MemoryExtractReviewRequest:
+    properties:
+      conversation_id:
+        type: string
+      message_id:
+        type: string
+      project_key:
+        type: string
+      text:
+        type: string
+    type: object
   internal_api_handlers.MemoryFileListResponse:
     properties:
       items:
@@ -228,12 +245,106 @@ definitions:
           type: string
         type: array
     type: object
+  internal_api_handlers.MemoryItemCreateRequest:
+    properties:
+      confidence:
+        type: number
+      decay_policy:
+        type: string
+      expires_at:
+        type: string
+      importance:
+        type: number
+      metadata:
+        additionalProperties: {}
+        type: object
+      path:
+        type: string
+      project_key:
+        type: string
+      scope:
+        $ref: '#/definitions/local-agent_internal_tools_memory.MemoryScope'
+      source:
+        type: string
+      source_message_id:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      text:
+        type: string
+      type:
+        $ref: '#/definitions/local-agent_internal_tools_memory.MemoryType'
+    type: object
+  internal_api_handlers.MemoryItemListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_tools_memory.MemoryItem'
+        type: array
+    type: object
+  internal_api_handlers.MemoryItemUpdateRequest:
+    properties:
+      clear_expires_at:
+        type: boolean
+      confidence:
+        type: number
+      decay_policy:
+        type: string
+      expires_at:
+        type: string
+      importance:
+        type: number
+      metadata:
+        additionalProperties: {}
+        type: object
+      metadata_set:
+        type: boolean
+      project_key:
+        type: string
+      scope:
+        $ref: '#/definitions/local-agent_internal_tools_memory.MemoryScope'
+      status:
+        $ref: '#/definitions/local-agent_internal_tools_memory.MemoryItemStatus'
+      tags:
+        items:
+          type: string
+        type: array
+      tags_set:
+        type: boolean
+      text:
+        type: string
+      type:
+        $ref: '#/definitions/local-agent_internal_tools_memory.MemoryType'
+    type: object
+  internal_api_handlers.MemoryReviewDecisionRequest:
+    properties:
+      note:
+        type: string
+    type: object
+  internal_api_handlers.MemoryReviewListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_tools_memory.MemoryReviewItem'
+        type: array
+    type: object
   internal_api_handlers.MessageListResponse:
     properties:
       items:
         items:
           $ref: '#/definitions/local-agent_internal_core.Message'
         type: array
+    type: object
+  internal_api_handlers.NetworkValidateURLRequest:
+    properties:
+      max_download_bytes:
+        type: integer
+      method:
+        type: string
+      url:
+        type: string
     type: object
   internal_api_handlers.OpsHostListResponse:
     properties:
@@ -255,6 +366,24 @@ definitions:
         type: boolean
       host_id:
         type: string
+    type: object
+  internal_api_handlers.PolicyProfileListResponse:
+    properties:
+      active:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_config.PolicyProfile'
+        type: array
+    type: object
+  internal_api_handlers.PolicyProfileValidateResponse:
+    properties:
+      error:
+        type: string
+      profile:
+        $ref: '#/definitions/local-agent_internal_config.PolicyProfile'
+      valid:
+        type: boolean
     type: object
   internal_api_handlers.PostMessageRequest:
     properties:
@@ -322,6 +451,29 @@ definitions:
       rerank:
         type: boolean
       top_k:
+        type: integer
+    type: object
+  internal_api_handlers.SecretScanRequest:
+    properties:
+      payload:
+        additionalProperties: {}
+        type: object
+      text:
+        type: string
+    type: object
+  internal_api_handlers.SecurityAuditReport:
+    properties:
+      counts:
+        additionalProperties:
+          type: integer
+        type: object
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_core.Event'
+        type: array
+      scan:
+        $ref: '#/definitions/local-agent_internal_security.SecretScanResult'
+      total:
         type: integer
     type: object
   internal_api_handlers.SkillDetailResponse:
@@ -613,6 +765,70 @@ definitions:
     - RunStepTypeSummarize
     - RunStepTypeFinalize
     - RunStepTypeCancel
+  local-agent_internal_config.NetworkPolicy:
+    properties:
+      allowed_domains:
+        items:
+          type: string
+        type: array
+      denied_domains:
+        items:
+          type: string
+        type: array
+      deny_metadata_ip:
+        type: boolean
+      deny_private_ip:
+        type: boolean
+      max_download_bytes:
+        type: integer
+      require_approval_for_methods:
+        items:
+          type: string
+        type: array
+    type: object
+  local-agent_internal_config.PolicyProfile:
+    properties:
+      auto_execute_readonly:
+        type: boolean
+      deny_effects:
+        items:
+          type: string
+        type: array
+      description:
+        type: string
+      min_confidence_for_auto_execute:
+        type: number
+      name:
+        type: string
+      require_approval_for:
+        items:
+          type: string
+        type: array
+    type: object
+  local-agent_internal_core.ApprovalExplanation:
+    properties:
+      affected_targets:
+        items:
+          type: string
+        type: array
+      expected_effects:
+        items:
+          type: string
+        type: array
+      risk_level:
+        type: string
+      rollback_plan:
+        additionalProperties: {}
+        type: object
+      safety_notes:
+        items:
+          type: string
+        type: array
+      summary:
+        type: string
+      why_needed:
+        type: string
+    type: object
   local-agent_internal_core.ApprovalRecord:
     properties:
       conversation_id:
@@ -621,6 +837,8 @@ definitions:
         type: string
       decision:
         $ref: '#/definitions/local-agent_internal_core.PolicyDecision'
+      explanation:
+        $ref: '#/definitions/local-agent_internal_core.ApprovalExplanation'
       id:
         type: string
       inference:
@@ -684,6 +902,38 @@ definitions:
         type: string
       sensitive:
         type: boolean
+      signals:
+        items:
+          type: string
+        type: array
+    type: object
+  local-agent_internal_core.Event:
+    properties:
+      approval_id:
+        type: string
+      content:
+        type: string
+      conversation_id:
+        type: string
+      created_at:
+        type: string
+      payload:
+        additionalProperties: {}
+        type: object
+      risk_level:
+        type: string
+      run_id:
+        type: string
+      step_id:
+        type: string
+      step_index:
+        type: integer
+      tool:
+        type: string
+      tool_call_id:
+        type: string
+      type:
+        type: string
     type: object
   local-agent_internal_core.KBChunk:
     properties:
@@ -847,11 +1097,38 @@ definitions:
       approval_payload:
         additionalProperties: {}
         type: object
+      policy_profile:
+        type: string
       reason:
         type: string
       requires_approval:
         type: boolean
       risk_level:
+        type: string
+      risk_trace:
+        $ref: '#/definitions/local-agent_internal_core.RiskTrace'
+    type: object
+  local-agent_internal_core.RiskTrace:
+    properties:
+      confidence:
+        type: number
+      decision:
+        type: string
+      effects:
+        items:
+          type: string
+        type: array
+      policy_profile:
+        type: string
+      reason:
+        type: string
+      risk_level:
+        type: string
+      signals:
+        items:
+          type: string
+        type: array
+      tool_id:
         type: string
     type: object
   local-agent_internal_core.SkillPackageInfo:
@@ -932,6 +1209,457 @@ definitions:
       started_at:
         type: string
       tool_call_id:
+        type: string
+    type: object
+  local-agent_internal_evals.CategoryStats:
+    properties:
+      errors:
+        type: integer
+      failed:
+        type: integer
+      passed:
+        type: integer
+      total:
+        type: integer
+    type: object
+  local-agent_internal_evals.EvalApprovalMode:
+    enum:
+    - reject_all_writes
+    - approve_expected_writes
+    - auto_approve_readonly
+    type: string
+    x-enum-varnames:
+    - EvalApprovalRejectAllWrites
+    - EvalApprovalApproveExpectedOnly
+    - EvalApprovalAutoApproveReadonly
+  local-agent_internal_evals.EvalAssertion:
+    properties:
+      actual: {}
+      expected: {}
+      message:
+        type: string
+      name:
+        type: string
+      passed:
+        type: boolean
+    type: object
+  local-agent_internal_evals.EvalCase:
+    properties:
+      category:
+        $ref: '#/definitions/local-agent_internal_evals.EvalCategory'
+      conversation:
+        items:
+          $ref: '#/definitions/local-agent_internal_evals.EvalMessage'
+        type: array
+      expected:
+        $ref: '#/definitions/local-agent_internal_evals.EvalExpected'
+      forbidden:
+        $ref: '#/definitions/local-agent_internal_evals.EvalForbidden'
+      id:
+        type: string
+      input:
+        type: string
+      kb_fixture:
+        type: string
+      memory_fixture:
+        type: string
+      metadata:
+        additionalProperties: {}
+        type: object
+      ops_fixture:
+        type: string
+      replay:
+        $ref: '#/definitions/local-agent_internal_evals.ReplayOptions'
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+      workspace_fixture:
+        type: string
+    type: object
+  local-agent_internal_evals.EvalCaseListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_evals.EvalCase'
+        type: array
+    type: object
+  local-agent_internal_evals.EvalCategory:
+    enum:
+    - chat
+    - rag
+    - code
+    - ops
+    - safety
+    type: string
+    x-enum-varnames:
+    - EvalCategoryChat
+    - EvalCategoryRAG
+    - EvalCategoryCode
+    - EvalCategoryOps
+    - EvalCategorySafety
+  local-agent_internal_evals.EvalCitation:
+    properties:
+      document_id:
+        type: string
+      score:
+        type: number
+      source:
+        type: string
+      source_file:
+        type: string
+      source_uri:
+        type: string
+    type: object
+  local-agent_internal_evals.EvalExpected:
+    properties:
+      answer_hints:
+        items:
+          type: string
+        type: array
+      approval_required:
+        type: boolean
+      citation_required:
+        type: boolean
+      expected_sources:
+        items:
+          type: string
+        type: array
+      policy_profile:
+        type: string
+      refusal_expected:
+        type: boolean
+      risk_level:
+        type: string
+      tool_sequence:
+        items:
+          type: string
+        type: array
+      tools:
+        items:
+          type: string
+        type: array
+    type: object
+  local-agent_internal_evals.EvalForbidden:
+    properties:
+      effects:
+        items:
+          type: string
+        type: array
+      secret_patterns:
+        items:
+          type: string
+        type: array
+      tools:
+        items:
+          type: string
+        type: array
+    type: object
+  local-agent_internal_evals.EvalMessage:
+    properties:
+      content:
+        type: string
+      role:
+        type: string
+    type: object
+  local-agent_internal_evals.EvalReport:
+    properties:
+      by_category:
+        additionalProperties:
+          $ref: '#/definitions/local-agent_internal_evals.CategoryStats'
+        type: object
+      created_at:
+        type: string
+      failures:
+        items:
+          $ref: '#/definitions/local-agent_internal_evals.EvalReportFailure'
+        type: array
+      run_id:
+        type: string
+      security:
+        $ref: '#/definitions/local-agent_internal_evals.EvalReportSecurity'
+      summary:
+        $ref: '#/definitions/local-agent_internal_evals.EvalReportSummary'
+    type: object
+  local-agent_internal_evals.EvalReportFailure:
+    properties:
+      actual: {}
+      assertion:
+        type: string
+      case_id:
+        type: string
+      category:
+        type: string
+      expected: {}
+      message:
+        type: string
+    type: object
+  local-agent_internal_evals.EvalReportSecurity:
+    properties:
+      forbidden_tool_calls:
+        items:
+          type: string
+        type: array
+      secret_findings:
+        items:
+          $ref: '#/definitions/local-agent_internal_security.SecretFinding'
+        type: array
+      unexpected_auto_approvals:
+        items:
+          type: string
+        type: array
+    type: object
+  local-agent_internal_evals.EvalReportSummary:
+    properties:
+      errors:
+        type: integer
+      failed:
+        type: integer
+      pass_rate:
+        type: number
+      passed:
+        type: integer
+      total:
+        type: integer
+    type: object
+  local-agent_internal_evals.EvalResult:
+    properties:
+      approvals:
+        items:
+          type: string
+        type: array
+      assertions:
+        items:
+          $ref: '#/definitions/local-agent_internal_evals.EvalAssertion'
+        type: array
+      case_id:
+        type: string
+      category:
+        $ref: '#/definitions/local-agent_internal_evals.EvalCategory'
+      citations:
+        items:
+          $ref: '#/definitions/local-agent_internal_evals.EvalCitation'
+        type: array
+      error:
+        type: string
+      events:
+        items:
+          $ref: '#/definitions/local-agent_internal_core.Event'
+        type: array
+      passed:
+        type: boolean
+      policy_decisions:
+        items:
+          $ref: '#/definitions/local-agent_internal_core.PolicyDecision'
+        type: array
+      refused:
+        type: boolean
+      risk_traces:
+        items:
+          $ref: '#/definitions/local-agent_internal_core.RiskTrace'
+        type: array
+      score:
+        type: number
+      secret_findings:
+        items:
+          $ref: '#/definitions/local-agent_internal_security.SecretFinding'
+        type: array
+      status:
+        $ref: '#/definitions/local-agent_internal_evals.EvalRunStatus'
+      summary:
+        type: string
+      title:
+        type: string
+      tool_calls:
+        items:
+          type: string
+        type: array
+    type: object
+  local-agent_internal_evals.EvalRun:
+    properties:
+      errors:
+        type: integer
+      failed:
+        type: integer
+      finished_at:
+        type: string
+      passed:
+        type: integer
+      report_path:
+        type: string
+      request:
+        $ref: '#/definitions/local-agent_internal_evals.EvalRunRequest'
+      results:
+        items:
+          $ref: '#/definitions/local-agent_internal_evals.EvalResult'
+        type: array
+      run_id:
+        type: string
+      started_at:
+        type: string
+      status:
+        $ref: '#/definitions/local-agent_internal_evals.EvalRunStatus'
+      total:
+        type: integer
+    type: object
+  local-agent_internal_evals.EvalRunListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/local-agent_internal_evals.EvalRun'
+        type: array
+    type: object
+  local-agent_internal_evals.EvalRunRequest:
+    properties:
+      approval_mode:
+        $ref: '#/definitions/local-agent_internal_evals.EvalApprovalMode'
+      case_ids:
+        items:
+          type: string
+        type: array
+      category:
+        $ref: '#/definitions/local-agent_internal_evals.EvalCategory'
+      max_steps:
+        type: integer
+      tag:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
+  local-agent_internal_evals.EvalRunStatus:
+    enum:
+    - pending
+    - running
+    - passed
+    - failed
+    - error
+    type: string
+    x-enum-varnames:
+    - EvalRunPending
+    - EvalRunRunning
+    - EvalRunPassed
+    - EvalRunFailed
+    - EvalRunError
+  local-agent_internal_evals.ReplayDiff:
+    properties:
+      actual_approvals:
+        items:
+          type: string
+        type: array
+      actual_tools:
+        items:
+          type: string
+        type: array
+      approval_changed:
+        type: boolean
+      citation_changed:
+        type: boolean
+      expected_approvals:
+        items:
+          type: string
+        type: array
+      expected_tools:
+        items:
+          type: string
+        type: array
+      risk_level_changed:
+        type: boolean
+      tool_sequence_changed:
+        type: boolean
+    type: object
+  local-agent_internal_evals.ReplayMode:
+    enum:
+    - event
+    - behavior
+    type: string
+    x-enum-varnames:
+    - ReplayModeEvent
+    - ReplayModeBehavior
+  local-agent_internal_evals.ReplayOptions:
+    properties:
+      compare_approvals:
+        type: boolean
+      compare_tool_calls:
+        type: boolean
+      mode:
+        $ref: '#/definitions/local-agent_internal_evals.ReplayMode'
+      redact_secrets:
+        type: boolean
+      use_mock_tools:
+        type: boolean
+    type: object
+  local-agent_internal_evals.ReplayResult:
+    properties:
+      behavior:
+        $ref: '#/definitions/local-agent_internal_evals.EvalResult'
+      created_at:
+        type: string
+      diff:
+        $ref: '#/definitions/local-agent_internal_evals.ReplayDiff'
+      error:
+        type: string
+      events:
+        items:
+          $ref: '#/definitions/local-agent_internal_core.Event'
+        type: array
+      mode:
+        $ref: '#/definitions/local-agent_internal_evals.ReplayMode'
+      options:
+        $ref: '#/definitions/local-agent_internal_evals.ReplayOptions'
+      replay_id:
+        type: string
+      source_run_id:
+        type: string
+      status:
+        $ref: '#/definitions/local-agent_internal_evals.EvalRunStatus'
+      summary:
+        type: string
+    type: object
+  local-agent_internal_security.NetworkPolicyDecision:
+    properties:
+      allowed:
+        type: boolean
+      host:
+        type: string
+      method:
+        type: string
+      normalized_url:
+        type: string
+      reason:
+        type: string
+      requires_approval:
+        type: boolean
+      risk_level:
+        type: string
+    type: object
+  local-agent_internal_security.SecretFinding:
+    properties:
+      confidence:
+        type: number
+      description:
+        type: string
+      location:
+        type: string
+      redacted:
+        type: string
+      severity:
+        type: string
+      type:
+        type: string
+    type: object
+  local-agent_internal_security.SecretScanResult:
+    properties:
+      findings:
+        items:
+          $ref: '#/definitions/local-agent_internal_security.SecretFinding'
+        type: array
+      has_secret:
+        type: boolean
+      redacted_text:
         type: string
     type: object
   local-agent_internal_tools_kb.AnswerInput:
@@ -1331,6 +2059,181 @@ definitions:
       tool_name:
         type: string
     type: object
+  local-agent_internal_tools_memory.MemoryCandidate:
+    properties:
+      confidence:
+        type: number
+      decay_policy:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      importance:
+        type: number
+      project_key:
+        type: string
+      reason:
+        type: string
+      scope:
+        $ref: '#/definitions/local-agent_internal_tools_memory.MemoryScope'
+      sensitive:
+        type: boolean
+      source:
+        type: string
+      source_id:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      target_path:
+        type: string
+      text:
+        type: string
+      type:
+        $ref: '#/definitions/local-agent_internal_tools_memory.MemoryType'
+    type: object
+  local-agent_internal_tools_memory.MemoryConflict:
+    properties:
+      candidate_id:
+        type: string
+      conflict_id:
+        type: string
+      existing_ids:
+        items:
+          type: string
+        type: array
+      severity:
+        type: string
+      summary:
+        type: string
+      type:
+        type: string
+    type: object
+  local-agent_internal_tools_memory.MemoryItem:
+    properties:
+      confidence:
+        type: number
+      created_at:
+        type: string
+      decay_policy:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      importance:
+        type: number
+      last_used_at:
+        type: string
+      metadata:
+        additionalProperties: {}
+        type: object
+      path:
+        type: string
+      project_key:
+        type: string
+      scope:
+        $ref: '#/definitions/local-agent_internal_tools_memory.MemoryScope'
+      sensitive:
+        type: boolean
+      source:
+        type: string
+      source_message_id:
+        type: string
+      status:
+        $ref: '#/definitions/local-agent_internal_tools_memory.MemoryItemStatus'
+      tags:
+        items:
+          type: string
+        type: array
+      text:
+        type: string
+      type:
+        $ref: '#/definitions/local-agent_internal_tools_memory.MemoryType'
+      updated_at:
+        type: string
+      use_count:
+        type: integer
+    type: object
+  local-agent_internal_tools_memory.MemoryItemStatus:
+    enum:
+    - active
+    - pending
+    - rejected
+    - expired
+    - archived
+    type: string
+    x-enum-varnames:
+    - MemoryItemStatusActive
+    - MemoryItemStatusPending
+    - MemoryItemStatusRejected
+    - MemoryItemStatusExpired
+    - MemoryItemStatusArchived
+  local-agent_internal_tools_memory.MemoryReviewItem:
+    properties:
+      applied_item:
+        $ref: '#/definitions/local-agent_internal_tools_memory.MemoryItem'
+      candidate:
+        $ref: '#/definitions/local-agent_internal_tools_memory.MemoryCandidate'
+      conflict_ids:
+        items:
+          type: string
+        type: array
+      conflicts:
+        items:
+          $ref: '#/definitions/local-agent_internal_tools_memory.MemoryConflict'
+        type: array
+      created_at:
+        type: string
+      decided_at:
+        type: string
+      decision_note:
+        type: string
+      review_id:
+        type: string
+      status:
+        $ref: '#/definitions/local-agent_internal_tools_memory.MemoryReviewStatus'
+    type: object
+  local-agent_internal_tools_memory.MemoryReviewStatus:
+    enum:
+    - pending
+    - approved
+    - rejected
+    - applied
+    type: string
+    x-enum-varnames:
+    - MemoryReviewPending
+    - MemoryReviewApproved
+    - MemoryReviewRejected
+    - MemoryReviewApplied
+  local-agent_internal_tools_memory.MemoryScope:
+    enum:
+    - user
+    - project
+    - procedure
+    - conversation
+    type: string
+    x-enum-varnames:
+    - MemoryScopeUser
+    - MemoryScopeProject
+    - MemoryScopeProcedure
+    - MemoryScopeConversation
+  local-agent_internal_tools_memory.MemoryType:
+    enum:
+    - preference
+    - fact
+    - procedure
+    - project
+    - episode
+    type: string
+    x-enum-varnames:
+    - MemoryTypePreference
+    - MemoryTypeFact
+    - MemoryTypeProcedure
+    - MemoryTypeProject
+    - MemoryTypeEpisode
   local-agent_internal_tools_ops.HostProfile:
     properties:
       created_at:
@@ -2507,6 +3410,256 @@ paths:
       summary: Post user message
       tags:
       - Conversations
+  /v1/evals:
+    get:
+      parameters:
+      - description: Eval category
+        in: query
+        name: category
+        type: string
+      - description: Tag filter
+        in: query
+        name: tag
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_evals.EvalCaseListResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: List eval cases
+      tags:
+      - Eval
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Eval case
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/local-agent_internal_evals.EvalCase'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/local-agent_internal_evals.EvalCase'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Create eval case
+      tags:
+      - Eval
+  /v1/evals/{case_id}:
+    delete:
+      parameters:
+      - description: Eval case ID
+        in: path
+        name: case_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.StatusResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Delete eval case
+      tags:
+      - Eval
+    get:
+      parameters:
+      - description: Eval case ID
+        in: path
+        name: case_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_evals.EvalCase'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Get eval case
+      tags:
+      - Eval
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Eval case ID
+        in: path
+        name: case_id
+        required: true
+        type: string
+      - description: Eval case
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/local-agent_internal_evals.EvalCase'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_evals.EvalCase'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Update eval case
+      tags:
+      - Eval
+  /v1/evals/run:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Eval run selection
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/local-agent_internal_evals.EvalRunRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_evals.EvalRun'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Run eval cases in safe mode
+      tags:
+      - Eval
+  /v1/evals/runs:
+    get:
+      parameters:
+      - description: Max runs to return
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_evals.EvalRunListResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: List eval runs
+      tags:
+      - Eval
+  /v1/evals/runs/{run_id}:
+    get:
+      parameters:
+      - description: Eval run ID or latest
+        in: path
+        name: run_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_evals.EvalRun'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Get eval run
+      tags:
+      - Eval
+  /v1/evals/runs/{run_id}/report:
+    get:
+      parameters:
+      - description: Eval run ID or latest
+        in: path
+        name: run_id
+        required: true
+        type: string
+      - description: json or markdown
+        in: query
+        name: format
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_evals.EvalReport'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Get eval report
+      tags:
+      - Eval
   /v1/health:
     get:
       produces:
@@ -3210,6 +4363,219 @@ paths:
       summary: Read memory file
       tags:
       - Memory
+  /v1/memory/items:
+    get:
+      parameters:
+      - description: Memory scope
+        in: query
+        name: scope
+        type: string
+      - description: Memory type
+        in: query
+        name: type
+        type: string
+      - description: Project key
+        in: query
+        name: project_key
+        type: string
+      - description: Item status
+        in: query
+        name: status
+        type: string
+      - description: Tag
+        in: query
+        name: tag
+        type: string
+      - description: Text query
+        in: query
+        name: query
+        type: string
+      - description: Include archived/rejected/expired items
+        in: query
+        name: include_archived
+        type: boolean
+      - description: Maximum items
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.MemoryItemListResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: List memory items
+      tags:
+      - Memory
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Memory item payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api_handlers.MemoryItemCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ToolRouteResponse'
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ToolRouteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Create memory item through ToolRouter
+      tags:
+      - Memory
+  /v1/memory/items/{id}:
+    delete:
+      parameters:
+      - description: Memory item ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Physically remove item block
+        in: query
+        name: force
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ToolRouteResponse'
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ToolRouteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Archive or force-delete memory item through ToolRouter
+      tags:
+      - Memory
+    get:
+      parameters:
+      - description: Memory item ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_memory.MemoryItem'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Get memory item
+      tags:
+      - Memory
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Memory item ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Memory item update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api_handlers.MemoryItemUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ToolRouteResponse'
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ToolRouteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Update memory item through ToolRouter
+      tags:
+      - Memory
+  /v1/memory/items/{id}/archive:
+    post:
+      parameters:
+      - description: Memory item ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ToolRouteResponse'
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ToolRouteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Archive memory item through ToolRouter
+      tags:
+      - Memory
+  /v1/memory/items/{id}/restore:
+    post:
+      parameters:
+      - description: Memory item ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ToolRouteResponse'
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ToolRouteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Restore memory item through ToolRouter
+      tags:
+      - Memory
   /v1/memory/patches:
     post:
       consumes:
@@ -3251,6 +4617,136 @@ paths:
           schema:
             $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
       summary: Reindex markdown memory
+      tags:
+      - Memory
+  /v1/memory/review:
+    get:
+      parameters:
+      - description: Review status
+        in: query
+        name: status
+        type: string
+      - description: Maximum items
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.MemoryReviewListResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: List memory review queue
+      tags:
+      - Memory
+  /v1/memory/review/{review_id}:
+    get:
+      parameters:
+      - description: Review ID
+        in: path
+        name: review_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_memory.MemoryReviewItem'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Get memory review item
+      tags:
+      - Memory
+  /v1/memory/review/{review_id}/approve:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Review ID
+        in: path
+        name: review_id
+        required: true
+        type: string
+      - description: Decision note
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/internal_api_handlers.MemoryReviewDecisionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_memory.MemoryReviewItem'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Approve memory review item and apply it
+      tags:
+      - Memory
+  /v1/memory/review/{review_id}/reject:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Review ID
+        in: path
+        name: review_id
+        required: true
+        type: string
+      - description: Decision note
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/internal_api_handlers.MemoryReviewDecisionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_tools_memory.MemoryReviewItem'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Reject memory review item
+      tags:
+      - Memory
+  /v1/memory/review/extract:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Extraction payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api_handlers.MemoryExtractReviewRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_api_handlers.MemoryReviewListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Extract memory candidates into review queue
       tags:
       - Memory
   /v1/memory/search:
@@ -3606,6 +5102,32 @@ paths:
       summary: Get RAG eval run
       tags:
       - RAG
+  /v1/replays/{replay_id}:
+    get:
+      parameters:
+      - description: Replay ID
+        in: path
+        name: replay_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_evals.ReplayResult'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Get replay result
+      tags:
+      - Replay
   /v1/runs:
     get:
       parameters:
@@ -3689,6 +5211,39 @@ paths:
       summary: Cancel workflow run
       tags:
       - Runs
+  /v1/runs/{run_id}/replay:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Workflow run ID
+        in: path
+        name: run_id
+        required: true
+        type: string
+      - description: Replay options
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/local-agent_internal_evals.ReplayOptions'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_evals.ReplayResult'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_handlers.ErrorResponse'
+      summary: Replay workflow run in safe mode
+      tags:
+      - Replay
   /v1/runs/{run_id}/resume:
     post:
       consumes:
@@ -3753,6 +5308,182 @@ paths:
       summary: List workflow run steps
       tags:
       - Runs
+  /v1/security/audit:
+    get:
+      parameters:
+      - description: Event type filter
+        in: query
+        name: type
+        type: string
+      - description: Max events
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.SecurityAuditReport'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Read security audit report
+      tags:
+      - Security
+  /v1/security/audit/runs/{run_id}:
+    get:
+      parameters:
+      - description: Run ID
+        in: path
+        name: run_id
+        required: true
+        type: string
+      - description: Event type filter
+        in: query
+        name: type
+        type: string
+      - description: Max events
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.SecurityAuditReport'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Read security audit report for a run
+      tags:
+      - Security
+  /v1/security/network-policy:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_config.NetworkPolicy'
+      summary: Get network policy
+      tags:
+      - Security
+  /v1/security/network-policy/validate-url:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: URL validation payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api_handlers.NetworkValidateURLRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_security.NetworkPolicyDecision'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Validate URL against network policy
+      tags:
+      - Security
+  /v1/security/policy-profiles:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.PolicyProfileListResponse'
+      summary: List policy profiles
+      tags:
+      - Security
+  /v1/security/policy-profiles/{name}:
+    get:
+      parameters:
+      - description: Policy profile name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_config.PolicyProfile'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Get policy profile
+      tags:
+      - Security
+  /v1/security/policy-profiles/validate:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Policy profile payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/local-agent_internal_config.PolicyProfile'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_handlers.PolicyProfileValidateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.PolicyProfileValidateResponse'
+      summary: Validate a policy profile
+      tags:
+      - Security
+  /v1/security/secret-scan:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Secret scan payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api_handlers.SecretScanRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/local-agent_internal_security.SecretScanResult'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_api_handlers.LegacyErrorResponse'
+      summary: Scan text or payload for secrets
+      tags:
+      - Security
   /v1/skills:
     get:
       produces:

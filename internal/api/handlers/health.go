@@ -71,6 +71,15 @@ func (h *HealthHandler) Get(w http.ResponseWriter, r *http.Request) {
 		"database": map[string]any{
 			"status": configuredStatus(h.Deps.Config.Database.URL != "", "configured", "memory_fallback"),
 		},
+		"llm": map[string]any{
+			"provider": h.Deps.Config.LLM.Provider,
+			"model":    h.Deps.Config.LLM.Model,
+		},
+		"embeddings": map[string]any{
+			"provider":   h.Deps.Config.Embeddings.Provider,
+			"model":      h.Deps.Config.Embeddings.Model,
+			"dimensions": h.Deps.Config.Vector.EmbeddingDimension,
+		},
 		"qdrant":         qdrantStatus,
 		"knowledge_base": kbStatus,
 		"workflow": map[string]any{

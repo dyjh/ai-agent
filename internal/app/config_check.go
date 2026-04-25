@@ -12,22 +12,32 @@ import (
 
 // ConfigCheckReport is the non-secret startup check summary.
 type ConfigCheckReport struct {
-	Status       string `json:"status"`
-	Knowledge    string `json:"knowledge_base"`
-	Provider     string `json:"provider,omitempty"`
-	DocsRoute    string `json:"docs_route"`
-	OpenAPIRoute string `json:"openapi_route"`
+	Status             string `json:"status"`
+	Knowledge          string `json:"knowledge_base"`
+	Provider           string `json:"provider,omitempty"`
+	LLMProvider        string `json:"llm_provider,omitempty"`
+	LLMModel           string `json:"llm_model,omitempty"`
+	EmbeddingProvider  string `json:"embedding_provider,omitempty"`
+	EmbeddingModel     string `json:"embedding_model,omitempty"`
+	EmbeddingDimension int    `json:"embedding_dimension,omitempty"`
+	DocsRoute          string `json:"docs_route"`
+	OpenAPIRoute       string `json:"openapi_route"`
 }
 
 // CheckConfig validates config values and creates local directories that are
 // safe for the single-user runtime to own.
 func CheckConfig(_ context.Context, cfg config.Config, logger *slog.Logger) (ConfigCheckReport, error) {
 	report := ConfigCheckReport{
-		Status:       "ok",
-		Knowledge:    "disabled",
-		Provider:     cfg.KB.Provider,
-		DocsRoute:    "/swagger/index.html",
-		OpenAPIRoute: "/swagger/doc.json",
+		Status:             "ok",
+		Knowledge:          "disabled",
+		Provider:           cfg.KB.Provider,
+		LLMProvider:        cfg.LLM.Provider,
+		LLMModel:           cfg.LLM.Model,
+		EmbeddingProvider:  cfg.Embeddings.Provider,
+		EmbeddingModel:     cfg.Embeddings.Model,
+		EmbeddingDimension: cfg.Vector.EmbeddingDimension,
+		DocsRoute:          "/swagger/index.html",
+		OpenAPIRoute:       "/swagger/doc.json",
 	}
 	if cfg.KB.Enabled {
 		report.Knowledge = "enabled"
@@ -55,6 +65,7 @@ func CheckConfig(_ context.Context, cfg config.Config, logger *slog.Logger) (Con
 
 	for _, path := range []string{
 		"config/policy.yaml",
+		"config/policy.profiles.yaml",
 		"config/skills.registry.yaml",
 		"config/mcp.servers.yaml",
 		"config/mcp.tool-policies.yaml",
@@ -70,6 +81,9 @@ func CheckConfig(_ context.Context, cfg config.Config, logger *slog.Logger) (Con
 			"status", report.Status,
 			"knowledge_base", report.Knowledge,
 			"provider", report.Provider,
+			"llm_provider", report.LLMProvider,
+			"embedding_provider", report.EmbeddingProvider,
+			"embedding_model", report.EmbeddingModel,
 			"docs_route", report.DocsRoute,
 		)
 	}

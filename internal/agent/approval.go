@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"local-agent/internal/core"
 	"local-agent/internal/ids"
+	"local-agent/internal/security"
 )
 
 var errApprovalNotFound = errors.New("approval not found")
@@ -44,7 +46,8 @@ func (a *ApprovalCenter) Create(runID, conversationID string, proposal core.Tool
 		Decision:       decision,
 		InputSnapshot:  snapshot,
 		SnapshotHash:   hash,
-		Summary:        approvalSummary(proposal, inference),
+		Summary:        security.RedactString(approvalSummary(proposal, inference)),
+		Explanation:    approvalExplanation(proposal, inference, decision),
 		Status:         core.ApprovalPending,
 		CreatedAt:      time.Now().UTC(),
 	}
@@ -260,6 +263,18 @@ func approvalSummary(proposal core.ToolProposal, inference core.EffectInferenceR
 		if path, ok := proposal.Input["path"].(string); ok {
 			return fmt.Sprintf("准备修改 Markdown memory `%s`。", path)
 		}
+	case "memory.extract_candidates":
+		return "准备写入 memory review queue，长期记忆正文尚不会提交。"
+	case "memory.item_create":
+		return "准备新增一条 Markdown-backed memory item。"
+	case "memory.item_update":
+		if id, ok := proposal.Input["id"].(string); ok {
+			return fmt.Sprintf("准备更新 memory item `%s`。", id)
+		}
+	case "memory.item_archive", "memory.item_restore", "memory.item_delete":
+		if id, ok := proposal.Input["id"].(string); ok {
+			return fmt.Sprintf("准备执行 `%s`，目标 memory item `%s`。", proposal.Tool, id)
+		}
 	case "skill.run":
 		if skillID, ok := proposal.Input["skill_id"].(string); ok {
 			return fmt.Sprintf("准备执行 skill `%s`，风险等级为 %s。", skillID, inference.RiskLevel)
@@ -282,6 +297,87 @@ func approvalSummary(proposal core.ToolProposal, inference core.EffectInferenceR
 	return fmt.Sprintf("准备执行 `%s`，风险等级为 %s。", proposal.Tool, inference.RiskLevel)
 }
 
+func approvalExplanation(proposal core.ToolProposal, inference core.EffectInferenceResult, decision core.PolicyDecision) *core.ApprovalExplanation {
+	summary := security.RedactString(approvalSummary(proposal, inference))
+	why := security.RedactString(decision.Reason)
+	if strings.TrimSpace(why) == "" {
+		why = security.RedactString(inference.ReasonSummary)
+	}
+	explanation := &core.ApprovalExplanation{
+		Summary:         summary,
+		WhyNeeded:       why,
+		ExpectedEffects: append([]string(nil), inference.Effects...),
+		RiskLevel:       inference.RiskLevel,
+		AffectedTargets: affectedTargets(proposal),
+		SafetyNotes:     approvalSafetyNotes(proposal, inference, decision),
+	}
+	if rollback, ok := decision.ApprovalPayload["rollback_plan"]; ok {
+		explanation.RollbackPlan = anyToMap(security.RedactAny(rollback))
+	}
+	return explanation
+}
+
+func affectedTargets(proposal core.ToolProposal) []string {
+	var targets []string
+	for _, key := range []string{"path", "workspace", "service", "service_name", "container", "container_id", "resource", "name", "namespace", "target", "host_id", "manifest_path"} {
+		if value, ok := proposal.Input[key].(string); ok && strings.TrimSpace(value) != "" {
+			targets = append(targets, key+"="+security.RedactString(value))
+		}
+	}
+	for _, path := range approvalStringSlice(proposal.Input["paths"]) {
+		if strings.TrimSpace(path) != "" {
+			targets = append(targets, "path="+security.RedactString(path))
+		}
+	}
+	if files, ok := proposal.Input["files"].([]any); ok {
+		for _, item := range files {
+			file, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			path, _ := file["path"].(string)
+			if path != "" {
+				targets = append(targets, "path="+security.RedactString(path))
+			}
+		}
+	}
+	return uniqueStrings(targets)
+}
+
+func approvalSafetyNotes(proposal core.ToolProposal, inference core.EffectInferenceResult, decision core.PolicyDecision) []string {
+	notes := []string{"Execution will use only the approved input_snapshot and snapshot_hash."}
+	if inference.Sensitive {
+		notes = append(notes, "Sensitive resources are involved; logs and API responses are redacted.")
+	}
+	if decision.PolicyProfile != "" {
+		notes = append(notes, "Policy profile: "+decision.PolicyProfile)
+	}
+	if proposal.Tool == "git.clean" || strings.Contains(inference.RiskLevel, "danger") {
+		notes = append(notes, "This operation may be destructive or hard to roll back.")
+	}
+	if proposal.Tool == "skill.run" && strings.Contains(strings.ToLower(inference.ReasonSummary), "fallback") {
+		notes = append(notes, "Sandbox fallback requires explicit approval.")
+	}
+	return notes
+}
+
+func anyToMap(input any) map[string]any {
+	switch typed := input.(type) {
+	case map[string]any:
+		return core.CloneMap(typed)
+	default:
+		raw, err := json.Marshal(input)
+		if err != nil {
+			return nil
+		}
+		var out map[string]any
+		if err := json.Unmarshal(raw, &out); err != nil {
+			return nil
+		}
+		return out
+	}
+}
+
 func opsApprovalTarget(input map[string]any) string {
 	for _, key := range []string{"service", "service_name", "container", "container_id", "target", "name", "resource"} {
 		if value, ok := input[key].(string); ok && value != "" {
@@ -296,8 +392,39 @@ func cloneApproval(record core.ApprovalRecord) *core.ApprovalRecord {
 	cp.Proposal.Input = core.CloneMap(record.Proposal.Input)
 	cp.InputSnapshot = core.CloneMap(record.InputSnapshot)
 	cp.Inference.Effects = append([]string(nil), record.Inference.Effects...)
+	cp.Inference.Signals = append([]string(nil), record.Inference.Signals...)
 	if record.Decision.ApprovalPayload != nil {
 		cp.Decision.ApprovalPayload = core.CloneMap(record.Decision.ApprovalPayload)
 	}
+	if record.Decision.RiskTrace != nil {
+		trace := *record.Decision.RiskTrace
+		trace.Effects = append([]string(nil), record.Decision.RiskTrace.Effects...)
+		trace.Signals = append([]string(nil), record.Decision.RiskTrace.Signals...)
+		cp.Decision.RiskTrace = &trace
+	}
+	if record.Explanation != nil {
+		explanation := *record.Explanation
+		explanation.ExpectedEffects = append([]string(nil), record.Explanation.ExpectedEffects...)
+		explanation.AffectedTargets = append([]string(nil), record.Explanation.AffectedTargets...)
+		explanation.SafetyNotes = append([]string(nil), record.Explanation.SafetyNotes...)
+		explanation.RollbackPlan = core.CloneMap(record.Explanation.RollbackPlan)
+		cp.Explanation = &explanation
+	}
 	return &cp
+}
+
+func uniqueStrings(items []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if strings.TrimSpace(item) == "" {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		out = append(out, item)
+	}
+	return out
 }

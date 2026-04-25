@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"local-agent/internal/security"
 )
 
 type httpDoer interface {
@@ -485,14 +487,18 @@ func sanitizePayload(chunk VectorChunk) map[string]any {
 	payload := map[string]any{}
 	for key, value := range chunk.Payload {
 		if allowed[key] {
-			payload[key] = value
+			if text, ok := value.(string); ok {
+				payload[key] = security.RedactString(text)
+			} else {
+				payload[key] = value
+			}
 		}
 	}
 	if chunk.SourceFile != "" {
 		payload["source_file"] = chunk.SourceFile
 	}
 	if chunk.Text != "" {
-		payload["text"] = chunk.Text
+		payload["text"] = security.RedactString(chunk.Text)
 	}
 	return payload
 }

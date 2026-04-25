@@ -25,7 +25,9 @@ func NewChatHandler(deps handlers.Dependencies) *ChatHandler {
 
 // ServeHTTP upgrades and serves the bidirectional chat protocol.
 func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	conn, err := websocket.Accept(w, r, nil)
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OriginPatterns: []string{"localhost", "127.0.0.1", "::1"},
+	})
 	if err != nil {
 		return
 	}

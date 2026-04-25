@@ -3,6 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+
+	"local-agent/internal/security"
 )
 
 // Base wraps shared dependencies and JSON helpers.
@@ -25,7 +27,7 @@ func decodeJSON(r *http.Request, target any) error {
 func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
+	_ = json.NewEncoder(w).Encode(security.RedactAny(payload))
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string, details any) {

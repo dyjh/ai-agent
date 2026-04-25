@@ -4,3 +4,10 @@
 /data/
 /coverage.out
 .codex
+ui/web/node_modules/
+ui/web/dist/
+ui/web/coverage/
+ui/tui/bin/
+
+/promote/
+/global_tests/

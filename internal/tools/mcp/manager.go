@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"sort"
@@ -12,6 +13,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"local-agent/internal/config"
 	"local-agent/internal/core"
 	"local-agent/internal/ids"
 	"local-agent/internal/security"
@@ -27,6 +29,7 @@ type Manager struct {
 	transports    map[string]MCPTransport
 	factory       TransportFactory
 	defaultTimout int
+	network       config.NetworkPolicy
 }
 
 // Option customizes the MCP manager.
@@ -60,11 +63,19 @@ func NewManager(options ...Option) *Manager {
 		transports:    map[string]MCPTransport{},
 		factory:       DefaultTransportFactory{},
 		defaultTimout: 30,
+		network:       config.Default().Policy.Network,
 	}
 	for _, option := range options {
 		option(m)
 	}
 	return m
+}
+
+// SetNetworkPolicy sets outbound HTTP MCP endpoint constraints.
+func (m *Manager) SetNetworkPolicy(policy config.NetworkPolicy) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.network = policy
 }
 
 // LoadConfig loads server and policy configuration files.
@@ -420,6 +431,15 @@ func (m *Manager) transportFor(ctx context.Context, serverID string) (MCPTranspo
 	m.mu.RUnlock()
 	if transport != nil {
 		return transport, nil
+	}
+	if server.Transport == TransportHTTP {
+		m.mu.RLock()
+		network := m.network
+		m.mu.RUnlock()
+		decision := security.ValidateNetworkURL(network, server.URL, http.MethodPost, server.Compatibility.MaxPayloadBytes)
+		if !decision.Allowed {
+			return nil, fmt.Errorf("network policy denied MCP HTTP endpoint: %s", decision.Reason)
+		}
 	}
 
 	cfg := TransportConfig{

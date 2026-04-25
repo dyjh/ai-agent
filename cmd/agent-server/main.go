@@ -46,6 +46,9 @@ func main() {
 		logger.Info("startup config verified",
 			"knowledge_base", report.Knowledge,
 			"provider", report.Provider,
+			"llm_provider", report.LLMProvider,
+			"embedding_provider", report.EmbeddingProvider,
+			"embedding_model", report.EmbeddingModel,
 			"docs_route", report.DocsRoute,
 		)
 	}

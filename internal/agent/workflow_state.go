@@ -365,11 +365,13 @@ func cloneRunState(state RunState) RunState {
 	if state.Inference != nil {
 		inference := *state.Inference
 		inference.Effects = append([]string(nil), state.Inference.Effects...)
+		inference.Signals = append([]string(nil), state.Inference.Signals...)
 		cp.Inference = &inference
 	}
 	if state.Policy != nil {
 		policy := *state.Policy
 		policy.ApprovalPayload = core.CloneMap(state.Policy.ApprovalPayload)
+		policy.RiskTrace = cloneRiskTrace(state.Policy.RiskTrace)
 		cp.Policy = &policy
 	}
 	if state.ToolResult != nil {
@@ -390,11 +392,13 @@ func cloneRunStep(step RunStep) RunStep {
 	if step.Inference != nil {
 		inference := *step.Inference
 		inference.Effects = append([]string(nil), step.Inference.Effects...)
+		inference.Signals = append([]string(nil), step.Inference.Signals...)
 		cp.Inference = &inference
 	}
 	if step.Policy != nil {
 		policy := *step.Policy
 		policy.ApprovalPayload = core.CloneMap(step.Policy.ApprovalPayload)
+		policy.RiskTrace = cloneRiskTrace(step.Policy.RiskTrace)
 		cp.Policy = &policy
 	}
 	if step.Approval != nil {
@@ -454,6 +458,9 @@ func sanitizeRunState(state RunState) RunState {
 	if cp.Policy != nil {
 		cp.Policy.ApprovalPayload = security.RedactMap(cp.Policy.ApprovalPayload)
 		cp.Policy.Reason = security.RedactString(cp.Policy.Reason)
+		if cp.Policy.RiskTrace != nil {
+			cp.Policy.RiskTrace.Reason = security.RedactString(cp.Policy.RiskTrace.Reason)
+		}
 	}
 	if cp.ToolResult != nil {
 		cp.ToolResult.Output = security.RedactMap(cp.ToolResult.Output)
@@ -475,6 +482,9 @@ func sanitizeRunStep(step RunStep) RunStep {
 	if cp.Policy != nil {
 		cp.Policy.ApprovalPayload = security.RedactMap(cp.Policy.ApprovalPayload)
 		cp.Policy.Reason = security.RedactString(cp.Policy.Reason)
+		if cp.Policy.RiskTrace != nil {
+			cp.Policy.RiskTrace.Reason = security.RedactString(cp.Policy.RiskTrace.Reason)
+		}
 	}
 	if cp.ToolResult != nil {
 		cp.ToolResult.Output = security.RedactMap(cp.ToolResult.Output)
@@ -483,8 +493,23 @@ func sanitizeRunStep(step RunStep) RunStep {
 	if cp.Approval != nil {
 		cp.Approval.Summary = security.RedactString(cp.Approval.Summary)
 		cp.Approval.Reason = security.RedactString(cp.Approval.Reason)
+		if cp.Approval.Explanation != nil {
+			cp.Approval.Explanation.Summary = security.RedactString(cp.Approval.Explanation.Summary)
+			cp.Approval.Explanation.WhyNeeded = security.RedactString(cp.Approval.Explanation.WhyNeeded)
+			cp.Approval.Explanation.RollbackPlan = security.RedactMap(cp.Approval.Explanation.RollbackPlan)
+		}
 	}
 	return cp
+}
+
+func cloneRiskTrace(trace *core.RiskTrace) *core.RiskTrace {
+	if trace == nil {
+		return nil
+	}
+	cp := *trace
+	cp.Effects = append([]string(nil), trace.Effects...)
+	cp.Signals = append([]string(nil), trace.Signals...)
+	return &cp
 }
 
 func sanitizeCodePlan(plan *CodePlan) {

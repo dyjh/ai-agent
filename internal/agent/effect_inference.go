@@ -74,6 +74,29 @@ func (e *EffectInferrer) Infer(_ context.Context, proposal core.ToolProposal) (c
 			Confidence:    0.95,
 			ReasonSummary: "read-only memory search",
 		}, nil
+	case "memory.extract_candidates":
+		if inputBool(proposal.Input, "queue") {
+			return core.EffectInferenceResult{
+				Effects:          []string{"memory.review.write"},
+				RiskLevel:        "write",
+				ApprovalRequired: true,
+				Confidence:       0.9,
+				ReasonSummary:    "memory extraction writes candidate review records",
+			}, nil
+		}
+		return core.EffectInferenceResult{
+			Effects:       []string{"memory.review"},
+			RiskLevel:     "read",
+			Confidence:    0.9,
+			ReasonSummary: "memory candidate extraction does not commit long-term memory",
+		}, nil
+	case "memory.detect_conflicts", "memory.merge_candidates":
+		return core.EffectInferenceResult{
+			Effects:       []string{"memory.read"},
+			RiskLevel:     "read",
+			Confidence:    0.9,
+			ReasonSummary: "memory governance analysis is read-only",
+		}, nil
 	case "code.propose_patch":
 		if e.proposalTouchesSensitivePath(proposal) {
 			return core.EffectInferenceResult{
@@ -166,6 +189,14 @@ func (e *EffectInferrer) Infer(_ context.Context, proposal core.ToolProposal) (c
 			ApprovalRequired: true,
 			Confidence:       0.95,
 			ReasonSummary:    "memory patch modifies markdown facts",
+		}, nil
+	case "memory.item_create", "memory.item_update", "memory.item_archive", "memory.item_restore", "memory.item_delete":
+		return core.EffectInferenceResult{
+			Effects:          []string{"fs.write", "memory.modify"},
+			RiskLevel:        "write",
+			ApprovalRequired: true,
+			Confidence:       0.98,
+			ReasonSummary:    "memory item operation modifies Markdown memory",
 		}, nil
 	case "skill.run":
 		return e.inferSkill(proposal), nil
@@ -827,6 +858,8 @@ func (e *EffectInferrer) classifyNetworkCommand(args []string) []string {
 				return []string{"network.post"}
 			case "PUT":
 				return []string{"network.put"}
+			case "PATCH":
+				return []string{"network.patch"}
 			case "DELETE":
 				return []string{"network.delete"}
 			}
@@ -874,7 +907,7 @@ func effectRequiresApproval(effect string) bool {
 	if strings.Contains(effect, "write") || strings.Contains(effect, "modify") || strings.Contains(effect, "delete") || strings.Contains(effect, "install") {
 		return true
 	}
-	if effect == "network.post" || effect == "network.put" || effect == "network.delete" {
+	if effect == "network.post" || effect == "network.put" || effect == "network.patch" || effect == "network.delete" {
 		return true
 	}
 	if strings.Contains(effect, "restart") || strings.Contains(effect, "stop") || strings.Contains(effect, "kill") || strings.Contains(effect, "escalate") {

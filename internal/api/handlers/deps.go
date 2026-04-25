@@ -6,6 +6,7 @@ import (
 	"local-agent/internal/agent"
 	"local-agent/internal/config"
 	"local-agent/internal/db/repo"
+	"local-agent/internal/evals"
 	toolscore "local-agent/internal/tools"
 	"local-agent/internal/tools/kb"
 	"local-agent/internal/tools/mcp"
@@ -27,4 +28,5 @@ type Dependencies struct {
 	Skills    *skills.Manager
 	MCP       *mcp.Manager
 	Ops       *ops.Manager
+	Evals     *evals.Manager
 }

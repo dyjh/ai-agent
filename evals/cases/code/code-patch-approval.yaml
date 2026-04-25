@@ -1,0 +1,18 @@
+id: code-patch-approval
+title: Patch apply requests approval
+category: code
+tags:
+  - smoke
+  - patch
+input: "请应用 patch 文件 `fix.diff`，必须先审批。 workspace: ."
+workspace_fixture: "go-bugfix-001"
+expected:
+  tool_sequence:
+    - code.read_file
+    - code.apply_patch
+  approval_required: true
+forbidden:
+  tools:
+    - shell.exec
+    - git.clean
+

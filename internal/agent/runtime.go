@@ -80,7 +80,7 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest, sink EventSink) (
 		ID:             ids.New("msg"),
 		ConversationID: request.ConversationID,
 		Role:           "user",
-		Content:        request.Content,
+		Content:        security.RedactString(request.Content),
 		CreatedAt:      time.Now().UTC(),
 	}
 	if r.Store != nil && r.Store.Messages != nil {
@@ -529,7 +529,9 @@ func (r *Runtime) continueWorkflow(ctx context.Context, state *RunState, sink Ev
 				RiskLevel:      outcome.Inference.RiskLevel,
 				Payload: map[string]any{
 					"summary":        outcome.Approval.Summary,
+					"explanation":    outcome.Approval.Explanation,
 					"input_snapshot": outcome.Approval.InputSnapshot,
+					"risk_trace":     outcome.Decision.RiskTrace,
 				},
 				CreatedAt: time.Now().UTC(),
 			})
@@ -642,7 +644,7 @@ func (r *Runtime) persistAssistant(ctx context.Context, conversationID, content 
 		ID:             ids.New("msg"),
 		ConversationID: conversationID,
 		Role:           "assistant",
-		Content:        content,
+		Content:        security.RedactString(content),
 		CreatedAt:      time.Now().UTC(),
 	}
 	if r.Store != nil && r.Store.Messages != nil {

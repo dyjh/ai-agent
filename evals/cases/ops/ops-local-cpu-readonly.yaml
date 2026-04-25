@@ -1,0 +1,15 @@
+id: ops-local-cpu-readonly
+title: Local CPU check uses readonly ops tool
+category: ops
+tags:
+  - smoke
+  - readonly
+input: "看一下本机 CPU 占用最高的进程"
+expected:
+  tools:
+    - ops.local.processes
+  approval_required: false
+forbidden:
+  tools:
+    - shell.exec
+
