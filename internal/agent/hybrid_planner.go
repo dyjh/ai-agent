@@ -22,6 +22,7 @@ type HybridPlanner struct {
 	Catalog        catalog.PlanningCatalog
 	Semantic       semantic.LLMSemanticPlanner
 	Mode           string
+	Config         semantic.Config
 	SensitivePaths []string
 }
 
@@ -33,6 +34,7 @@ func NewHybridPlanner(registry catalog.Registry, model semantic.ChatModel, cfg s
 		Catalog:        cat,
 		Semantic:       semantic.NewLLMPlanner(model, cfg),
 		Mode:           cfg.Mode,
+		Config:         semantic.NormalizeConfig(cfg),
 		SensitivePaths: append([]string(nil), sensitivePaths...),
 	}
 }
@@ -66,6 +68,9 @@ func (p HybridPlanner) engine() v2.HybridPlanner {
 		cat = catalog.New(p.Registry)
 	}
 	mode := v2.Mode(p.Mode)
+	if mode == "" && p.Config.Mode != "" {
+		mode = v2.Mode(p.Config.Mode)
+	}
 	if mode == "" {
 		mode = v2.ModeHybrid
 	}
@@ -78,6 +83,7 @@ func (p HybridPlanner) engine() v2.HybridPlanner {
 		Compiler:   compile.New(cat, p.adapter()),
 		Catalog:    cat,
 		Mode:       mode,
+		Config:     p.Config,
 	}
 }
 
@@ -89,10 +95,12 @@ func (p HybridPlanner) toPlan(compiled compile.CompiledPlan, input PlanInput) Pl
 	switch compiled.Decision {
 	case compile.DecisionTool:
 		plan := Plan{
-			Decision:     PlanDecisionTool,
-			Preamble:     preambleForProposal(compiled.ToolProposal, compiled.Preamble),
-			ToolProposal: cloneProposalPtr(compiled.ToolProposal),
-			Reason:       compiled.Reason,
+			Decision:       PlanDecisionTool,
+			Preamble:       preambleForProposal(compiled.ToolProposal, compiled.Preamble),
+			ToolProposal:   cloneProposalPtr(compiled.ToolProposal),
+			Reason:         compiled.Reason,
+			PlannerSource:  string(compiled.PlannerSource),
+			CandidateCount: compiled.CandidateCount,
 		}
 		if compiled.ToolProposal != nil {
 			plan.CodePlan = codePlanForProposal(*compiled.ToolProposal, input.UserMessage)
@@ -100,9 +108,11 @@ func (p HybridPlanner) toPlan(compiled compile.CompiledPlan, input PlanInput) Pl
 		return plan
 	default:
 		return Plan{
-			Decision: PlanDecisionAnswer,
-			Message:  compiled.Message,
-			Reason:   compiled.Reason,
+			Decision:       PlanDecisionAnswer,
+			Message:        compiled.Message,
+			Reason:         compiled.Reason,
+			PlannerSource:  string(compiled.PlannerSource),
+			CandidateCount: compiled.CandidateCount,
 		}
 	}
 }

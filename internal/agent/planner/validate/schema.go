@@ -19,9 +19,15 @@ func (v Validator) validateStep(step *semantic.SemanticPlanStep) stepValidation 
 		result.Errors = append(result.Errors, "tool is not planner auto-selectable: "+step.Tool)
 		return result
 	}
-	if !v.Options.AllowCrossCandidate && len(v.Options.CandidateToolIDs) > 0 && !containsTool(v.Options.CandidateToolIDs, step.Tool) {
+	candidateScoped := v.Options.RequireCandidateMatch || len(v.Options.CandidateToolIDs) > 0
+	if !v.Options.AllowCrossCandidate && candidateScoped && !containsTool(v.Options.CandidateToolIDs, step.Tool) {
 		result.Errors = append(result.Errors, "tool was not in candidate set: "+step.Tool)
 		result.Clarify = "候选工具不足以安全处理这个请求，请补充目标或改用明确的工具参数。"
+		return result
+	}
+	if step.Tool == "shell.exec" && !v.shellExplicitlyRequested(step) {
+		result.Errors = append(result.Errors, "shell.exec requires explicit shell intent or an exact command from the user")
+		result.Clarify = "当前请求没有明确要求执行 shell 命令，不能把 shell.exec 当作结构化工具不足时的 fallback。"
 		return result
 	}
 	if !spec.AutoSelectable {
@@ -73,6 +79,49 @@ func containsTool(tools []string, tool string) bool {
 		}
 	}
 	return false
+}
+
+func (v Validator) shellExplicitlyRequested(step *semantic.SemanticPlanStep) bool {
+	if v.Options.Request == nil {
+		return false
+	}
+	req := *v.Options.Request
+	if req.ExplicitToolID == "shell.exec" {
+		return true
+	}
+	command := strings.TrimSpace(fmt.Sprint(step.Input["command"]))
+	original := strings.ToLower(strings.TrimSpace(req.Original))
+	if command != "" && strings.Contains(strings.ToLower(req.Original), strings.ToLower(command)) {
+		return true
+	}
+	for _, marker := range []string{"shell", "bash", "命令", "终端", "command"} {
+		if strings.Contains(original, marker) {
+			return true
+		}
+	}
+	return command != "" && requestLooksLikeCommand(req.Original, command)
+}
+
+func requestLooksLikeCommand(original, command string) bool {
+	original = strings.TrimSpace(original)
+	command = strings.TrimSpace(command)
+	if original == "" || command == "" {
+		return false
+	}
+	fields := strings.Fields(strings.ToLower(original))
+	if len(fields) == 0 {
+		return false
+	}
+	commandFields := strings.Fields(strings.ToLower(command))
+	if len(commandFields) == 0 || fields[0] != commandFields[0] {
+		return false
+	}
+	switch fields[0] {
+	case "cat", "ls", "pwd", "ps", "pgrep", "top", "uname", "uptime", "free", "df", "whoami", "grep", "rg", "sed", "head", "tail", "go", "npm", "pnpm", "yarn", "python", "docker", "kubectl":
+		return true
+	default:
+		return false
+	}
 }
 
 func plannerBlockedTool(tool string) bool {

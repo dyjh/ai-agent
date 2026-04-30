@@ -705,8 +705,8 @@ func (e *EffectInferrer) inferShell(proposal core.ToolProposal) core.EffectInfer
 	effects := make([]string, 0, 4)
 	confidence := 0.9
 	riskLevel := "read"
-	approvalRequired := false
-	reason := "read-only shell query"
+	approvalRequired := true
+	reason := "shell command requires approval"
 
 	if structure.HasWriteRedirect {
 		effects = append(effects, "fs.write")
@@ -739,10 +739,10 @@ func (e *EffectInferrer) inferShell(proposal core.ToolProposal) core.EffectInfer
 	switch first {
 	case "ps", "pgrep", "top":
 		effects = append(effects, "read", "process.read")
-		reason = "process inspection command"
+		reason = "process inspection shell command requires approval"
 	case "uname", "uptime", "free", "df", "pwd", "whoami":
 		effects = append(effects, "read", "system.read")
-		reason = "system inspection command"
+		reason = "system inspection shell command requires approval"
 	case "git":
 		effects = append(effects, e.classifyGit(rest)...)
 		if hasMutatingEffect(effects) {
@@ -750,10 +750,11 @@ func (e *EffectInferrer) inferShell(proposal core.ToolProposal) core.EffectInfer
 			approvalRequired = true
 			reason = "git command mutates repository state"
 		} else {
-			reason = "git read-only command"
+			reason = "git read-only shell command requires approval"
 		}
 	case "cat", "less", "head", "tail", "ls", "find", "rg", "grep", "sed":
 		effects = append(effects, "read", "code.read")
+		reason = "file inspection shell command requires approval"
 		if first == "sed" && contains(rest, "-i") {
 			effects = append(effects, "fs.write", "code.modify")
 			riskLevel = "write"
@@ -772,7 +773,7 @@ func (e *EffectInferrer) inferShell(proposal core.ToolProposal) core.EffectInfer
 			approvalRequired = true
 			reason = "package or module management command"
 		} else {
-			reason = "read-only tooling query"
+			reason = "read-only tooling shell command requires approval"
 		}
 	case "curl", "wget":
 		effects = append(effects, e.classifyNetworkCommand(rest)...)
@@ -781,7 +782,7 @@ func (e *EffectInferrer) inferShell(proposal core.ToolProposal) core.EffectInfer
 			approvalRequired = true
 			reason = "network write or upload detected"
 		} else {
-			reason = "network read command"
+			reason = "network read shell command requires approval"
 		}
 	case "sudo":
 		effects = append(effects, "privilege.escalate")

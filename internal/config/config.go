@@ -136,11 +136,40 @@ type ShellConfig struct {
 
 // PlannerConfig controls the hybrid natural-language planner.
 type PlannerConfig struct {
-	Mode                    string `yaml:"mode"`
-	SemanticEnabled         bool   `yaml:"semantic_enabled"`
-	SemanticShadowMode      bool   `yaml:"semantic_shadow_mode"`
-	MaxRetries              int    `yaml:"max_retries"`
-	RequireSchemaValidation bool   `yaml:"require_schema_validation"`
+	Mode                    string                   `yaml:"mode"`
+	SemanticEnabled         bool                     `yaml:"semantic_enabled"`
+	SemanticShadowMode      bool                     `yaml:"semantic_shadow_mode"`
+	MaxRetries              int                      `yaml:"max_retries"`
+	RequireSchemaValidation bool                     `yaml:"require_schema_validation"`
+	ChatGate                PlannerChatGateConfig    `yaml:"chat_gate"`
+	ToolPlanner             PlannerToolPlannerConfig `yaml:"tool_planner"`
+	Shell                   PlannerShellConfig       `yaml:"shell"`
+	Debug                   PlannerDebugConfig       `yaml:"debug"`
+}
+
+// PlannerChatGateConfig controls the lightweight no-tool gate.
+type PlannerChatGateConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Mode    string `yaml:"mode"`
+}
+
+// PlannerToolPlannerConfig controls final tool choice authority.
+type PlannerToolPlannerConfig struct {
+	RequireLLMForToolChoice    bool `yaml:"require_llm_for_tool_choice"`
+	EnableFastPath             bool `yaml:"enable_fastpath"`
+	AllowCandidateFallback     bool `yaml:"allow_candidate_fallback"`
+	CandidateSelectorAsContext bool `yaml:"candidate_selector_as_context"`
+	AllowCrossCandidate        bool `yaml:"allow_cross_candidate"`
+}
+
+// PlannerShellConfig controls shell planning fallback behavior.
+type PlannerShellConfig struct {
+	AllowAutoFallback bool `yaml:"allow_auto_fallback"`
+}
+
+// PlannerDebugConfig controls planner observability.
+type PlannerDebugConfig struct {
+	ExposePlannerSource bool `yaml:"expose_planner_source"`
 }
 
 // PolicyProfile stores one named policy mode.
@@ -239,11 +268,27 @@ func Default() Config {
 			MaxOutputChars:        20000,
 		},
 		Planner: PlannerConfig{
-			Mode:                    "hybrid",
-			SemanticEnabled:         false,
+			Mode:                    "semantic_strict",
+			SemanticEnabled:         true,
 			SemanticShadowMode:      false,
 			MaxRetries:              2,
 			RequireSchemaValidation: true,
+			ChatGate: PlannerChatGateConfig{
+				Enabled: true,
+				Mode:    "lightweight",
+			},
+			ToolPlanner: PlannerToolPlannerConfig{
+				RequireLLMForToolChoice:    true,
+				EnableFastPath:             false,
+				AllowCandidateFallback:     false,
+				CandidateSelectorAsContext: true,
+			},
+			Shell: PlannerShellConfig{
+				AllowAutoFallback: false,
+			},
+			Debug: PlannerDebugConfig{
+				ExposePlannerSource: true,
+			},
 		},
 		Policy: PolicyConfig{
 			MinConfidenceForAutoExecute: 0.85,

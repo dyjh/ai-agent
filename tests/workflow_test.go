@@ -16,13 +16,13 @@ import (
 func TestWorkflowReadOnlyAutoExecutes(t *testing.T) {
 	runtime, planner, executor := newWorkflowRuntime(core.ToolProposal{
 		ID:        "tool_read",
-		Tool:      "shell.exec",
-		Input:     map[string]any{"command": "pwd"},
-		Purpose:   "read current directory",
+		Tool:      "ops.local.system_info",
+		Input:     map[string]any{},
+		Purpose:   "read local system info",
 		CreatedAt: time.Now().UTC(),
 	})
 
-	events := startWorkflow(t, runtime, "conv_read", "pwd")
+	events := startWorkflow(t, runtime, "conv_read", "system info")
 	runID := eventValue(t, events, "run.started").RunID
 
 	state, err := runtime.StateStore.Get(context.Background(), runID)
@@ -157,6 +157,7 @@ func newWorkflowRuntime(proposal core.ToolProposal) (*agent.Runtime, *workflowPl
 
 	registry := toolscore.NewRegistry()
 	registry.Register(core.ToolSpec{ID: "shell.exec", Name: "shell.exec", Description: "shell"}, executor)
+	registry.Register(core.ToolSpec{ID: "ops.local.system_info", Name: "ops.local.system_info", Description: "system info"}, executor)
 	router := toolscore.NewRouter(
 		registry,
 		agent.NewEffectInferrer(config.PolicyConfig{SensitivePaths: []string{".env"}}),

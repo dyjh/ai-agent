@@ -20,10 +20,12 @@ type PlanValidationResult struct {
 
 // Options configures local safety checks.
 type Options struct {
-	SensitivePaths      []string
-	Request             *normalize.NormalizedRequest
-	CandidateToolIDs    []string
-	AllowCrossCandidate bool
+	SensitivePaths        []string
+	Request               *normalize.NormalizedRequest
+	CandidateToolIDs      []string
+	AllowCrossCandidate   bool
+	RequireCandidateMatch bool
+	RequireSemanticSource bool
 }
 
 // Validator validates SemanticPlan without executing anything.
@@ -61,6 +63,11 @@ func (v Validator) Validate(plan semantic.SemanticPlan) PlanValidationResult {
 		result.Sanitized = &sanitized
 		return result
 	case semantic.SemanticPlanTool, semantic.SemanticPlanMultiStep:
+		if v.Options.RequireSemanticSource && sanitized.PlannerSource != semantic.PlannerSourceSemanticLLM && sanitized.PlannerSource != semantic.PlannerSourceExplicitTool {
+			result.Errors = append(result.Errors, "semantic_strict tool plan must come from semantic_llm or explicit_tool_request")
+			result.Clarify = "语义工具规划模型当前不可用，无法安全选择工具。请稍后重试，或明确指定工具。"
+			return result
+		}
 	default:
 		result.Errors = append(result.Errors, fmt.Sprintf("invalid decision %q", sanitized.Decision))
 		return result

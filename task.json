@@ -1,17 +1,17 @@
 {
   "project": "local-agent",
   "source": "promote-stageF-9",
-  "last_updated": "2026-04-25T23:10:00+08:00",
+  "last_updated": "2026-04-29T18:30:00+08:00",
   "overall_status": "full_agent_foundation_completed",
-  "current_task_id": "post-full-agent-planner-v2-tool-card-refactor",
-  "current_task_title": "Planner V2.1 Tool Card Candidate Planner Refactor",
+  "current_task_id": "post-full-agent-planner-v2-semantic-strict",
+  "current_task_title": "Planner V2.2 Semantic Strict Tool Choice",
   "summary": {
     "headline": "MVP 主链路保持稳定，F1 代码能力、F2 运维能力、F3 RAG 可靠性、F4 长期记忆治理、F5 安全策略/Secret Guard、F6 Eval/Replay 和 F7 Web UI/TUI 首版均已完成。",
     "progress": {
-      "completed": 25,
+      "completed": 26,
       "in_progress": 0,
       "pending": 1,
-      "total": 26
+      "total": 27
     },
     "verified": [
       "2026-04-23 已检查仓库结构，HTTP API / WebSocket / CLI / memory / kb / skills / mcp / tests 均已存在。",
@@ -38,7 +38,8 @@
       "2026-04-25 已完成 Phase F6：新增 EvalCase YAML/JSON、safe-mode EvalRunner、chat/RAG/code/ops/safety golden tasks、event/behavior replay、Eval report、API/CLI、Swagger/OpenAPI 更新和回归测试，并确认 go test ./... 通过。",
       "2026-04-25 已完成 Phase F7 首版：新增独立 ui/web React/Vite Web UI、ui/tui Go TUI、Chat/Run/Approval/Code/Memory/KB/Skill/MCP/Ops/Eval/Settings 页面入口、CORS/WS 本机 origin 支持、README/Makefile/task.json 更新，并确认 go test ./...、ui/tui go test ./...、ui/web npm test 和 npm run build 通过。",
       "2026-04-25 已完成 Post-F7 Planner V2：Hybrid Planner、RequestNormalizer、IntentClassifier、PlanningCatalog、SemanticPlan、FastPath、LLM Semantic Planner 配置门禁、PlanValidator、PlanCompiler、planner eval 和 live regression 修复。",
-      "2026-04-25 已完成 Planner V2.1：Slot-only Normalizer、Tool Card Catalog、CandidateSelector、候选 Tool Card Semantic Planner、signals.go keyword dictionary removed、old planner dead code cleaned、planner eval expanded，并保持 bug.json live regression case 通过。"
+      "2026-04-25 已完成 Planner V2.1：Slot-only Normalizer、Tool Card Catalog、CandidateSelector、候选 Tool Card Semantic Planner、signals.go keyword dictionary removed、old planner dead code cleaned、planner eval expanded，并保持 bug.json live regression case 通过。",
+      "2026-04-29 已完成 Planner V2.2 semantic_strict：默认生产模式禁止 FastPath / Candidate fallback 本地拍板工具，CandidateSelector 降级为候选上下文，Semantic LLM Planner 负责工具选择，planner_source 进入 plan/run event，shell.exec 禁止自动 fallback 且始终审批。"
     ],
     "unfinished_overview": [
       "当前 step loop 已覆盖本地单用户可恢复多步任务，但仍不是无限自动规划的通用 graph 平台。",
@@ -651,6 +652,40 @@
       ]
     },
     {
+      "id": "post-full-agent-planner-v2-semantic-strict",
+      "title": "Planner V2.2 Semantic Strict Tool Choice",
+      "status": "completed",
+      "problem_statement": [
+        "HybridPlanner.Plan 当前会先执行 Candidate Selector，候选召回结果会影响后续工具规划。",
+        "在非 semantic mode 下，旧链路会先执行 FastPath；fastpath 命中后直接返回，不再调用 Semantic LLM。",
+        "当 Semantic LLM 返回 ErrUnavailable 时，旧链路会使用 semantic.PlanFromCandidates 兜底生成工具计划。",
+        "Candidate Selector 是本地打分逻辑，只适合作为候选召回，不应在默认生产模式中成为最终工具决策。",
+        "工具执行后 summarizeToolResult 仍偏粗，本次仅保证 planner 改造不加重该问题。"
+      ],
+      "completed_items": [
+        "新增 semantic_strict 默认生产模式及 planner.chat_gate / tool_planner / shell / debug 配置。",
+        "ChatGate 只判断 direct_answer / maybe_tool / clarify，不选择工具。",
+        "CandidateSelector 在 semantic_strict 下只作为 Semantic LLM Planner 的候选上下文，不允许 PlanFromCandidates 兜底拍板。",
+        "FastPath 在 semantic_strict 下默认关闭，且 require_llm_for_tool_choice=true 时不参与最终计划生成。",
+        "Semantic LLM unavailable 时返回 tool_planner_unavailable 澄清，不生成 ToolProposal。",
+        "新增 planner_source，并写入 SemanticPlan、CompiledPlan、agent.Plan、RunState plan 和 run.state / tool_proposed event payload。",
+        "Validator 增加强约束：semantic_strict 工具计划必须来自 semantic_llm 或 explicit_tool_request，工具必须在候选集内，shell.exec 必须有显式 shell/命令意图。",
+        "shell.exec 不再作为自动 fallback，EffectInference 将 shell.exec 始终标记为需要审批。",
+        "更新 README 和 semantic strict planner 回归测试。"
+      ],
+      "remaining_items": [
+        "summarizeToolResult 仍需后续单独增强为 tool-aware / citation-aware / diff-aware 摘要。",
+        "后续可补充 planner telemetry 指标，用于统计候选召回、semantic_llm、validator clarify 和 unavailable 命中率。"
+      ],
+      "deliverables": [
+        "semantic_strict planner mode",
+        "planner source observability",
+        "strict validator checks",
+        "shell fallback ban",
+        "Planner V2.2 regression tests"
+      ]
+    },
+    {
       "id": "post-full-agent-backlog",
       "title": "Post-F7 Backlog",
       "status": "pending",
@@ -791,6 +826,11 @@
       "at": "2026-04-25T23:10:00+08:00",
       "task_id": "post-full-agent-planner-v2-tool-card-refactor",
       "summary": "完成 Planner V2.1 Tool Card Candidate Planner Refactor：移除 signals.go 自然语言词表，引入 Tool Card Catalog、CandidateSelector、候选语义规划、Tool Card aware Validator，清理旧 planner 死代码并扩展回归/eval。"
+    },
+    {
+      "at": "2026-04-29T18:30:00+08:00",
+      "task_id": "post-full-agent-planner-v2-semantic-strict",
+      "summary": "完成 Planner V2.2 semantic_strict：默认生产模式要求 Semantic LLM 负责工具选择，FastPath 和 Candidate fallback 不再静默截断语义规划，CandidateSelector 只做候选上下文，shell.exec 禁止自动 fallback 且始终审批，并补充 planner_source 可观测性和回归测试。"
     }
   ]
 }

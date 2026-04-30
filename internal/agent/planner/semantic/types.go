@@ -1,5 +1,18 @@
 package semantic
 
+// PlannerSource records which planner component produced the final decision.
+type PlannerSource string
+
+const (
+	PlannerSourceFastPath          PlannerSource = "fastpath"
+	PlannerSourceSemanticLLM       PlannerSource = "semantic_llm"
+	PlannerSourceCandidateFallback PlannerSource = "candidate_fallback"
+	PlannerSourceNoToolAnswer      PlannerSource = "no_tool_answer"
+	PlannerSourceClarify           PlannerSource = "clarify"
+	PlannerSourceToolUnavailable   PlannerSource = "tool_planner_unavailable"
+	PlannerSourceExplicitTool      PlannerSource = "explicit_tool_request"
+)
+
 // SemanticPlanDecision is the structured planner decision before compilation.
 type SemanticPlanDecision string
 
@@ -17,6 +30,7 @@ type SemanticPlan struct {
 	Confidence         float64              `json:"confidence"`
 	Language           string               `json:"language,omitempty"`
 	Domain             string               `json:"domain,omitempty"`
+	PlannerSource      PlannerSource        `json:"planner_source,omitempty"`
 	Steps              []SemanticPlanStep   `json:"steps,omitempty"`
 	Answer             string               `json:"answer,omitempty"`
 	ClarifyingQuestion string               `json:"clarifying_question,omitempty"`

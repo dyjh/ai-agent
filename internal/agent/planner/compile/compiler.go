@@ -16,13 +16,15 @@ const (
 
 // CompiledPlan is a non-executable bridge from SemanticPlan to ToolProposal.
 type CompiledPlan struct {
-	Decision     Decision                   `json:"decision"`
-	Message      string                     `json:"message,omitempty"`
-	Preamble     string                     `json:"preamble,omitempty"`
-	Reason       string                     `json:"reason,omitempty"`
-	ToolProposal *core.ToolProposal         `json:"tool_proposal,omitempty"`
-	SemanticPlan semantic.SemanticPlan      `json:"semantic_plan"`
-	SelectedStep *semantic.SemanticPlanStep `json:"selected_step,omitempty"`
+	Decision       Decision                   `json:"decision"`
+	Message        string                     `json:"message,omitempty"`
+	Preamble       string                     `json:"preamble,omitempty"`
+	Reason         string                     `json:"reason,omitempty"`
+	PlannerSource  semantic.PlannerSource     `json:"planner_source,omitempty"`
+	CandidateCount int                        `json:"candidate_count,omitempty"`
+	ToolProposal   *core.ToolProposal         `json:"tool_proposal,omitempty"`
+	SemanticPlan   semantic.SemanticPlan      `json:"semantic_plan"`
+	SelectedStep   *semantic.SemanticPlanStep `json:"selected_step,omitempty"`
 }
 
 // Compiler compiles validated SemanticPlan into the existing proposal shape.
@@ -46,12 +48,12 @@ func New(cat catalog.PlanningCatalog, adapter ProposalAdapter) Compiler {
 func (c Compiler) Compile(plan semantic.SemanticPlan) CompiledPlan {
 	switch plan.Decision {
 	case semantic.SemanticPlanAnswer:
-		return CompiledPlan{Decision: DecisionAnswer, Message: plan.Answer, Reason: plan.Reason, SemanticPlan: plan}
+		return CompiledPlan{Decision: DecisionAnswer, Message: plan.Answer, Reason: plan.Reason, PlannerSource: plan.PlannerSource, SemanticPlan: plan}
 	case semantic.SemanticPlanClarify:
-		return CompiledPlan{Decision: DecisionAnswer, Message: plan.ClarifyingQuestion, Reason: plan.Reason, SemanticPlan: plan}
+		return CompiledPlan{Decision: DecisionAnswer, Message: plan.ClarifyingQuestion, Reason: plan.Reason, PlannerSource: plan.PlannerSource, SemanticPlan: plan}
 	case semantic.SemanticPlanTool, semantic.SemanticPlanMultiStep:
 		if len(plan.Steps) == 0 {
-			return CompiledPlan{Decision: DecisionAnswer, Message: "需要补充要执行的工具和参数。", Reason: "semantic plan has no steps", SemanticPlan: plan}
+			return CompiledPlan{Decision: DecisionAnswer, Message: "需要补充要执行的工具和参数。", Reason: "semantic plan has no steps", PlannerSource: plan.PlannerSource, SemanticPlan: plan}
 		}
 		step := plan.Steps[0]
 		spec, _ := c.Catalog.Tool(step.Tool)
@@ -61,15 +63,16 @@ func (c Compiler) Compile(plan semantic.SemanticPlan) CompiledPlan {
 		}
 		proposal := c.Adapter.NewProposal(step.Tool, step.Input, purpose, spec.DefaultEffects)
 		return CompiledPlan{
-			Decision:     DecisionTool,
-			Preamble:     preambleFor(step.Tool),
-			Reason:       plan.Reason,
-			ToolProposal: &proposal,
-			SemanticPlan: plan,
-			SelectedStep: &step,
+			Decision:      DecisionTool,
+			Preamble:      preambleFor(step.Tool),
+			Reason:        plan.Reason,
+			PlannerSource: plan.PlannerSource,
+			ToolProposal:  &proposal,
+			SemanticPlan:  plan,
+			SelectedStep:  &step,
 		}
 	default:
-		return CompiledPlan{Decision: DecisionAnswer, Reason: "unsupported semantic decision", SemanticPlan: plan}
+		return CompiledPlan{Decision: DecisionAnswer, Reason: "unsupported semantic decision", PlannerSource: plan.PlannerSource, SemanticPlan: plan}
 	}
 }
 

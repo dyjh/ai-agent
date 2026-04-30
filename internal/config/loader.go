@@ -105,6 +105,9 @@ func Load(path string) (Config, error) {
 	if cfg.Planner.MaxRetries <= 0 {
 		cfg.Planner.MaxRetries = Default().Planner.MaxRetries
 	}
+	if strings.TrimSpace(cfg.Planner.ChatGate.Mode) == "" {
+		cfg.Planner.ChatGate.Mode = Default().Planner.ChatGate.Mode
+	}
 
 	return cfg, nil
 }

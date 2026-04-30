@@ -115,7 +115,7 @@ func createApprovalRun(t *testing.T, baseURL, conversationID string) (string, st
 	t.Helper()
 	var response map[string]any
 	mustRequestJSON(t, http.MethodPost, baseURL+"/v1/conversations/"+conversationID+"/messages", map[string]any{
-		"content": "请帮我安装 axios 依赖",
+		"content": "tool_id: shell.exec 请帮我安装 axios 依赖",
 	}, &response)
 	approval, ok := response["approval"].(map[string]any)
 	if !ok {

@@ -38,6 +38,9 @@ func ValidateRuntime(cfg Config) error {
 	if err := validateVector(cfg); err != nil {
 		errs = append(errs, err)
 	}
+	if err := ValidatePlannerConfig(cfg.Planner); err != nil {
+		errs = append(errs, err)
+	}
 	return errors.Join(errs...)
 }
 
@@ -156,6 +159,20 @@ func ValidatePolicyConfig(policy PolicyConfig) error {
 	}
 	if normalized.Network.MaxDownloadBytes <= 0 {
 		errs = append(errs, errors.New("policy.network_policy.max_download_bytes must be positive"))
+	}
+	return errors.Join(errs...)
+}
+
+// ValidatePlannerConfig checks planner mode and retry settings.
+func ValidatePlannerConfig(planner PlannerConfig) error {
+	var errs []error
+	switch strings.ToLower(strings.TrimSpace(planner.Mode)) {
+	case "", "heuristic", "hybrid", "semantic", "semantic_strict":
+	default:
+		errs = append(errs, fmt.Errorf("unsupported planner mode: %s", planner.Mode))
+	}
+	if planner.MaxRetries < 0 {
+		errs = append(errs, errors.New("planner.max_retries must be non-negative"))
 	}
 	return errors.Join(errs...)
 }

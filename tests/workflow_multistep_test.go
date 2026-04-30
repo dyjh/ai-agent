@@ -19,8 +19,8 @@ func TestWorkflowMultiStepLoop(t *testing.T) {
 			Decision: agent.PlanDecisionTool,
 			ToolProposal: &core.ToolProposal{
 				ID:        "tool_one",
-				Tool:      "shell.exec",
-				Input:     map[string]any{"command": "pwd"},
+				Tool:      "ops.local.system_info",
+				Input:     map[string]any{},
 				CreatedAt: time.Now().UTC(),
 			},
 		},
@@ -32,8 +32,8 @@ func TestWorkflowMultiStepLoop(t *testing.T) {
 			Decision: agent.PlanDecisionTool,
 			ToolProposal: &core.ToolProposal{
 				ID:        "tool_two",
-				Tool:      "shell.exec",
-				Input:     map[string]any{"command": "ls -la"},
+				Tool:      "ops.local.processes",
+				Input:     map[string]any{},
 				CreatedAt: time.Now().UTC(),
 			},
 		},
@@ -87,8 +87,8 @@ func TestWorkflowMaxStepsStopsLoop(t *testing.T) {
 			Decision: agent.PlanDecisionTool,
 			ToolProposal: &core.ToolProposal{
 				ID:        "tool_one",
-				Tool:      "shell.exec",
-				Input:     map[string]any{"command": "pwd"},
+				Tool:      "ops.local.system_info",
+				Input:     map[string]any{},
 				CreatedAt: time.Now().UTC(),
 			},
 		},
@@ -123,6 +123,8 @@ func newSequencedRuntime(plans []agent.Plan, maxSteps int) (*agent.Runtime, *seq
 	planner := &sequencePlanner{plans: append([]agent.Plan(nil), plans...)}
 	registry := toolscore.NewRegistry()
 	registry.Register(core.ToolSpec{ID: "shell.exec", Name: "shell.exec", Description: "shell"}, executor)
+	registry.Register(core.ToolSpec{ID: "ops.local.system_info", Name: "ops.local.system_info", Description: "system info"}, executor)
+	registry.Register(core.ToolSpec{ID: "ops.local.processes", Name: "ops.local.processes", Description: "processes"}, executor)
 	router := toolscore.NewRouter(
 		registry,
 		agent.NewEffectInferrer(config.PolicyConfig{SensitivePaths: []string{".env"}}),

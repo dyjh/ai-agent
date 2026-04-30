@@ -121,6 +121,9 @@ func TestEffectInference(t *testing.T) {
 			if got.RiskLevel != tc.wantRisk {
 				t.Fatalf("risk = %s, want %s", got.RiskLevel, tc.wantRisk)
 			}
+			if tc.proposal.Tool == "shell.exec" && !got.ApprovalRequired {
+				t.Fatalf("shell.exec inference must require approval: %+v", got)
+			}
 		})
 	}
 }

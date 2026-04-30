@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"local-agent/internal/core"
@@ -382,6 +383,13 @@ func (r *Runtime) continueWorkflow(ctx context.Context, state *RunState, sink Ev
 			if plan.Reason != "" {
 				step.Summary = plan.Reason
 			}
+			if plan.PlannerSource != "" && !containsPlannerSource(step.Summary) {
+				if step.Summary == "" {
+					step.Summary = "planner_source=" + plan.PlannerSource
+				} else {
+					step.Summary = "planner_source=" + plan.PlannerSource + "; " + step.Summary
+				}
+			}
 			step.CodePlan = cloneCodePlan(plan.CodePlan)
 			if plan.ToolProposal != nil {
 				proposal := cloneProposal(*plan.ToolProposal)
@@ -393,7 +401,10 @@ func (r *Runtime) continueWorkflow(ctx context.Context, state *RunState, sink Ev
 			return nil, stepErr
 		}
 		r.transition(ctx, state, RunStatusPlanned, planStep, sink, map[string]any{
-			"decision": plan.Decision,
+			"decision":        plan.Decision,
+			"planner_source":  plan.PlannerSource,
+			"candidate_count": plan.CandidateCount,
+			"tool":            plannedTool(plan),
 		})
 		if plan.Preamble != "" {
 			r.emit(ctx, sink, core.Event{
@@ -460,8 +471,10 @@ func (r *Runtime) continueWorkflow(ctx context.Context, state *RunState, sink Ev
 			return nil, err
 		}
 		r.transition(ctx, state, RunStatusToolProposed, proposeStep, sink, map[string]any{
-			"tool":         proposal.Tool,
-			"tool_call_id": proposal.ID,
+			"tool":            proposal.Tool,
+			"tool_call_id":    proposal.ID,
+			"planner_source":  plan.PlannerSource,
+			"candidate_count": plan.CandidateCount,
 		})
 
 		outcome, err := r.Router.Propose(ctx, state.RunID, state.ConversationID, *plan.ToolProposal)
@@ -877,6 +890,17 @@ func normalizePlan(plan Plan, lastToolResult *core.ToolResult) Plan {
 		plan.Decision = PlanDecisionAnswer
 	}
 	return clonePlan(plan)
+}
+
+func containsPlannerSource(summary string) bool {
+	return strings.Contains(summary, "planner_source=")
+}
+
+func plannedTool(plan Plan) string {
+	if plan.ToolProposal == nil {
+		return ""
+	}
+	return plan.ToolProposal.Tool
 }
 
 func stepID(step *RunStep) string {

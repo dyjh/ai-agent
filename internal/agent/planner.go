@@ -31,12 +31,14 @@ type PlanInput struct {
 
 // Plan is the planner output before routing.
 type Plan struct {
-	Decision     PlanDecision       `json:"decision,omitempty"`
-	Preamble     string             `json:"preamble,omitempty"`
-	Message      string             `json:"message,omitempty"`
-	ToolProposal *core.ToolProposal `json:"tool_proposal,omitempty"`
-	CodePlan     *CodePlan          `json:"code_plan,omitempty"`
-	Reason       string             `json:"reason,omitempty"`
+	Decision       PlanDecision       `json:"decision,omitempty"`
+	Preamble       string             `json:"preamble,omitempty"`
+	Message        string             `json:"message,omitempty"`
+	ToolProposal   *core.ToolProposal `json:"tool_proposal,omitempty"`
+	CodePlan       *CodePlan          `json:"code_plan,omitempty"`
+	Reason         string             `json:"reason,omitempty"`
+	PlannerSource  string             `json:"planner_source,omitempty"`
+	CandidateCount int                `json:"candidate_count,omitempty"`
 }
 
 // Planner produces either a direct answer or a structured tool proposal.

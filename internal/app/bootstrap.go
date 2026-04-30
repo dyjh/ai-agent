@@ -132,6 +132,23 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 			SemanticShadowMode:      cfg.Planner.SemanticShadowMode,
 			MaxRetries:              cfg.Planner.MaxRetries,
 			RequireSchemaValidation: cfg.Planner.RequireSchemaValidation,
+			ChatGate: plannersemantic.ChatGateConfig{
+				Enabled: cfg.Planner.ChatGate.Enabled,
+				Mode:    cfg.Planner.ChatGate.Mode,
+			},
+			ToolPlanner: plannersemantic.ToolPlannerConfig{
+				RequireLLMForToolChoice:    cfg.Planner.ToolPlanner.RequireLLMForToolChoice,
+				EnableFastPath:             cfg.Planner.ToolPlanner.EnableFastPath,
+				AllowCandidateFallback:     cfg.Planner.ToolPlanner.AllowCandidateFallback,
+				CandidateSelectorAsContext: cfg.Planner.ToolPlanner.CandidateSelectorAsContext,
+				AllowCrossCandidate:        cfg.Planner.ToolPlanner.AllowCrossCandidate,
+			},
+			Shell: plannersemantic.ShellPlannerConfig{
+				AllowAutoFallback: cfg.Planner.Shell.AllowAutoFallback,
+			},
+			Debug: plannersemantic.DebugConfig{
+				ExposePlannerSource: cfg.Planner.Debug.ExposePlannerSource,
+			},
 		}, cfg.Policy.SensitivePaths),
 		Runner:           einoapp.Runner{Model: model},
 		Approvals:        approvals,

@@ -230,27 +230,42 @@ go run ./cmd/agent eval report latest
 
 ## Planner V2
 
-当前默认使用 Hybrid Planner。
+当前生产推荐默认使用 `semantic_strict`。
 
+- ChatGate 只判断请求是否明显不需要工具，只能输出 direct answer / maybe tool / clarify，不选择具体工具。
 - RequestNormalizer 只提取结构化槽位：workspace、quoted text、possible file path、URL、host/kb/run/approval id、显式 tool id 和数字参数；`Signals` 只承载这些结构化信号，不再维护自然语言关键词词表。
 - Tool Card Catalog 位于 `config/planner.tool-cards.yaml`，用工具说明、用途、反例、示例、required slots、defaults、effects 和 risk level 描述 planner 语义；ToolRegistry 仍是工具存在性和真实 effects 的事实源。
-- CandidateSelector 根据结构化槽位和 Tool Card metadata / 文本相似度召回 TopK 候选工具，不做最终工具决策，也不在 Go 代码中维护中英文短语词典。
-- Deterministic FastPath 只保留强结构入口；自然语言工具选择进入 Tool Card Candidate Planner。
-- LLM Semantic Planner 位于配置门禁之后，只能从候选 Tool Cards 中输出结构化 `SemanticPlan` JSON，不能执行 shell、写文件、调用 MCP、Skill、Ops 或 Code executor，也不能发明工具。
-- `SemanticPlan` 必须先通过本地 PlanValidator，校验工具是否在候选集、工具是否存在、required slots、defaults、input schema、路径逃逸、secret input 和危险/审批工具。
+- CandidateSelector 根据结构化槽位和 Tool Card metadata / 文本相似度召回 TopK 候选工具，只作为 Semantic LLM Planner 的候选上下文，不做最终工具决策。
+- Semantic LLM Planner 负责最终工具选择，只能从候选 Tool Cards 中输出结构化 `SemanticPlan` JSON，不能执行 shell、写文件、调用 MCP、Skill、Ops 或 Code executor，也不能发明工具。
+- `SemanticPlan` 必须先通过本地 PlanValidator，校验 planner source、候选范围、工具存在性、required slots、defaults、input schema、路径逃逸、secret input 和危险/审批工具。
 - PlanCompiler 只把合法计划编译为现有 `ToolProposal`；执行仍走 ToolRouter / EffectInference / PolicyEngine / ApprovalCenter / Executor。
-- 不确定或缺少必要参数时，planner 会转为澄清问题，而不是把宽泛 `workspace` 请求降级到错误工具。
+- `shell.exec` 是显式授权的逃生通道，不是结构化工具不足时的自动 fallback；即使是只读 shell 命令也必须审批。
+- FastPath 仅用于 legacy/hybrid/低成本模式；`semantic_strict` 下不会直接产出 ToolProposal。
+- Semantic LLM 不可用且未显式指定工具时，`semantic_strict` 会返回澄清/不可用，不会用 Candidate fallback 本地选工具。
+- 不确定或缺少必要参数时，planner 会转为澄清问题，而不是把宽泛请求降级到错误工具。
 - `evals/cases/planner/` 中的 Planner Eval 覆盖中英文回归 case，用于防止自然语言 routing 退化。
 
 可选配置：
 
 ```yaml
 planner:
-  mode: hybrid # heuristic / semantic / hybrid
-  semantic_enabled: true # 需要真实模型时打开；默认配置可保持 false
+  mode: semantic_strict # heuristic / semantic / hybrid / semantic_strict
+  semantic_enabled: true
   semantic_shadow_mode: false
   max_retries: 2
   require_schema_validation: true
+  chat_gate:
+    enabled: true
+    mode: lightweight
+  tool_planner:
+    require_llm_for_tool_choice: true
+    enable_fastpath: false
+    allow_candidate_fallback: false
+    candidate_selector_as_context: true
+  shell:
+    allow_auto_fallback: false
+  debug:
+    expose_planner_source: true
 ```
 
 ## 数据位置

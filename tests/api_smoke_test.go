@@ -88,7 +88,7 @@ func TestAPISmoke(t *testing.T) {
 	}
 
 	mustRequestJSON(t, http.MethodPost, server.URL+"/v1/conversations/"+conversation.ID+"/messages", map[string]any{
-		"content": "请帮我安装 axios 依赖",
+		"content": "tool_id: shell.exec 请帮我安装 axios 依赖",
 	}, &runResp)
 
 	var approvals map[string][]map[string]any

@@ -75,3 +75,22 @@ shell:
   enabled: true
   default_timeout_seconds: 60
   max_output_chars: 20000
+
+planner:
+  mode: semantic_strict
+  semantic_enabled: true
+  semantic_shadow_mode: false
+  max_retries: 2
+  require_schema_validation: true
+  chat_gate:
+    enabled: true
+    mode: lightweight
+  tool_planner:
+    require_llm_for_tool_choice: true
+    enable_fastpath: false
+    allow_candidate_fallback: false
+    candidate_selector_as_context: true
+  shell:
+    allow_auto_fallback: false
+  debug:
+    expose_planner_source: true
