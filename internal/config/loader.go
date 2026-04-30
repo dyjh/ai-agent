@@ -108,6 +108,21 @@ func Load(path string) (Config, error) {
 	if strings.TrimSpace(cfg.Planner.ChatGate.Mode) == "" {
 		cfg.Planner.ChatGate.Mode = Default().Planner.ChatGate.Mode
 	}
+	if strings.TrimSpace(cfg.Planner.ConversationRouter.Mode) == "" {
+		cfg.Planner.ConversationRouter.Mode = Default().Planner.ConversationRouter.Mode
+	}
+	if strings.TrimSpace(cfg.Planner.ConversationRouter.FallbackMode) == "" {
+		cfg.Planner.ConversationRouter.FallbackMode = Default().Planner.ConversationRouter.FallbackMode
+	}
+	if cfg.Planner.ConversationRouter.MaxRetries <= 0 {
+		cfg.Planner.ConversationRouter.MaxRetries = Default().Planner.ConversationRouter.MaxRetries
+	}
+	if !cfg.Planner.ConversationRouter.RequireJSON {
+		cfg.Planner.ConversationRouter.RequireJSON = Default().Planner.ConversationRouter.RequireJSON
+	}
+	if cfg.Planner.ChatGate.Enabled {
+		cfg.Planner.ConversationRouter.Enabled = true
+	}
 
 	return cfg, nil
 }

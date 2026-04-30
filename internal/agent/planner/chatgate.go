@@ -2,7 +2,6 @@ package planner
 
 import (
 	"strings"
-	"unicode/utf8"
 
 	"local-agent/internal/agent/planner/intent"
 	"local-agent/internal/agent/planner/normalize"
@@ -27,10 +26,7 @@ func chatGate(cls intent.IntentClassification, req normalize.NormalizedRequest) 
 	if hasStructuralToolScope(req) || looksExternalAction(text) || looksLikeShellRequest(text) {
 		return chatGateMaybeTool
 	}
-	if isSimpleGreeting(text) || looksLikeDirectChat(text) {
-		return chatGateDirectAnswer
-	}
-	return chatGateMaybeTool
+	return chatGateDirectAnswer
 }
 
 func hasStructuralToolScope(req normalize.NormalizedRequest) bool {
@@ -43,45 +39,25 @@ func hasStructuralToolScope(req normalize.NormalizedRequest) bool {
 		len(req.URLs) > 0
 }
 
-func isSimpleGreeting(text string) bool {
-	lower := strings.ToLower(strings.TrimSpace(text))
-	lower = strings.Trim(lower, " ,.?!，。！？")
-	switch lower {
-	case "hi", "hello", "hey", "你好", "您好", "嗨":
-		return true
-	default:
-		return false
-	}
-}
-
-func looksLikeDirectChat(text string) bool {
-	lower := strings.ToLower(text)
-	directPhrases := []string{
-		"解释", "说明", "是什么", "为什么", "怎么理解", "写一段", "帮我写", "润色", "翻译", "总结一下",
-		"介绍", "聊聊", "头脑风暴",
-		"explain", "what is", "why", "write a", "draft", "translate", "summarize",
-		"introduce", "brainstorm",
-	}
-	for _, phrase := range directPhrases {
-		if strings.Contains(lower, phrase) {
-			return true
-		}
-	}
-	return utf8.RuneCountInString(text) <= 12 && strings.HasSuffix(strings.TrimSpace(text), "?")
-}
-
 func looksExternalAction(text string) bool {
 	lower := strings.ToLower(text)
+	if containsAny(lower, []string{"记住", "忘记"}) ||
+		(containsAny(lower, []string{"以后", "偏好", "喜欢"}) && containsAny(lower, []string{"回答", "使用", "用中文", "语言"})) {
+		return true
+	}
+	if containsAny(lower, []string{"知识库", "kb"}) && containsAny(lower, []string{"回答", "引用", "来源", "检索", "根据"}) {
+		return true
+	}
 	actionPhrases := []string{
-		"查看", "读取", "打开", "搜索", "定位", "运行", "执行", "测试", "安装", "重启", "删除", "修改", "应用",
-		"read", "open", "search", "find", "run", "execute", "test", "install", "restart", "delete", "modify", "apply",
+		"看", "查看", "读取", "打开", "搜索", "定位", "获取", "检查", "确认", "列出", "运行", "执行", "测试", "检测", "跑", "安装", "重启", "删除", "修改", "修复", "实现", "应用",
+		"read", "open", "search", "find", "get", "inspect", "check", "list", "run", "execute", "test", "install", "restart", "delete", "modify", "fix", "implement", "apply",
 	}
-	for _, phrase := range actionPhrases {
-		if strings.Contains(lower, phrase) {
-			return true
-		}
+	resourcePhrases := []string{
+		"本地", "本机", "机器", "系统", "进程", "cpu", "占用", "磁盘", "内存", "日志", "文件", "目录", "路径", "仓库", "项目", "代码", "服务", "主机", "知识库", "审批", "容器", "pod", "bug", "测试", "失败", "功能", "patch", "diff",
+		"workspace", "tool_id", "approval_id", "run_id", "host_id", "kb_id", "docker", "k8s", "kubectl", "git", "mcp", "url",
+		"local", "system", "process", "cpu", "disk", "memory", "log", "file", "directory", "path", "repo", "repository", "code", "service", "host", "knowledge base", "approval", "container", "bug", "test", "failure", "feature",
 	}
-	return false
+	return containsAny(lower, actionPhrases) && containsAny(lower, resourcePhrases)
 }
 
 func looksLikeShellRequest(text string) bool {
@@ -94,9 +70,28 @@ func looksLikeShellRequest(text string) bool {
 		return false
 	}
 	switch fields[0] {
-	case "cat", "ls", "pwd", "ps", "grep", "rg", "sed", "head", "tail", "go", "npm", "pnpm", "yarn", "python", "docker", "kubectl":
+	case "cat", "ls", "pwd", "ps", "grep", "rg", "sed", "head", "tail", "docker", "kubectl":
 		return true
+	case "go":
+		return len(fields) > 1 && containsAny(fields[1], []string{"test", "run", "build", "env", "mod", "get", "install", "list", "version", "fmt", "vet"})
+	case "npm", "pnpm", "yarn":
+		return len(fields) > 1 && !looksLikeLanguageQuestionToken(fields[1])
+	case "python":
+		return len(fields) > 1 && (strings.HasPrefix(fields[1], "-") || strings.HasSuffix(fields[1], ".py"))
 	default:
 		return false
 	}
+}
+
+func looksLikeLanguageQuestionToken(value string) bool {
+	return value == "的" || value == "语言" || value == "是什么" || value == "和" || strings.Contains(value, "什么")
+}
+
+func containsAny(value string, phrases []string) bool {
+	for _, phrase := range phrases {
+		if strings.Contains(value, phrase) {
+			return true
+		}
+	}
+	return false
 }

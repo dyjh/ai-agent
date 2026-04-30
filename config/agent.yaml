@@ -82,6 +82,12 @@ planner:
   semantic_shadow_mode: false
   max_retries: 2
   require_schema_validation: true
+  conversation_router:
+    enabled: true
+    mode: llm
+    fallback_mode: lightweight
+    max_retries: 1
+    require_json: true
   chat_gate:
     enabled: true
     mode: lightweight
@@ -94,3 +100,4 @@ planner:
     allow_auto_fallback: false
   debug:
     expose_planner_source: true
+    expose_route_source: true

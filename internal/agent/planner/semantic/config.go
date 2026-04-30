@@ -2,8 +2,17 @@ package semantic
 
 import "strings"
 
-// ChatGateConfig controls the lightweight no-tool gate. It may decide that a
-// request is direct chat, but it never selects a concrete tool.
+// ConversationRouterConfig controls the chat/tool/clarify router.
+type ConversationRouterConfig struct {
+	Enabled      bool   `json:"enabled" yaml:"enabled"`
+	Mode         string `json:"mode" yaml:"mode"`
+	FallbackMode string `json:"fallback_mode" yaml:"fallback_mode"`
+	MaxRetries   int    `json:"max_retries" yaml:"max_retries"`
+	RequireJSON  bool   `json:"require_json" yaml:"require_json"`
+}
+
+// ChatGateConfig controls the legacy lightweight no-tool gate. New routing
+// should use ConversationRouterConfig; this remains as a compatibility knob.
 type ChatGateConfig struct {
 	Enabled bool   `json:"enabled" yaml:"enabled"`
 	Mode    string `json:"mode" yaml:"mode"`
@@ -27,6 +36,7 @@ type ShellPlannerConfig struct {
 // DebugConfig controls planner observability.
 type DebugConfig struct {
 	ExposePlannerSource bool `json:"expose_planner_source" yaml:"expose_planner_source"`
+	ExposeRouteSource   bool `json:"expose_route_source" yaml:"expose_route_source"`
 }
 
 // NormalizeConfig fills mode-specific planner defaults.
@@ -41,13 +51,35 @@ func NormalizeConfig(cfg Config) Config {
 	if cfg.ChatGate.Mode == "" {
 		cfg.ChatGate.Mode = "lightweight"
 	}
+	if cfg.ConversationRouter.Mode == "" {
+		cfg.ConversationRouter.Mode = cfg.ChatGate.Mode
+	}
+	if cfg.ConversationRouter.Mode == "" {
+		cfg.ConversationRouter.Mode = "lightweight"
+	}
+	cfg.ConversationRouter.Mode = strings.ToLower(strings.TrimSpace(cfg.ConversationRouter.Mode))
+	if cfg.ConversationRouter.FallbackMode == "" {
+		cfg.ConversationRouter.FallbackMode = "lightweight"
+	}
+	cfg.ConversationRouter.FallbackMode = strings.ToLower(strings.TrimSpace(cfg.ConversationRouter.FallbackMode))
+	if cfg.ConversationRouter.MaxRetries <= 0 {
+		cfg.ConversationRouter.MaxRetries = 1
+	}
+	if !cfg.ConversationRouter.RequireJSON {
+		cfg.ConversationRouter.RequireJSON = true
+	}
+	if cfg.ChatGate.Enabled {
+		cfg.ConversationRouter.Enabled = true
+	}
 	if IsSemanticStrictMode(cfg.Mode) {
+		cfg.ConversationRouter.Enabled = true
 		cfg.ChatGate.Enabled = true
 		cfg.ToolPlanner.RequireLLMForToolChoice = true
 		cfg.ToolPlanner.EnableFastPath = false
 		cfg.ToolPlanner.AllowCandidateFallback = false
 		cfg.Shell.AllowAutoFallback = false
 		cfg.Debug.ExposePlannerSource = true
+		cfg.Debug.ExposeRouteSource = true
 	} else {
 		cfg.ToolPlanner.EnableFastPath = true
 		cfg.ToolPlanner.AllowCandidateFallback = true

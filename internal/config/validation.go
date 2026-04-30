@@ -174,6 +174,19 @@ func ValidatePlannerConfig(planner PlannerConfig) error {
 	if planner.MaxRetries < 0 {
 		errs = append(errs, errors.New("planner.max_retries must be non-negative"))
 	}
+	switch strings.ToLower(strings.TrimSpace(planner.ConversationRouter.Mode)) {
+	case "", "lightweight", "llm", "hybrid":
+	default:
+		errs = append(errs, fmt.Errorf("unsupported planner.conversation_router.mode: %s", planner.ConversationRouter.Mode))
+	}
+	switch strings.ToLower(strings.TrimSpace(planner.ConversationRouter.FallbackMode)) {
+	case "", "lightweight":
+	default:
+		errs = append(errs, fmt.Errorf("unsupported planner.conversation_router.fallback_mode: %s", planner.ConversationRouter.FallbackMode))
+	}
+	if planner.ConversationRouter.MaxRetries < 0 {
+		errs = append(errs, errors.New("planner.conversation_router.max_retries must be non-negative"))
+	}
 	return errors.Join(errs...)
 }
 

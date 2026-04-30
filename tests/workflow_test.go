@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -148,6 +149,45 @@ func TestWorkflowApprovalRejectDoesNotExecute(t *testing.T) {
 		t.Fatalf("approval status = %s, want rejected", approval.Status)
 	}
 	assertHasEvent(t, resumeEvents, "approval.rejected")
+}
+
+func TestWorkflowAnswerModeRunnerIgnoresPlannerMessage(t *testing.T) {
+	runtime, planner, _ := newWorkflowRuntime(core.ToolProposal{})
+	planner.plan = agent.Plan{
+		Decision:    agent.PlanDecisionAnswer,
+		AnswerMode:  agent.AnswerModeRunner,
+		Route:       "direct_answer",
+		RouteSource: "conversation_router_lightweight",
+		Message:     "planner message must not be persisted",
+	}
+	events := startWorkflow(t, runtime, "conv_runner_mode", "普通聊天问题")
+	var planned core.Event
+	for _, event := range events {
+		if event.Type == "run.state" && event.Payload["status"] == string(agent.RunStatusPlanned) {
+			planned = event
+			break
+		}
+	}
+	if planned.Type == "" {
+		t.Fatalf("missing planned event in %v", eventTypes(events))
+	}
+	if planned.Payload["route"] != "direct_answer" || planned.Payload["route_source"] != "conversation_router_lightweight" {
+		t.Fatalf("planned payload = %+v, want route trace", planned.Payload)
+	}
+	steps, err := runtime.StateStore.ListSteps(context.Background(), planned.RunID)
+	if err != nil {
+		t.Fatalf("ListSteps: %v", err)
+	}
+	if len(steps) < 2 || steps[1].Route != "direct_answer" || steps[1].RouteSource != "conversation_router_lightweight" {
+		t.Fatalf("plan step = %+v, want route trace", steps)
+	}
+	message := eventValue(t, events, "assistant.message")
+	if message.Content == planner.plan.Message {
+		t.Fatalf("assistant message used planner message, want runner output")
+	}
+	if !strings.Contains(message.Content, "Mock response:") {
+		t.Fatalf("assistant message = %q, want runner output", message.Content)
+	}
 }
 
 func newWorkflowRuntime(proposal core.ToolProposal) (*agent.Runtime, *workflowPlanner, *workflowExecutor) {

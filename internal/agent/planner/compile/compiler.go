@@ -1,6 +1,8 @@
 package compile
 
 import (
+	"strings"
+
 	"local-agent/internal/agent/planner/catalog"
 	"local-agent/internal/agent/planner/semantic"
 	"local-agent/internal/core"
@@ -14,9 +16,18 @@ const (
 	DecisionTool   Decision = "tool"
 )
 
+const (
+	AnswerModeRunner               = "runner"
+	AnswerModePlannerClarify       = "planner_clarify"
+	AnswerModeCapabilityLimitation = "capability_limitation"
+)
+
 // CompiledPlan is a non-executable bridge from SemanticPlan to ToolProposal.
 type CompiledPlan struct {
 	Decision       Decision                   `json:"decision"`
+	AnswerMode     string                     `json:"answer_mode,omitempty"`
+	Route          string                     `json:"route,omitempty"`
+	RouteSource    string                     `json:"route_source,omitempty"`
 	Message        string                     `json:"message,omitempty"`
 	Preamble       string                     `json:"preamble,omitempty"`
 	Reason         string                     `json:"reason,omitempty"`
@@ -49,11 +60,15 @@ func (c Compiler) Compile(plan semantic.SemanticPlan) CompiledPlan {
 	switch plan.Decision {
 	case semantic.SemanticPlanAnswer:
 		return CompiledPlan{Decision: DecisionAnswer, Message: plan.Answer, Reason: plan.Reason, PlannerSource: plan.PlannerSource, SemanticPlan: plan}
+	case semantic.SemanticPlanNoTool:
+		return CompiledPlan{Decision: DecisionAnswer, AnswerMode: AnswerModeRunner, Message: "", Reason: plan.Reason, PlannerSource: plan.PlannerSource, SemanticPlan: plan}
 	case semantic.SemanticPlanClarify:
-		return CompiledPlan{Decision: DecisionAnswer, Message: plan.ClarifyingQuestion, Reason: plan.Reason, PlannerSource: plan.PlannerSource, SemanticPlan: plan}
+		return CompiledPlan{Decision: DecisionAnswer, AnswerMode: AnswerModePlannerClarify, Message: plan.ClarifyingQuestion, Reason: plan.Reason, PlannerSource: plan.PlannerSource, SemanticPlan: plan}
+	case semantic.SemanticPlanCapabilityLimitation:
+		return CompiledPlan{Decision: DecisionAnswer, AnswerMode: AnswerModeCapabilityLimitation, Message: capabilityMessage(plan), Reason: plan.Reason, PlannerSource: plan.PlannerSource, SemanticPlan: plan}
 	case semantic.SemanticPlanTool, semantic.SemanticPlanMultiStep:
 		if len(plan.Steps) == 0 {
-			return CompiledPlan{Decision: DecisionAnswer, Message: "需要补充要执行的工具和参数。", Reason: "semantic plan has no steps", PlannerSource: plan.PlannerSource, SemanticPlan: plan}
+			return CompiledPlan{Decision: DecisionAnswer, AnswerMode: AnswerModePlannerClarify, Message: "需要补充要执行的工具和参数。", Reason: "semantic plan has no steps", PlannerSource: plan.PlannerSource, SemanticPlan: plan}
 		}
 		step := plan.Steps[0]
 		spec, _ := c.Catalog.Tool(step.Tool)
@@ -74,6 +89,21 @@ func (c Compiler) Compile(plan semantic.SemanticPlan) CompiledPlan {
 	default:
 		return CompiledPlan{Decision: DecisionAnswer, Reason: "unsupported semantic decision", PlannerSource: plan.PlannerSource, SemanticPlan: plan}
 	}
+}
+
+func capabilityMessage(plan semantic.SemanticPlan) string {
+	base := "当前可用工具不足，无法安全完成这个操作。"
+	detail := strings.TrimSpace(plan.CapabilityMessage)
+	if detail != "" {
+		if strings.Contains(detail, "工具不足") || strings.Contains(strings.ToLower(detail), "insufficient") || strings.Contains(strings.ToLower(detail), "capability") {
+			return detail
+		}
+		return base + " " + detail
+	}
+	if plan.Reason != "" {
+		return base + " " + plan.Reason
+	}
+	return base
 }
 
 func preambleFor(tool string) string {

@@ -390,6 +390,11 @@ func (r *Runtime) continueWorkflow(ctx context.Context, state *RunState, sink Ev
 					step.Summary = "planner_source=" + plan.PlannerSource + "; " + step.Summary
 				}
 			}
+			step.Route = plan.Route
+			step.RouteSource = plan.RouteSource
+			step.PlannerSource = plan.PlannerSource
+			step.CandidateCount = plan.CandidateCount
+			step.PlannedTool = plannedTool(plan)
 			step.CodePlan = cloneCodePlan(plan.CodePlan)
 			if plan.ToolProposal != nil {
 				proposal := cloneProposal(*plan.ToolProposal)
@@ -402,6 +407,9 @@ func (r *Runtime) continueWorkflow(ctx context.Context, state *RunState, sink Ev
 		}
 		r.transition(ctx, state, RunStatusPlanned, planStep, sink, map[string]any{
 			"decision":        plan.Decision,
+			"answer_mode":     plan.AnswerMode,
+			"route":           plan.Route,
+			"route_source":    plan.RouteSource,
 			"planner_source":  plan.PlannerSource,
 			"candidate_count": plan.CandidateCount,
 			"tool":            plannedTool(plan),
@@ -433,7 +441,7 @@ func (r *Runtime) continueWorkflow(ctx context.Context, state *RunState, sink Ev
 			continue
 		case PlanDecisionAnswer:
 			message := plan.Message
-			if message == "" {
+			if plan.AnswerMode == AnswerModeRunner || message == "" {
 				modelMessage, err := r.Runner.Run(ctx, einoapp.AgentInput{Messages: state.Context.Messages})
 				if err != nil {
 					r.fail(ctx, state, err, sink)

@@ -52,6 +52,26 @@ func (v Validator) Validate(plan semantic.SemanticPlan) PlanValidationResult {
 
 	switch sanitized.Decision {
 	case semantic.SemanticPlanAnswer:
+		if sanitized.PlannerSource == semantic.PlannerSourceSemanticLLM {
+			result.Errors = append(result.Errors, "semantic tool planner must not produce final answers")
+			result.Clarify = "这个请求不能由工具规划器直接生成最终回答；请改走普通回答流程，或补充需要操作的本地资源和工具范围。"
+			return result
+		}
+		result.Valid = true
+		result.Sanitized = &sanitized
+		return result
+	case semantic.SemanticPlanNoTool:
+		sanitized.Answer = ""
+		sanitized.Steps = nil
+		result.Valid = true
+		result.Sanitized = &sanitized
+		return result
+	case semantic.SemanticPlanCapabilityLimitation:
+		sanitized.Answer = ""
+		sanitized.Steps = nil
+		if sanitized.CapabilityMessage == "" {
+			sanitized.CapabilityMessage = "当前可用工具不足，无法安全完成这个操作。"
+		}
 		result.Valid = true
 		result.Sanitized = &sanitized
 		return result

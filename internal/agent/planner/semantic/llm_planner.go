@@ -22,15 +22,16 @@ type ChatModel interface {
 
 // Config controls LLM semantic planning. The planner is inert unless enabled.
 type Config struct {
-	Mode                    string             `json:"mode" yaml:"mode"`
-	SemanticEnabled         bool               `json:"semantic_enabled" yaml:"semantic_enabled"`
-	SemanticShadowMode      bool               `json:"semantic_shadow_mode" yaml:"semantic_shadow_mode"`
-	MaxRetries              int                `json:"max_retries" yaml:"max_retries"`
-	RequireSchemaValidation bool               `json:"require_schema_validation" yaml:"require_schema_validation"`
-	ChatGate                ChatGateConfig     `json:"chat_gate" yaml:"chat_gate"`
-	ToolPlanner             ToolPlannerConfig  `json:"tool_planner" yaml:"tool_planner"`
-	Shell                   ShellPlannerConfig `json:"shell" yaml:"shell"`
-	Debug                   DebugConfig        `json:"debug" yaml:"debug"`
+	Mode                    string                   `json:"mode" yaml:"mode"`
+	SemanticEnabled         bool                     `json:"semantic_enabled" yaml:"semantic_enabled"`
+	SemanticShadowMode      bool                     `json:"semantic_shadow_mode" yaml:"semantic_shadow_mode"`
+	MaxRetries              int                      `json:"max_retries" yaml:"max_retries"`
+	RequireSchemaValidation bool                     `json:"require_schema_validation" yaml:"require_schema_validation"`
+	ConversationRouter      ConversationRouterConfig `json:"conversation_router" yaml:"conversation_router"`
+	ChatGate                ChatGateConfig           `json:"chat_gate" yaml:"chat_gate"`
+	ToolPlanner             ToolPlannerConfig        `json:"tool_planner" yaml:"tool_planner"`
+	Shell                   ShellPlannerConfig       `json:"shell" yaml:"shell"`
+	Debug                   DebugConfig              `json:"debug" yaml:"debug"`
 }
 
 // LLMSemanticPlanner asks a chat model for a SemanticPlan JSON object only.

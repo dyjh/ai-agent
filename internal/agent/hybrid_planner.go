@@ -99,6 +99,8 @@ func (p HybridPlanner) toPlan(compiled compile.CompiledPlan, input PlanInput) Pl
 			Preamble:       preambleForProposal(compiled.ToolProposal, compiled.Preamble),
 			ToolProposal:   cloneProposalPtr(compiled.ToolProposal),
 			Reason:         compiled.Reason,
+			Route:          compiled.Route,
+			RouteSource:    compiled.RouteSource,
 			PlannerSource:  string(compiled.PlannerSource),
 			CandidateCount: compiled.CandidateCount,
 		}
@@ -109,8 +111,11 @@ func (p HybridPlanner) toPlan(compiled compile.CompiledPlan, input PlanInput) Pl
 	default:
 		return Plan{
 			Decision:       PlanDecisionAnswer,
+			AnswerMode:     compiled.AnswerMode,
 			Message:        compiled.Message,
 			Reason:         compiled.Reason,
+			Route:          compiled.Route,
+			RouteSource:    compiled.RouteSource,
 			PlannerSource:  string(compiled.PlannerSource),
 			CandidateCount: compiled.CandidateCount,
 		}

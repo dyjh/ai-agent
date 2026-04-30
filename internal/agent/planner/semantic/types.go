@@ -4,23 +4,26 @@ package semantic
 type PlannerSource string
 
 const (
-	PlannerSourceFastPath          PlannerSource = "fastpath"
-	PlannerSourceSemanticLLM       PlannerSource = "semantic_llm"
-	PlannerSourceCandidateFallback PlannerSource = "candidate_fallback"
-	PlannerSourceNoToolAnswer      PlannerSource = "no_tool_answer"
-	PlannerSourceClarify           PlannerSource = "clarify"
-	PlannerSourceToolUnavailable   PlannerSource = "tool_planner_unavailable"
-	PlannerSourceExplicitTool      PlannerSource = "explicit_tool_request"
+	PlannerSourceFastPath           PlannerSource = "fastpath"
+	PlannerSourceSemanticLLM        PlannerSource = "semantic_llm"
+	PlannerSourceCandidateFallback  PlannerSource = "candidate_fallback"
+	PlannerSourceNoToolAnswer       PlannerSource = "no_tool_answer"
+	PlannerSourceConversationRouter PlannerSource = "conversation_router"
+	PlannerSourceClarify            PlannerSource = "clarify"
+	PlannerSourceToolUnavailable    PlannerSource = "tool_planner_unavailable"
+	PlannerSourceExplicitTool       PlannerSource = "explicit_tool_request"
 )
 
 // SemanticPlanDecision is the structured planner decision before compilation.
 type SemanticPlanDecision string
 
 const (
-	SemanticPlanAnswer    SemanticPlanDecision = "answer"
-	SemanticPlanTool      SemanticPlanDecision = "tool"
-	SemanticPlanMultiStep SemanticPlanDecision = "multi_step"
-	SemanticPlanClarify   SemanticPlanDecision = "clarify"
+	SemanticPlanAnswer               SemanticPlanDecision = "answer"
+	SemanticPlanNoTool               SemanticPlanDecision = "no_tool"
+	SemanticPlanTool                 SemanticPlanDecision = "tool"
+	SemanticPlanMultiStep            SemanticPlanDecision = "multi_step"
+	SemanticPlanClarify              SemanticPlanDecision = "clarify"
+	SemanticPlanCapabilityLimitation SemanticPlanDecision = "capability_limitation"
 )
 
 // SemanticPlan is the only shape an LLM semantic planner may emit.
@@ -34,6 +37,7 @@ type SemanticPlan struct {
 	Steps              []SemanticPlanStep   `json:"steps,omitempty"`
 	Answer             string               `json:"answer,omitempty"`
 	ClarifyingQuestion string               `json:"clarifying_question,omitempty"`
+	CapabilityMessage  string               `json:"capability_message,omitempty"`
 	Reason             string               `json:"reason,omitempty"`
 }
 

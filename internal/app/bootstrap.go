@@ -132,6 +132,13 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 			SemanticShadowMode:      cfg.Planner.SemanticShadowMode,
 			MaxRetries:              cfg.Planner.MaxRetries,
 			RequireSchemaValidation: cfg.Planner.RequireSchemaValidation,
+			ConversationRouter: plannersemantic.ConversationRouterConfig{
+				Enabled:      cfg.Planner.ConversationRouter.Enabled,
+				Mode:         cfg.Planner.ConversationRouter.Mode,
+				FallbackMode: cfg.Planner.ConversationRouter.FallbackMode,
+				MaxRetries:   cfg.Planner.ConversationRouter.MaxRetries,
+				RequireJSON:  cfg.Planner.ConversationRouter.RequireJSON,
+			},
 			ChatGate: plannersemantic.ChatGateConfig{
 				Enabled: cfg.Planner.ChatGate.Enabled,
 				Mode:    cfg.Planner.ChatGate.Mode,
@@ -148,6 +155,7 @@ func NewBootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 			},
 			Debug: plannersemantic.DebugConfig{
 				ExposePlannerSource: cfg.Planner.Debug.ExposePlannerSource,
+				ExposeRouteSource:   cfg.Planner.Debug.ExposeRouteSource,
 			},
 		}, cfg.Policy.SensitivePaths),
 		Runner:           einoapp.Runner{Model: model},

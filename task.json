@@ -1,10 +1,19 @@
 {
   "project": "local-agent",
   "source": "promote-stageF-9",
-  "last_updated": "2026-04-29T18:30:00+08:00",
+  "last_updated": "2026-04-30T16:45:00+08:00",
   "overall_status": "full_agent_foundation_completed",
-  "current_task_id": "post-full-agent-planner-v2-semantic-strict",
-  "current_task_title": "Planner V2.2 Semantic Strict Tool Choice",
+  "current_task_id": "bug-fix-4-conversation-router-phases-1-15",
+  "current_task_title": "Conversation Router Routing Fix Phases 1-15",
+  "bug_fix_4_phase_1_findings": [
+    "chatGate 当前是本地短语判断，命中 direct chat 才 direct_answer，否则默认 maybe_tool。",
+    "“分为哪些大类 / 有哪些类型 / 包括哪些 / 分哪几类”等普通知识问答容易漏判。",
+    "classificationFromCandidates 只要 candidates 非空就会把 NeedTool=true，这是候选召回污染意图。",
+    "semantic_strict 当前不应理解为“所有请求都进工具规划器”，而应理解为“一旦需要工具，工具选择必须由 LLM 完成”。",
+    "Semantic Tool Planner 当前 prompt 允许 decision=answer，这是职责过宽。",
+    "Validator 对 decision=answer 无条件放行，导致 Tool Planner 可以直接产出最终回答。",
+    "Runtime 对非空 plan.Message 直接 completeWithMessage，绕过普通 Runner。"
+  ],
   "summary": {
     "headline": "MVP 主链路保持稳定，F1 代码能力、F2 运维能力、F3 RAG 可靠性、F4 长期记忆治理、F5 安全策略/Secret Guard、F6 Eval/Replay 和 F7 Web UI/TUI 首版均已完成。",
     "progress": {
@@ -39,7 +48,11 @@
       "2026-04-25 已完成 Phase F7 首版：新增独立 ui/web React/Vite Web UI、ui/tui Go TUI、Chat/Run/Approval/Code/Memory/KB/Skill/MCP/Ops/Eval/Settings 页面入口、CORS/WS 本机 origin 支持、README/Makefile/task.json 更新，并确认 go test ./...、ui/tui go test ./...、ui/web npm test 和 npm run build 通过。",
       "2026-04-25 已完成 Post-F7 Planner V2：Hybrid Planner、RequestNormalizer、IntentClassifier、PlanningCatalog、SemanticPlan、FastPath、LLM Semantic Planner 配置门禁、PlanValidator、PlanCompiler、planner eval 和 live regression 修复。",
       "2026-04-25 已完成 Planner V2.1：Slot-only Normalizer、Tool Card Catalog、CandidateSelector、候选 Tool Card Semantic Planner、signals.go keyword dictionary removed、old planner dead code cleaned、planner eval expanded，并保持 bug.json live regression case 通过。",
-      "2026-04-29 已完成 Planner V2.2 semantic_strict：默认生产模式禁止 FastPath / Candidate fallback 本地拍板工具，CandidateSelector 降级为候选上下文，Semantic LLM Planner 负责工具选择，planner_source 进入 plan/run event，shell.exec 禁止自动 fallback 且始终审批。"
+      "2026-04-29 已完成 Planner V2.2 semantic_strict：默认生产模式禁止 FastPath / Candidate fallback 本地拍板工具，CandidateSelector 降级为候选上下文，Semantic LLM Planner 负责工具选择，planner_source 进入 plan/run event，shell.exec 禁止自动 fallback 且始终审批。",
+      "2026-04-30 已完成 bug-fix-4 阶段 1～6：记录路由职责问题、新增 Conversation Router / LLM Router prompt、改造 chatGate fallback、HybridPlanner 先路由后候选召回，并引入 no_tool 让 Runtime 调普通 Runner。",
+      "2026-04-30 已完成 bug-fix-4 阶段 7～10：Semantic Tool Planner prompt 不再允许 answer，新增 capability_limitation，Validator 拒绝 semantic_llm answer，Compiler/Runtime 使用 answer_mode 区分 runner、clarify 和能力不足。",
+      "2026-04-30 已完成 bug-fix-4 阶段 11～13：确认删除 candidates -> NeedTool 污染，更新 conversation_router 配置为 llm + lightweight fallback，并将 route/route_source trace 写入 CompiledPlan、Plan、RunStep 和 run.state event。",
+      "2026-04-30 已完成 bug-fix-4 阶段 14～15：补齐普通问答、工具路由、workspace 读文件、shell 审批/禁止 fallback、tool planner answer/no_tool/unavailable 等回归测试，并更新 README 中的新职责边界。"
     ],
     "unfinished_overview": [
       "当前 step loop 已覆盖本地单用户可恢复多步任务，但仍不是无限自动规划的通用 graph 平台。",
@@ -831,6 +844,26 @@
       "at": "2026-04-29T18:30:00+08:00",
       "task_id": "post-full-agent-planner-v2-semantic-strict",
       "summary": "完成 Planner V2.2 semantic_strict：默认生产模式要求 Semantic LLM 负责工具选择，FastPath 和 Candidate fallback 不再静默截断语义规划，CandidateSelector 只做候选上下文，shell.exec 禁止自动 fallback 且始终审批，并补充 planner_source 可观测性和回归测试。"
+    },
+    {
+      "at": "2026-04-30T15:20:00+08:00",
+      "task_id": "bug-fix-4-conversation-router-phases-1-6",
+      "summary": "完成 bug-fix-4 阶段 1～6：阶段 1 问题记录已写入 task.json；新增 Conversation Router（lightweight + LLM JSON router）和严格 route prompt；HybridPlanner 改为 direct_answer/clarify/tool_needed 先路由，tool_needed 后才召回候选；新增 SemanticPlan no_tool，编译为空 Message 以交给普通 Runner。"
+    },
+    {
+      "at": "2026-04-30T15:50:00+08:00",
+      "task_id": "bug-fix-4-conversation-router-phases-7-10",
+      "summary": "完成 bug-fix-4 阶段 7～10：收窄 Semantic Tool Planner 输出为 tool/multi_step/clarify/no_tool/capability_limitation；Validator 禁止 semantic_llm 输出 final answer；Compiler 为 no_tool/clarify/capability_limitation 设置 answer_mode；Runtime 在 answer_mode=runner 时强制调用普通 Runner。"
+    },
+    {
+      "at": "2026-04-30T16:20:00+08:00",
+      "task_id": "bug-fix-4-conversation-router-phases-11-13",
+      "summary": "完成 bug-fix-4 阶段 11～13：Candidate Selector 不再反向设置 NeedTool；生产配置新增 conversation_router.mode=llm、fallback_mode=lightweight 和 debug.expose_route_source；新增 RouteSource 并把 route/route_source 透传到 CompiledPlan、agent.Plan、RunStep 和 run.state event。"
+    },
+    {
+      "at": "2026-04-30T16:45:00+08:00",
+      "task_id": "bug-fix-4-conversation-router-phases-14-15",
+      "summary": "完成 bug-fix-4 阶段 14～15：新增普通中文知识问答列表、工具请求、workspace 读文件、explicit shell、implicit shell fallback 禁止、tool planner answer/no_tool、tool planner unavailable 等回归测试；README Planner V2 章节已更新 Conversation Router、Runner、Candidate Selector、Semantic Tool Planner、Validator/Policy 和 Runtime 的职责边界。"
     }
   ]
 }

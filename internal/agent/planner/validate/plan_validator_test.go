@@ -56,6 +56,37 @@ func TestPlanValidatorRejectsPlannerBlockedTool(t *testing.T) {
 	}
 }
 
+func TestPlanValidatorRejectsSemanticPlannerAnswer(t *testing.T) {
+	result := New(catalog.New(nil), Options{}).Validate(semantic.SemanticPlan{
+		Decision:      semantic.SemanticPlanAnswer,
+		PlannerSource: semantic.PlannerSourceSemanticLLM,
+		Answer:        "ordinary answer",
+	})
+	if result.Valid || result.Clarify == "" {
+		t.Fatalf("result = %+v, want semantic planner answer rejected", result)
+	}
+}
+
+func TestPlanValidatorAcceptsNoToolAndCapabilityLimitation(t *testing.T) {
+	noTool := New(catalog.New(nil), Options{}).Validate(semantic.SemanticPlan{
+		Decision: semantic.SemanticPlanNoTool,
+		Answer:   "must be stripped",
+		Steps:    []semantic.SemanticPlanStep{{Tool: "code.search_text"}},
+	})
+	if !noTool.Valid || noTool.Sanitized.Answer != "" || len(noTool.Sanitized.Steps) != 0 {
+		t.Fatalf("noTool = %+v, want valid sanitized no_tool", noTool)
+	}
+	capability := New(catalog.New(nil), Options{}).Validate(semantic.SemanticPlan{
+		Decision:          semantic.SemanticPlanCapabilityLimitation,
+		Answer:            "must be stripped",
+		CapabilityMessage: "没有可用工具",
+		Steps:             []semantic.SemanticPlanStep{{Tool: "code.search_text"}},
+	})
+	if !capability.Valid || capability.Sanitized.Answer != "" || len(capability.Sanitized.Steps) != 0 || capability.Sanitized.CapabilityMessage == "" {
+		t.Fatalf("capability = %+v, want valid sanitized capability limitation", capability)
+	}
+}
+
 func TestPlanValidatorToolCardDefaultsRequiredSlotsAndCandidates(t *testing.T) {
 	req := normalize.New().Normalize("find containing `TODO` workspace: .")
 	result := New(catalog.New(nil), Options{

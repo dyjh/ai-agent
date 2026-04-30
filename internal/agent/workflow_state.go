@@ -73,21 +73,26 @@ type AgentContext struct {
 
 // RunStep is the serializable workflow trace for one step.
 type RunStep struct {
-	StepID     string                      `json:"step_id"`
-	RunID      string                      `json:"run_id"`
-	Index      int                         `json:"index"`
-	Type       RunStepType                 `json:"type"`
-	Status     RunStepStatus               `json:"status"`
-	CodePlan   *CodePlan                   `json:"code_plan,omitempty"`
-	Proposal   *core.ToolProposal          `json:"proposal,omitempty"`
-	Inference  *core.EffectInferenceResult `json:"inference,omitempty"`
-	Policy     *core.PolicyDecision        `json:"policy,omitempty"`
-	Approval   *core.ApprovalRecord        `json:"approval,omitempty"`
-	ToolResult *core.ToolResult            `json:"tool_result,omitempty"`
-	Summary    string                      `json:"summary,omitempty"`
-	Error      string                      `json:"error,omitempty"`
-	CreatedAt  time.Time                   `json:"created_at"`
-	UpdatedAt  time.Time                   `json:"updated_at"`
+	StepID         string                      `json:"step_id"`
+	RunID          string                      `json:"run_id"`
+	Index          int                         `json:"index"`
+	Type           RunStepType                 `json:"type"`
+	Status         RunStepStatus               `json:"status"`
+	Route          string                      `json:"route,omitempty"`
+	RouteSource    string                      `json:"route_source,omitempty"`
+	PlannerSource  string                      `json:"planner_source,omitempty"`
+	CandidateCount int                         `json:"candidate_count,omitempty"`
+	PlannedTool    string                      `json:"planned_tool,omitempty"`
+	CodePlan       *CodePlan                   `json:"code_plan,omitempty"`
+	Proposal       *core.ToolProposal          `json:"proposal,omitempty"`
+	Inference      *core.EffectInferenceResult `json:"inference,omitempty"`
+	Policy         *core.PolicyDecision        `json:"policy,omitempty"`
+	Approval       *core.ApprovalRecord        `json:"approval,omitempty"`
+	ToolResult     *core.ToolResult            `json:"tool_result,omitempty"`
+	Summary        string                      `json:"summary,omitempty"`
+	Error          string                      `json:"error,omitempty"`
+	CreatedAt      time.Time                   `json:"created_at"`
+	UpdatedAt      time.Time                   `json:"updated_at"`
 }
 
 // RunState is the serializable workflow snapshot used for pause/resume.

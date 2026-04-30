@@ -136,18 +136,29 @@ type ShellConfig struct {
 
 // PlannerConfig controls the hybrid natural-language planner.
 type PlannerConfig struct {
-	Mode                    string                   `yaml:"mode"`
-	SemanticEnabled         bool                     `yaml:"semantic_enabled"`
-	SemanticShadowMode      bool                     `yaml:"semantic_shadow_mode"`
-	MaxRetries              int                      `yaml:"max_retries"`
-	RequireSchemaValidation bool                     `yaml:"require_schema_validation"`
-	ChatGate                PlannerChatGateConfig    `yaml:"chat_gate"`
-	ToolPlanner             PlannerToolPlannerConfig `yaml:"tool_planner"`
-	Shell                   PlannerShellConfig       `yaml:"shell"`
-	Debug                   PlannerDebugConfig       `yaml:"debug"`
+	Mode                    string                          `yaml:"mode"`
+	SemanticEnabled         bool                            `yaml:"semantic_enabled"`
+	SemanticShadowMode      bool                            `yaml:"semantic_shadow_mode"`
+	MaxRetries              int                             `yaml:"max_retries"`
+	RequireSchemaValidation bool                            `yaml:"require_schema_validation"`
+	ConversationRouter      PlannerConversationRouterConfig `yaml:"conversation_router"`
+	ChatGate                PlannerChatGateConfig           `yaml:"chat_gate"`
+	ToolPlanner             PlannerToolPlannerConfig        `yaml:"tool_planner"`
+	Shell                   PlannerShellConfig              `yaml:"shell"`
+	Debug                   PlannerDebugConfig              `yaml:"debug"`
 }
 
-// PlannerChatGateConfig controls the lightweight no-tool gate.
+// PlannerConversationRouterConfig controls chat/tool/clarify routing.
+type PlannerConversationRouterConfig struct {
+	Enabled      bool   `yaml:"enabled"`
+	Mode         string `yaml:"mode"`
+	FallbackMode string `yaml:"fallback_mode"`
+	MaxRetries   int    `yaml:"max_retries"`
+	RequireJSON  bool   `yaml:"require_json"`
+}
+
+// PlannerChatGateConfig controls the legacy lightweight no-tool gate. New
+// deployments should use conversation_router.
 type PlannerChatGateConfig struct {
 	Enabled bool   `yaml:"enabled"`
 	Mode    string `yaml:"mode"`
@@ -170,6 +181,7 @@ type PlannerShellConfig struct {
 // PlannerDebugConfig controls planner observability.
 type PlannerDebugConfig struct {
 	ExposePlannerSource bool `yaml:"expose_planner_source"`
+	ExposeRouteSource   bool `yaml:"expose_route_source"`
 }
 
 // PolicyProfile stores one named policy mode.
@@ -273,6 +285,13 @@ func Default() Config {
 			SemanticShadowMode:      false,
 			MaxRetries:              2,
 			RequireSchemaValidation: true,
+			ConversationRouter: PlannerConversationRouterConfig{
+				Enabled:      true,
+				Mode:         "llm",
+				FallbackMode: "lightweight",
+				MaxRetries:   1,
+				RequireJSON:  true,
+			},
 			ChatGate: PlannerChatGateConfig{
 				Enabled: true,
 				Mode:    "lightweight",
@@ -288,6 +307,7 @@ func Default() Config {
 			},
 			Debug: PlannerDebugConfig{
 				ExposePlannerSource: true,
+				ExposeRouteSource:   true,
 			},
 		},
 		Policy: PolicyConfig{

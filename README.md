@@ -232,17 +232,21 @@ go run ./cmd/agent eval report latest
 
 当前生产推荐默认使用 `semantic_strict`。
 
-- ChatGate 只判断请求是否明显不需要工具，只能输出 direct answer / maybe tool / clarify，不选择具体工具。
+- Conversation Router 先判断 `direct_answer` / `tool_needed` / `clarify`。它只做路线判断，不回答问题、不选择具体工具、不生成 `ToolProposal`；`semantic_strict` 默认启用 LLM router，并用 lightweight router 兜底。
+- Runner 负责普通聊天、知识问答、写作、翻译、解释和总结。`direct_answer` 与 planner `no_tool` 都会交给 Runner，planner 不提供最终普通回答文本。
+- ChatGate 仍作为 legacy lightweight fallback 保留，不再承担完整语义路由；未命中工具/本地状态/结构槽位时默认走普通 Runner，而不是默认 `maybe_tool`。
 - RequestNormalizer 只提取结构化槽位：workspace、quoted text、possible file path、URL、host/kb/run/approval id、显式 tool id 和数字参数；`Signals` 只承载这些结构化信号，不再维护自然语言关键词词表。
 - Tool Card Catalog 位于 `config/planner.tool-cards.yaml`，用工具说明、用途、反例、示例、required slots、defaults、effects 和 risk level 描述 planner 语义；ToolRegistry 仍是工具存在性和真实 effects 的事实源。
-- CandidateSelector 根据结构化槽位和 Tool Card metadata / 文本相似度召回 TopK 候选工具，只作为 Semantic LLM Planner 的候选上下文，不做最终工具决策。
-- Semantic LLM Planner 负责最终工具选择，只能从候选 Tool Cards 中输出结构化 `SemanticPlan` JSON，不能执行 shell、写文件、调用 MCP、Skill、Ops 或 Code executor，也不能发明工具。
-- `SemanticPlan` 必须先通过本地 PlanValidator，校验 planner source、候选范围、工具存在性、required slots、defaults、input schema、路径逃逸、secret input 和危险/审批工具。
+- CandidateSelector 只在 `route=tool_needed` 后运行，根据结构化槽位和 Tool Card metadata / 文本相似度召回 TopK 候选工具；它只提供候选上下文，不修改 `NeedTool`，不决定最终工具。
+- Semantic Tool Planner 只负责在候选工具中选择工具并填参数，只能输出 `tool` / `multi_step` / `clarify` / `no_tool` / `capability_limitation` 的结构化 `SemanticPlan` JSON。它不能执行 shell、写文件、调用 MCP、Skill、Ops 或 Code executor，不能发明工具，也不能生成普通知识问答最终答案。
+- `SemanticPlan` 必须先通过本地 PlanValidator，校验 planner source、候选范围、工具存在性、required slots、defaults、input schema、路径逃逸、secret input 和危险/审批工具。Validator 会拒绝 Semantic Tool Planner 的 `decision=answer`，`shell.exec` 也不能作为结构化工具不足时的自动 fallback。
 - PlanCompiler 只把合法计划编译为现有 `ToolProposal`；执行仍走 ToolRouter / EffectInference / PolicyEngine / ApprovalCenter / Executor。
+- Runtime 根据 planner 输出分发：`direct_answer` / `no_tool` -> Runner；`tool` / `multi_step` -> ToolRouter / Executor；`clarify` -> 直接追问；`capability_limitation` -> 说明能力不足。`answer_mode=runner` 时即使 planner 错误填了 `Message` 也会强制调用 Runner。
 - `shell.exec` 是显式授权的逃生通道，不是结构化工具不足时的自动 fallback；即使是只读 shell 命令也必须审批。
 - FastPath 仅用于 legacy/hybrid/低成本模式；`semantic_strict` 下不会直接产出 ToolProposal。
 - Semantic LLM 不可用且未显式指定工具时，`semantic_strict` 会返回澄清/不可用，不会用 Candidate fallback 本地选工具。
 - 不确定或缺少必要参数时，planner 会转为澄清问题，而不是把宽泛请求降级到错误工具。
+- `run.state` 和 `RunStep` 会记录 `route`、`route_source`、`planner_source`、`candidate_count` 和 `tool`，用于确认普通问答没有进入 Semantic Tool Planner。
 - `evals/cases/planner/` 中的 Planner Eval 覆盖中英文回归 case，用于防止自然语言 routing 退化。
 
 可选配置：
@@ -254,9 +258,15 @@ planner:
   semantic_shadow_mode: false
   max_retries: 2
   require_schema_validation: true
+  conversation_router:
+    enabled: true
+    mode: llm # llm / lightweight / hybrid
+    fallback_mode: lightweight
+    max_retries: 1
+    require_json: true
   chat_gate:
     enabled: true
-    mode: lightweight
+    mode: lightweight # legacy fallback
   tool_planner:
     require_llm_for_tool_choice: true
     enable_fastpath: false
@@ -266,6 +276,7 @@ planner:
     allow_auto_fallback: false
   debug:
     expose_planner_source: true
+    expose_route_source: true
 ```
 
 ## 数据位置

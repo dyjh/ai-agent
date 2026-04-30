@@ -20,6 +20,12 @@ const (
 	PlanDecisionStop     PlanDecision = "stop"
 )
 
+const (
+	AnswerModeRunner               = "runner"
+	AnswerModePlannerClarify       = "planner_clarify"
+	AnswerModeCapabilityLimitation = "capability_limitation"
+)
+
 // PlanInput is the normalized planning context for one workflow iteration.
 type PlanInput struct {
 	ConversationID string
@@ -32,6 +38,9 @@ type PlanInput struct {
 // Plan is the planner output before routing.
 type Plan struct {
 	Decision       PlanDecision       `json:"decision,omitempty"`
+	AnswerMode     string             `json:"answer_mode,omitempty"`
+	Route          string             `json:"route,omitempty"`
+	RouteSource    string             `json:"route_source,omitempty"`
 	Preamble       string             `json:"preamble,omitempty"`
 	Message        string             `json:"message,omitempty"`
 	ToolProposal   *core.ToolProposal `json:"tool_proposal,omitempty"`

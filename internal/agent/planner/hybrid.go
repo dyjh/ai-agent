@@ -11,6 +11,7 @@ import (
 	"local-agent/internal/agent/planner/fastpath"
 	"local-agent/internal/agent/planner/intent"
 	"local-agent/internal/agent/planner/normalize"
+	convrouter "local-agent/internal/agent/planner/router"
 	"local-agent/internal/agent/planner/semantic"
 	"local-agent/internal/agent/planner/validate"
 )
@@ -36,6 +37,7 @@ type HybridPlanner struct {
 	Compiler   compile.Compiler
 	Catalog    catalog.PlanningCatalog
 	Selector   candidate.Selector
+	Router     convrouter.ConversationRouter
 	Mode       Mode
 	Config     semantic.Config
 }
@@ -54,73 +56,74 @@ func (p HybridPlanner) Plan(ctx context.Context, req Request) (compile.CompiledP
 	normalized := normalizer.Normalize(req.UserMessage)
 	classification := classifier.Classify(normalized)
 
-	if cfg.ChatGate.Enabled {
-		switch gate := chatGate(classification, normalized); gate {
-		case chatGateDirectAnswer:
-			return p.compileValid(semantic.SemanticPlan{
-				Decision:      semantic.SemanticPlanAnswer,
-				Goal:          normalized.Original,
-				Confidence:    classification.Confidence,
-				Language:      firstLanguage(normalized.LanguageHints),
-				Domain:        string(classification.Domain),
-				PlannerSource: semantic.PlannerSourceNoToolAnswer,
-				Answer:        "",
-				Reason:        "planner_source=no_tool_answer; chat gate classified request as direct answer",
-			}, normalized, nil, cfg), nil
-		case chatGateClarify:
-			return p.compileValid(semantic.SemanticPlan{
-				Decision:           semantic.SemanticPlanClarify,
-				Goal:               normalized.Original,
-				Confidence:         classification.Confidence,
-				Domain:             string(classification.Domain),
-				PlannerSource:      semantic.PlannerSourceClarify,
-				ClarifyingQuestion: "请补充要操作的目标和范围。",
-				Reason:             "planner_source=clarify; chat gate requires more detail",
-			}, normalized, nil, cfg), nil
-		}
+	route, err := p.routeConversation(ctx, req, normalized, classification, cfg)
+	if err != nil {
+		return compile.CompiledPlan{}, err
+	}
+	route = normalizeRouteDecision(route)
+	switch route.Route {
+	case convrouter.RouteDirectAnswer:
+		return p.compileValidWithRoute(semantic.SemanticPlan{
+			Decision:      semantic.SemanticPlanNoTool,
+			Goal:          normalized.Original,
+			Confidence:    route.Confidence,
+			Language:      firstLanguage(normalized.LanguageHints),
+			Domain:        string(classification.Domain),
+			PlannerSource: semantic.PlannerSourceConversationRouter,
+			Reason:        "planner_source=conversation_router; route=direct_answer; no tool needed; answer by runner",
+		}, normalized, nil, cfg, route), nil
+	case convrouter.RouteClarify:
+		return p.compileValidWithRoute(semantic.SemanticPlan{
+			Decision:           semantic.SemanticPlanClarify,
+			Goal:               normalized.Original,
+			Confidence:         route.Confidence,
+			Domain:             string(classification.Domain),
+			PlannerSource:      semantic.PlannerSourceClarify,
+			ClarifyingQuestion: clarificationQuestionFromRoute(route),
+			Reason:             "planner_source=conversation_router; route=clarify; " + route.Reason,
+		}, normalized, nil, cfg, route), nil
 	}
 
 	candidates, err := p.selectCandidates(ctx, selector, normalized, cfg)
 	if err != nil {
 		return compile.CompiledPlan{}, err
 	}
-	classification = classificationFromCandidates(classification, candidates)
 
 	if classification.NeedClarify {
-		return p.compileValid(semantic.SemanticPlan{
+		return p.compileValidWithRoute(semantic.SemanticPlan{
 			Decision:           semantic.SemanticPlanClarify,
 			Goal:               normalized.Original,
 			Confidence:         classification.Confidence,
 			Domain:             string(classification.Domain),
 			PlannerSource:      semantic.PlannerSourceClarify,
 			ClarifyingQuestion: clarificationQuestion(classification),
-			Reason:             "planner_source=clarify; " + classification.Reason,
-		}, normalized, candidates, cfg), nil
+			Reason:             "planner_source=conversation_router; route=tool_needed; classifier requires clarify; " + classification.Reason,
+		}, normalized, candidates, cfg, route), nil
 	}
 
 	if normalized.ExplicitToolID != "" {
-		return p.compileValid(withSource(semantic.PlanFromCandidates(normalized, req.ConversationID, explicitCandidates(normalized.ExplicitToolID, candidates)), semantic.PlannerSourceExplicitTool), normalized, candidates, cfg), nil
+		return p.compileValidWithRoute(withSource(semantic.PlanFromCandidates(normalized, req.ConversationID, explicitCandidates(normalized.ExplicitToolID, candidates)), semantic.PlannerSourceExplicitTool), normalized, candidates, cfg, route), nil
 	}
 
 	mode := Mode(cfg.Mode)
 	if cfg.ToolPlanner.EnableFastPath && !cfg.ToolPlanner.RequireLLMForToolChoice && mode != ModeSemantic && mode != ModeSemanticStrict {
 		if plan, ok := fast.Plan(fastpath.Input{ConversationID: req.ConversationID, Request: normalized, Classification: classification}); ok {
-			return p.compileValid(withSource(plan, semantic.PlannerSourceFastPath), normalized, candidates, cfg), nil
+			return p.compileValidWithRoute(withSource(plan, semantic.PlannerSourceFastPath), normalized, candidates, cfg, route), nil
 		}
 	}
 
-	if shouldUseToolPlanner(classification, candidates, mode) {
+	if shouldUseToolPlanner(mode) {
 		plan, err := p.Semantic.Plan(ctx, normalized, classification, candidates)
 		if err == nil {
-			return p.compileValid(withSource(plan, semantic.PlannerSourceSemanticLLM), normalized, candidates, cfg), nil
+			return p.compileValidWithRoute(withSource(plan, semantic.PlannerSourceSemanticLLM), normalized, candidates, cfg, route), nil
 		}
 		if !errors.Is(err, semantic.ErrUnavailable) {
 			return compile.CompiledPlan{}, err
 		}
 		if cfg.ToolPlanner.AllowCandidateFallback && !cfg.ToolPlanner.RequireLLMForToolChoice && mode != ModeSemanticStrict {
-			return p.compileValid(withSource(semantic.PlanFromCandidates(normalized, req.ConversationID, candidates), semantic.PlannerSourceCandidateFallback), normalized, candidates, cfg), nil
+			return p.compileValidWithRoute(withSource(semantic.PlanFromCandidates(normalized, req.ConversationID, candidates), semantic.PlannerSourceCandidateFallback), normalized, candidates, cfg, route), nil
 		}
-		return p.compileValid(semantic.SemanticPlan{
+		return p.compileValidWithRoute(semantic.SemanticPlan{
 			Decision:           semantic.SemanticPlanClarify,
 			Goal:               normalized.Original,
 			Confidence:         classification.Confidence,
@@ -128,39 +131,29 @@ func (p HybridPlanner) Plan(ctx context.Context, req Request) (compile.CompiledP
 			PlannerSource:      semantic.PlannerSourceToolUnavailable,
 			ClarifyingQuestion: "语义工具规划模型当前不可用，无法安全选择工具。请稍后重试，或明确指定工具。",
 			Reason:             "planner_source=tool_planner_unavailable; semantic planner unavailable and candidate fallback disabled",
-		}, normalized, candidates, cfg), nil
+		}, normalized, candidates, cfg, route), nil
 	}
 	if mode != ModeSemanticStrict && cfg.ToolPlanner.AllowCandidateFallback && !cfg.ToolPlanner.RequireLLMForToolChoice && len(candidates) > 0 {
-		return p.compileValid(withSource(semantic.PlanFromCandidates(normalized, req.ConversationID, candidates), semantic.PlannerSourceCandidateFallback), normalized, candidates, cfg), nil
+		return p.compileValidWithRoute(withSource(semantic.PlanFromCandidates(normalized, req.ConversationID, candidates), semantic.PlannerSourceCandidateFallback), normalized, candidates, cfg, route), nil
 	}
 
-	return p.compileValid(semantic.SemanticPlan{
-		Decision:      semantic.SemanticPlanAnswer,
-		Goal:          normalized.Original,
-		Confidence:    classification.Confidence,
-		Language:      firstLanguage(normalized.LanguageHints),
-		Domain:        string(classification.Domain),
-		PlannerSource: semantic.PlannerSourceNoToolAnswer,
-		Reason:        "planner_source=no_tool_answer; no tool plan selected",
-	}, normalized, candidates, cfg), nil
+	return p.compileValidWithRoute(semantic.SemanticPlan{
+		Decision:           semantic.SemanticPlanClarify,
+		Goal:               normalized.Original,
+		Confidence:         classification.Confidence,
+		Language:           firstLanguage(normalized.LanguageHints),
+		Domain:             string(classification.Domain),
+		PlannerSource:      semantic.PlannerSourceClarify,
+		ClarifyingQuestion: "这个请求看起来需要工具或本地状态，但当前无法安全选择工具。请补充目标、范围或明确工具。",
+		Reason:             "planner_source=conversation_router; route=tool_needed; no safe tool plan selected",
+	}, normalized, candidates, cfg, route), nil
 }
 
-func classificationFromCandidates(cls intent.IntentClassification, candidates []candidate.ToolCandidate) intent.IntentClassification {
-	if len(candidates) == 0 {
-		return cls
-	}
-	cls.NeedTool = true
-	if cls.Domain == intent.DomainChat && candidates[0].Card.Domain != "" {
-		cls.Domain = intent.IntentDomain(candidates[0].Card.Domain)
-	}
-	if cls.Intent == "" || cls.Intent == "answer" {
-		cls.Intent = "tool_request"
-	}
-	if cls.Confidence < 0.65 {
-		cls.Confidence = 0.65
-	}
-	cls.Reason = "tool card candidates available"
-	return cls
+func (p HybridPlanner) compileValidWithRoute(plan semantic.SemanticPlan, req normalize.NormalizedRequest, candidates []candidate.ToolCandidate, cfg semantic.Config, route convrouter.ConversationRouteDecision) compile.CompiledPlan {
+	compiled := p.compileValid(plan, req, candidates, cfg)
+	compiled.Route = string(route.Route)
+	compiled.RouteSource = string(route.Source)
+	return compiled
 }
 
 func (p HybridPlanner) compileValid(plan semantic.SemanticPlan, req normalize.NormalizedRequest, candidates []candidate.ToolCandidate, cfg semantic.Config) compile.CompiledPlan {
@@ -240,11 +233,71 @@ func (p HybridPlanner) selectCandidates(ctx context.Context, selector candidate.
 	return out, nil
 }
 
-func shouldUseToolPlanner(cls intent.IntentClassification, candidates []candidate.ToolCandidate, mode Mode) bool {
+func (p HybridPlanner) routeConversation(ctx context.Context, req Request, normalized normalize.NormalizedRequest, classification intent.IntentClassification, cfg semantic.Config) (convrouter.ConversationRouteDecision, error) {
+	router := p.Router
+	if router == nil {
+		router = p.newConversationRouter(cfg)
+	}
+	if router == nil {
+		return convrouter.LightweightConversationRouter{}.Route(ctx, convrouter.ConversationRouteInput{
+			ConversationID: req.ConversationID,
+			UserMessage:    req.UserMessage,
+			Normalized:     normalized,
+			Classification: classification,
+		})
+	}
+	return router.Route(ctx, convrouter.ConversationRouteInput{
+		ConversationID: req.ConversationID,
+		UserMessage:    req.UserMessage,
+		Normalized:     normalized,
+		Classification: classification,
+	})
+}
+
+func (p HybridPlanner) newConversationRouter(cfg semantic.Config) convrouter.ConversationRouter {
+	if !cfg.ConversationRouter.Enabled && !cfg.ChatGate.Enabled {
+		return nil
+	}
+	fallback := conversationRouterForMode(cfg.ConversationRouter.FallbackMode, nil, nil, cfg)
+	if fallback == nil {
+		fallback = convrouter.LightweightConversationRouter{}
+	}
+	return conversationRouterForMode(cfg.ConversationRouter.Mode, p.Semantic.Model, fallback, cfg)
+}
+
+func conversationRouterForMode(mode string, model convrouter.ChatModel, fallback convrouter.ConversationRouter, cfg semantic.Config) convrouter.ConversationRouter {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "llm", "hybrid":
+		return convrouter.LLMConversationRouter{
+			Model:       model,
+			MaxRetries:  cfg.ConversationRouter.MaxRetries,
+			RequireJSON: cfg.ConversationRouter.RequireJSON,
+			Fallback:    fallback,
+		}
+	case "", "lightweight":
+		return convrouter.LightweightConversationRouter{}
+	default:
+		return convrouter.LightweightConversationRouter{}
+	}
+}
+
+func normalizeRouteDecision(route convrouter.ConversationRouteDecision) convrouter.ConversationRouteDecision {
+	switch route.Route {
+	case convrouter.RouteDirectAnswer, convrouter.RouteToolNeeded, convrouter.RouteClarify:
+	default:
+		route.Route = convrouter.RouteClarify
+	}
+	if route.Source == "" {
+		route.Source = convrouter.RouteSourceLightweight
+	}
+	return route
+}
+
+func shouldUseToolPlanner(mode Mode) bool {
 	if mode == ModeHeuristic {
 		return false
 	}
-	return cls.NeedTool || len(candidates) > 0 || mode == ModeSemantic || mode == ModeSemanticStrict
+	return true
 }
 
 func withSource(plan semantic.SemanticPlan, source semantic.PlannerSource) semantic.SemanticPlan {
@@ -299,6 +352,13 @@ func clarificationQuestion(cls intent.IntentClassification) string {
 		return "请补充范围或参数：" + cls.Reason
 	}
 	return "请补充要操作的目标和范围。"
+}
+
+func clarificationQuestionFromRoute(route convrouter.ConversationRouteDecision) string {
+	if strings.TrimSpace(route.Reason) == "" {
+		return "请补充要操作的目标和范围。"
+	}
+	return "请补充要操作的目标和范围：" + route.Reason
 }
 
 func firstLanguage(hints []string) string {

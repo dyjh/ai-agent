@@ -2,6 +2,7 @@ package semantic_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/cloudwego/eino/components/model"
@@ -25,6 +26,20 @@ func TestLLMSemanticPlannerSelectsCandidateTool(t *testing.T) {
 	}
 	if len(plan.Steps) != 1 || plan.Steps[0].Tool != "code.search_text" {
 		t.Fatalf("plan = %+v", plan)
+	}
+}
+
+func TestSemanticPromptDisallowsPlannerAnswers(t *testing.T) {
+	req := normalize.New().Normalize("find containing `TODO` workspace: .")
+	prompt := semantic.BuildPrompt(req, intent.New().Classify(req), []candidate.ToolCandidate{candidateFor("code.search_text")})
+	if strings.Contains(prompt, "answer|tool") || strings.Contains(prompt, "\"answer\"") {
+		t.Fatalf("prompt still exposes answer output:\n%s", prompt)
+	}
+	if !strings.Contains(prompt, "tool|multi_step|clarify|no_tool|capability_limitation") {
+		t.Fatalf("prompt missing restricted decisions:\n%s", prompt)
+	}
+	if !strings.Contains(prompt, "Do not answer general knowledge questions.") {
+		t.Fatalf("prompt missing no-answer rule:\n%s", prompt)
 	}
 }
 

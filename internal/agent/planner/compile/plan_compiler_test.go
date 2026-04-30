@@ -34,6 +34,14 @@ func TestPlanCompilerClarifyAndAnswer(t *testing.T) {
 	if clarify.Decision != DecisionAnswer || clarify.Message != "which file?" {
 		t.Fatalf("clarify = %+v", clarify)
 	}
+	noTool := compiler.Compile(semantic.SemanticPlan{Decision: semantic.SemanticPlanNoTool, Answer: "must not be used"})
+	if noTool.Decision != DecisionAnswer || noTool.AnswerMode != AnswerModeRunner || noTool.Message != "" {
+		t.Fatalf("noTool = %+v, want empty message for runner", noTool)
+	}
+	capability := compiler.Compile(semantic.SemanticPlan{Decision: semantic.SemanticPlanCapabilityLimitation, CapabilityMessage: "缺少可用连接器"})
+	if capability.Decision != DecisionAnswer || capability.AnswerMode != AnswerModeCapabilityLimitation || capability.Message == "" {
+		t.Fatalf("capability = %+v, want capability limitation message", capability)
+	}
 }
 
 func TestPlanCompilerMultiStepCompilesFirstStep(t *testing.T) {
